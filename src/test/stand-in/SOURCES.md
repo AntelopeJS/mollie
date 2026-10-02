@@ -66,12 +66,13 @@ The stand-in is an HTTP server that answers the part of Mollie's API this module
 
 ## Refunds
 
-| Behaviour                                                                           | Basis                               |
-| ----------------------------------------------------------------------------------- | ----------------------------------- |
-| `amount` is required; only a paid payment, at most `amountRemaining` (422 `amount`) | spec, doc `reference/create-refund` |
-| A refund is created `pending`                                                       | spec (`get-refund` example)         |
-| …and counts towards `amountRefunded` (and out of `amountRemaining`) from creation   | assumed                             |
-| A refund is read under its payment                                                  | spec                                |
+| Behaviour                                                                                                  | Basis                               |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `amount` is required; only a paid payment, at most `amountRemaining` (422 `amount`)                        | spec, doc `reference/create-refund` |
+| A refund is created `pending`                                                                              | spec (`get-refund` example)         |
+| …and counts towards `amountRefunded` (and out of `amountRemaining`) from creation                          | assumed                             |
+| A refund is read under its payment                                                                         | spec                                |
+| A payment's refunds and captures are listed under it, and a capture keeps the metadata it was created with | spec                                |
 
 ## Customers and mandates
 
@@ -88,19 +89,19 @@ The stand-in is an HTTP server that answers the part of Mollie's API this module
 
 ## Subscriptions
 
-| Behaviour                                                                                                                                                                | Basis                                                                                            |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `interval` is `N days`, `N weeks` or `N months`, at most 365 days, 52 weeks or 12 months                                                                                 | spec; the 422 is assumed                                                                         |
-| `startDate` is `YYYY-MM-DD`, today when omitted                                                                                                                          | spec; "today" in UTC is assumed                                                                  |
-| `description` must be unique among the customer's active subscriptions                                                                                                   | spec (`description`); the 422 is assumed                                                         |
-| `mandateId` must be a valid mandate of the customer; omitted, any valid one is used                                                                                      | spec                                                                                             |
-| Created `active`, with `nextPaymentDate` its `startDate`                                                                                                                 | doc `docs/recurring-payments` (status follows the mandate); `nextPaymentDate` is assumed         |
-| A cancelled subscription cannot be updated (422)                                                                                                                         | doc `reference/update-subscription`                                                              |
-| Cancelling makes it `canceled` with `canceledAt`, and drops `nextPaymentDate`                                                                                            | spec ("If the subscription has been completed or canceled, this parameter will not be returned") |
-| Cancelling it again: 422                                                                                                                                                 | assumed                                                                                          |
-| A subscription's payments are listed under it, newest first                                                                                                              | spec                                                                                             |
-| A renewal (test control) is a `recurring` payment carrying `subscriptionId`, the subscription's mandate and `webhookUrl`, and moves `nextPaymentDate` on by one interval | doc `docs/recurring-payments` ("How do webhooks for subscriptions work?")                        |
-| …with no metadata of its own                                                                                                                                             | assumed (Mollie does not document copying a subscription's metadata to its payments)             |
+| Behaviour                                                                                                                                                                | Basis                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `interval` is `N days`, `N weeks` or `N months`, at most 365 days, 52 weeks or 12 months                                                                                 | spec; the 422 is assumed                                                                                                                  |
+| `startDate` is `YYYY-MM-DD`, today when omitted                                                                                                                          | spec; "today" in UTC is assumed                                                                                                           |
+| `description` must be unique among the customer's active subscriptions                                                                                                   | spec (`description`); the 422 is assumed                                                                                                  |
+| `mandateId` must be a valid mandate of the customer; omitted, any valid one is used                                                                                      | spec                                                                                                                                      |
+| Created `active`, with `nextPaymentDate` its `startDate`                                                                                                                 | doc `docs/recurring-payments` (status follows the mandate); `nextPaymentDate` is assumed                                                  |
+| A cancelled subscription cannot be updated (422)                                                                                                                         | doc `reference/update-subscription`                                                                                                       |
+| Cancelling makes it `canceled` with `canceledAt`, and drops `nextPaymentDate`                                                                                            | spec ("If the subscription has been completed or canceled, this parameter will not be returned")                                          |
+| Cancelling it again: 422                                                                                                                                                 | assumed                                                                                                                                   |
+| A subscription's payments are listed under it, newest first                                                                                                              | spec                                                                                                                                      |
+| A renewal (test control) is a `recurring` payment carrying `subscriptionId`, the subscription's mandate and `webhookUrl`, and moves `nextPaymentDate` on by one interval | doc `docs/recurring-payments` ("How do webhooks for subscriptions work?")                                                                 |
+| …carrying the subscription's metadata                                                                                                                                    | spec (subscription `metadata`: "Any metadata added to the subscription will be automatically forwarded to the payments generated for it") |
 
 ## Test controls that are not Mollie
 

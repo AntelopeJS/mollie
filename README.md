@@ -59,7 +59,7 @@ Only `payment.*` events are raised. A classic delivery names a payment, never th
 - **Saved methods are Mollie mandates**, created by a payment with `savePaymentMethod` (Mollie's `first` payment). A saved method belongs to one customer. Detaching it revokes the mandate, and Mollie then cancels every subscription that charges it.
 - **Off-session charges settle later.** A charge against a saved method comes back `pending`; Mollie reports `succeeded`, `authorized` or `failed` afterwards, through the webhook. A decline is a `failed` payment then, not the result of the creating call.
 - **Holding funds** (`authorizeOnly`) works only for methods Mollie can capture by hand: cards, Klarna, Billie, Riverty, Vipps, MobilePay, PayPal and Billink. The module refuses any other, rather than let Mollie capture at once, and offers only those on a hosted page.
-- **Idempotency keys last one hour at Mollie.** A replay within the hour returns the original result. After that, the same key is a new request, except for `CreateSubscription`, which finds its earlier result on its own.
+- **Idempotency keys last one hour at Mollie.** `RefundPayment`, `CapturePayment` and `CreateSubscription` find their earlier result by key at any time. For other calls, a replay within the hour returns the original result; after it, the same key is a new request.
 - **`refund.*` and `dispute.opened` events are not raised.** See above.
 
 ## Subscriptions

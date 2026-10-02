@@ -42,7 +42,7 @@ Pass the raw body and the headers to `VerifyWebhook`. Mollie posts `id=tr_…`, 
 - **Saved methods are mandates**, id `cst_…:mdt_…`, belonging to one customer. Detaching one revokes the mandate, and Mollie cancels the subscriptions that charge it.
 - **`authorizeOnly`** only for cards, Klarna, Billie, Riverty, Vipps, MobilePay, PayPal, Billink; anything else is refused before Mollie is called.
 - **No `refund.*` or `dispute.opened` events**: a Mollie delivery names a payment, never its refund or chargeback. Read refunds with `GetRefund`.
-- **Idempotency keys last one hour** at Mollie (except `CreateSubscription`, which finds its earlier result itself).
+- **Idempotency keys last one hour** at Mollie; `RefundPayment`, `CapturePayment` and `CreateSubscription` find their earlier result by key at any time.
 - **State errors come from the module reading the payment first.** A Mollie 422 is a `PaymentError`: it also means a suspended account.
 - **Subscriptions**: the first period is charged by `CreateSubscription` and not retried if it fails; Mollie's schedule starts one period later and Mollie retries its own renewals five times, then cancels. Dates are Europe/Amsterdam days; trial ends and anchors round up to the next midnight. `period_end` cancels at Mollie at once and is reported as running until the period ends, with no event when it does. Subscriptions not created by this module are invisible to it.
 - **A failed `CreateSubscription` must be replayed with its key**: Mollie may already hold the subscription and will charge it.
