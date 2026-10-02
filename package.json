@@ -1,0 +1,78 @@
+{
+  "name": "@antelopejs/mollie",
+  "version": "0.1.0",
+  "description": "A Mollie payment module that implements the payment and subscriptions interfaces of antelopejs",
+  "keywords": [
+    "antelopejs",
+    "billing",
+    "mollie",
+    "payment",
+    "subscription"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AntelopeJS/mollie.git"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "skills"
+  ],
+  "main": "dist/index.js",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "format": "oxfmt .",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "prepack": "pnpm run build",
+    "release": "pnpm run lint && pnpm run test && pnpm run prepack && release-it",
+    "test": "pnpm run build && ajs module test .",
+    "typecheck": "tsc --noEmit",
+    "format:check": "oxfmt --check .",
+    "knip": "knip"
+  },
+  "dependencies": {
+    "@antelopejs/interface-core": ">=0.0.5 <1.0.0",
+    "@antelopejs/interface-payment": "^0.1.0",
+    "@antelopejs/interface-subscriptions": "^0.1.0"
+  },
+  "devDependencies": {
+    "@antelopejs/tooling-configs": "^0.0.4",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.19.15",
+    "eslint-plugin-perfectionist": "^5.11.0",
+    "knip": "^6.34.0",
+    "oxfmt": "^0.66.0",
+    "oxlint": "1.81.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "release-it": "^19.2.4",
+    "release-it-changelogen": "^0.1.0",
+    "rimraf": "^6.1.3",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@10.6.5",
+  "pnpm": {
+    "overrides": {
+      "@antelopejs/interface-payment": "git+ssh://git@github.com/AntelopeJS/interface-payment.git#9d80f653258e23a820a93bb36b1fa1c8cbc8332f",
+      "@antelopejs/interface-subscriptions": "git+ssh://git@github.com/AntelopeJS/interface-subscriptions.git#481ede61b57cab94d82c9dd301a92935398cf01c"
+    }
+  },
+  "antelopeJs": {
+    "implements": [
+      "@antelopejs/interface-payment",
+      "@antelopejs/interface-subscriptions"
+    ],
+    "defaultConfig": {
+      "apiKey": "your_mollie_api_key"
+    },
+    "test": "src/test/antelope.test.ts",
+    "skills": [
+      "./skills"
+    ]
+  }
+}
