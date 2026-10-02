@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import type {
+  MollieAmount,
   MollieCustomer,
   MollieMandate,
   MolliePayment,
@@ -35,6 +36,17 @@ interface LoggedRequest {
   idempotencyKey?: string;
 }
 
+export interface Capture {
+  resource: "capture";
+  id: string;
+  mode: "test";
+  amount: MollieAmount;
+  status: "succeeded";
+  paymentId: string;
+  metadata: unknown;
+  createdAt: string;
+}
+
 export interface Account {
   payments: Map<string, MolliePayment>;
   refunds: Map<string, MollieRefund>;
@@ -46,6 +58,7 @@ export interface Account {
   tokens: Map<string, string>;
   declinesAtCreation: Set<string>;
   requests: LoggedRequest[];
+  captures: Map<string, Capture>;
 }
 
 const ID_ALPHABET =
@@ -64,6 +77,7 @@ export function NewAccount(): Account {
     tokens: new Map(),
     declinesAtCreation: new Set(),
     requests: [],
+    captures: new Map(),
   };
 }
 

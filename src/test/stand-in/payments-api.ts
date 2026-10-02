@@ -5,14 +5,6 @@ import type {
   MollieRefund,
 } from "../../mollie/types";
 import {
-  type Account,
-  NewId,
-  Text,
-  NewestFirst,
-  NowIso,
-  type StandInResponse,
-} from "./state";
-import {
   type Body,
   CreatePaymentRecord,
   type PaymentHooks,
@@ -20,6 +12,15 @@ import {
   ReadAmount,
   zero,
 } from "./payments";
+import {
+  type Account,
+  type Capture,
+  NewId,
+  Text,
+  NewestFirst,
+  NowIso,
+  type StandInResponse,
+} from "./state";
 
 export interface Request {
   account: Account;
@@ -141,18 +142,46 @@ export function CreateCapture(request: Request): StandInResponse {
     );
   }
   settleCapture(payment, amount.value);
+  const capture: Capture = {
+    resource: "capture",
+    id: NewId("cpt"),
+    mode: "test",
+    amount,
+    status: "succeeded",
+    paymentId: payment.id,
+    metadata: request.body.metadata ?? null,
+    createdAt: NowIso(),
+  };
+  request.account.captures.set(capture.id, capture);
   request.hooks.notify(request.account, payment);
-  return Ok(
-    {
-      resource: "capture",
-      id: NewId("cpt"),
-      mode: "test",
-      amount,
-      status: "succeeded",
-      paymentId: payment.id,
-      createdAt: NowIso(),
-    },
-    201,
+  return Ok(capture, 201);
+}
+
+export function ListCaptures(request: Request): StandInResponse {
+  const paymentId = request.params[0];
+  PaymentOf(request.account, paymentId);
+  const captures = [...request.account.captures.values()].filter(
+    (capture) => capture.paymentId === paymentId,
+  );
+  return Page(
+    captures,
+    request.query,
+    "captures",
+    `${request.hooks.baseUrl}/v2/payments/${paymentId}/captures`,
+  );
+}
+
+export function ListRefunds(request: Request): StandInResponse {
+  const paymentId = request.params[0];
+  PaymentOf(request.account, paymentId);
+  const refunds = [...request.account.refunds.values()].filter(
+    (refund) => refund.paymentId === paymentId,
+  );
+  return Page(
+    refunds,
+    request.query,
+    "refunds",
+    `${request.hooks.baseUrl}/v2/payments/${paymentId}/refunds`,
   );
 }
 

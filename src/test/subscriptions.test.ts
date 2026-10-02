@@ -157,6 +157,40 @@ describe("[mollie] subscription schedule", function () {
     assert.equal(after.cancelAtPeriodEnd, false);
   });
 
+  it("keeps an early end after another subscription of the customer ends early later", async () => {
+    const payer = await NewPayer();
+    const first = await CreateSubscription(request(payer), Key());
+    const second = await CreateSubscription(
+      request(payer, { billingAnchor: Date.now() + 40 * DAY_MS }),
+      Key(),
+    );
+    await CancelSubscription(first.id, Key(), "period_end");
+    const endedEarly = await CancelSubscription(first.id, Key(), "now");
+    const past = first.currentPeriodEnd - Date.now() + HOUR_MS;
+    const read = await Within(past, async () => {
+      await CancelSubscription(second.id, Key(), "period_end");
+      await CancelSubscription(second.id, Key(), "now");
+      return GetSubscription(first.id);
+    });
+    assert.equal(read.status, "canceled");
+    assert.equal(read.endedAt, endedEarly.endedAt);
+  });
+
+  it("keeps metadata written outside the module visible on a customer after an early end", async () => {
+    const payer = await NewPayer();
+    await CurrentHarness().client.request({
+      method: "PATCH",
+      path: `/customers/${payer.customer}`,
+      body: { metadata: { crm: "c-9" } },
+    });
+    const subscription = await CreateSubscription(request(payer), Key());
+    await CancelSubscription(subscription.id, Key(), "period_end");
+    await CancelSubscription(subscription.id, Key(), "now");
+    assert.deepEqual((await GetCustomer(payer.customer)).metadata, {
+      crm: "c-9",
+    });
+  });
+
   it("keeps an early end on later reads, and the customer's own metadata intact", async () => {
     const payer = await NewPayer({ crm: "c-77" });
     const subscription = await CreateSubscription(request(payer), Key());
@@ -249,6 +283,21 @@ describe("[mollie] renewals Mollie fires", function () {
 
   before(function () {
     RequireStandIn(this);
+  });
+
+  it("reports a renewal under the subscription's reference and metadata, which Mollie forwards", async () => {
+    const payer = await NewPayer();
+    const subscription = await CreateSubscription(
+      request(payer, { metadata: { plan: "gold" } }),
+      Key(),
+    );
+    const renewal = renew(subscription);
+    const read = await GetPayment(renewal.id);
+    assert.equal(read.reference, subscription.reference);
+    assert.deepEqual(read.metadata, {
+      plan: "gold",
+      [SUBSCRIPTION_METADATA_KEY]: subscription.id,
+    });
   });
 
   it("marks a renewal as the subscription's and reports it as the latest payment", async () => {

@@ -46,10 +46,14 @@ export function ReadCallerMetadata(
   metadata: MollieMetadata | undefined,
 ): Record<string, string> {
   const parsed = parse(metadata);
-  if (OWN_KEY in parsed) {
+  if (OWN_KEY in parsed && isObject(parsed[CALLER_KEY])) {
     return strings(parsed[CALLER_KEY]);
   }
-  return strings(parsed);
+  return strings(
+    Object.fromEntries(
+      Object.entries(parsed).filter(([key]) => key !== OWN_KEY),
+    ),
+  );
 }
 
 export function WriteMetadata<T extends object>(

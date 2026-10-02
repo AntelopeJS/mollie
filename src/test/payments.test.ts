@@ -26,8 +26,10 @@ import {
   SettledPayment,
   StandIn,
   TEST_TIMEOUT,
+  Within,
 } from "./support/helpers";
 
+const HOUR_MS = 60 * 60 * 1000;
 const EUR = (value: number) => ({ value, currency: "EUR" });
 
 function offSession(
@@ -187,6 +189,51 @@ describe("[mollie] declines arrive after the creating call", function () {
     assert.equal(failed.status, "failed");
     assert.ok(failed.failure);
     assert.equal(failed.failure.code, "declined");
+  });
+});
+
+describe("[mollie] replaying captures and refunds", function () {
+  this.timeout(TEST_TIMEOUT);
+
+  it("returns the original capture for a replayed key, within Mollie's hour and after it", async () => {
+    const created = await offSession(CurrentHarness().chargeable, {
+      authorizeOnly: true,
+    });
+    await SettledPayment(created.id);
+    const key = Key();
+    const first = await CapturePayment(created.id, key, EUR(1000));
+    const replay = await CapturePayment(created.id, key, EUR(1000));
+    const later = await Within(2 * HOUR_MS, () =>
+      CapturePayment(created.id, key, EUR(1000)),
+    );
+    for (const payment of [first, replay, later]) {
+      assert.equal(payment.status, "succeeded");
+      assert.equal(payment.amountCaptured.value, 1000);
+    }
+    await assert.rejects(
+      () => CapturePayment(created.id, Key(), EUR(1000)),
+      InvalidPaymentStateError,
+    );
+  });
+
+  it("returns the original refund for a replayed key, even once nothing is left to refund", async () => {
+    const id = await paidPayment();
+    const key = Key();
+    const first = await RefundPayment({ payment: id }, key);
+    const replay = await RefundPayment({ payment: id }, key);
+    assert.equal(replay.id, first.id);
+    assert.equal((await GetPayment(id)).amountRefunded.value, 2500);
+  });
+
+  it("does not refund twice when a partial refund is replayed after Mollie forgot the key", async () => {
+    const id = await paidPayment();
+    const key = Key();
+    const first = await RefundPayment({ payment: id, amount: EUR(500) }, key);
+    const later = await Within(2 * HOUR_MS, () =>
+      RefundPayment({ payment: id, amount: EUR(500) }, key),
+    );
+    assert.equal(later.id, first.id);
+    assert.equal((await GetPayment(id)).amountRefunded.value, 500);
   });
 });
 

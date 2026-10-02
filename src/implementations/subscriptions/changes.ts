@@ -21,6 +21,7 @@ import {
   CompleteRecord,
   LoadRecord,
   ReadOwnSubscription,
+  KeyHash,
   RecordEarlyEnd,
   SubscriptionPath,
   type SubscriptionRecord,
@@ -72,7 +73,9 @@ export async function ListSubscriptions(
 }
 
 function isSameRequest(record: SubscriptionRecord, key: string): boolean {
-  return record.own.cancel?.key === key || record.earlyEnd?.key === key;
+  return (
+    record.own.cancel?.key === key || record.earlyEnd?.keyHash === KeyHash(key)
+  );
 }
 
 async function replayOrRefuse(
@@ -113,8 +116,7 @@ async function endEarly(
 ): Promise<Subscription> {
   await RecordEarlyEnd(account, record, {
     endedAt: Date.now(),
-    endsAt: record.own.cancel?.endsAt ?? Date.now(),
-    key,
+    keyHash: KeyHash(key),
   });
   return ToSubscription(await LoadRecord(account, record.id));
 }

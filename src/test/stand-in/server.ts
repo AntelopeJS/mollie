@@ -44,6 +44,8 @@ const API_ROUTES: ApiRoute[] = [
   ["GET", `/v2/payments/${ID}`, payments.GetPayment],
   ["DELETE", `/v2/payments/${ID}`, payments.CancelPayment],
   ["POST", `/v2/payments/${ID}/captures`, payments.CreateCapture],
+  ["GET", `/v2/payments/${ID}/captures`, payments.ListCaptures],
+  ["GET", `/v2/payments/${ID}/refunds`, payments.ListRefunds],
   [
     "POST",
     `/v2/payments/${ID}/release-authorization`,

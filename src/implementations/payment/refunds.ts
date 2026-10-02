@@ -7,14 +7,21 @@ import {
 
 import { ReadPayment } from "./payments";
 import { GetAccount } from "../../accounts";
+import type { Account } from "../../accounts";
 import { ParseRefundId } from "../../mollie/ids";
 import { NotFound, Translating } from "./errors";
-import { WriteMetadata } from "../../mollie/metadata";
+import { DefinedFields } from "../../mollie/fields";
 import { ToPaymentStatus, ToRefund } from "./mapping";
+import { ReadOwn, WriteMetadata } from "../../mollie/metadata";
 import type { MolliePayment, MollieRefund } from "../../mollie/types";
 import { FromMollieAmount, ToMollieAmount } from "../../mollie/amounts";
 
 const REFUND_ENTITY = "refund";
+const REFUND_PAGE = "?limit=250";
+
+interface OwnRefund {
+  key: string;
+}
 
 function refusal(payment: MolliePayment, reason: string): Error {
   return new InvalidPaymentStateError(
@@ -43,6 +50,20 @@ function refundableAmount(payment: MolliePayment, requested?: Amount): Amount {
   return amount;
 }
 
+async function earlierRefund(
+  account: Account,
+  payment: MolliePayment,
+  idempotencyKey: string,
+): Promise<MollieRefund | undefined> {
+  const refunds = await account.client.list<MollieRefund>(
+    `/payments/${payment.id}/refunds${REFUND_PAGE}`,
+    "refunds",
+  );
+  return refunds.find(
+    (refund) => ReadOwn<OwnRefund>(refund.metadata)?.key === idempotencyKey,
+  );
+}
+
 export async function RefundPayment(
   request: RefundRequest,
   idempotencyKey: string,
@@ -50,6 +71,10 @@ export async function RefundPayment(
 ): Promise<Refund> {
   const account = GetAccount(provider);
   const payment = await ReadPayment(account, request.payment);
+  const earlier = await Translating(request.payment, "payment", () =>
+    earlierRefund(account, payment, idempotencyKey),
+  );
+  if (earlier) return ToRefund(earlier);
   const amount = refundableAmount(payment, request.amount);
   return Translating(request.payment, "payment", async () =>
     ToRefund(
@@ -62,7 +87,10 @@ export async function RefundPayment(
             ? `Refund (${request.reason}) for ${payment.description}`
             : `Refund for ${payment.description}`,
           metadata: WriteMetadata(
-            request.reason ? { reason: request.reason } : {},
+            {
+              key: idempotencyKey,
+              ...DefinedFields({ reason: request.reason }),
+            },
             request.metadata,
           ),
         },

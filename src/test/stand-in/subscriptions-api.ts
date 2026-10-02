@@ -249,7 +249,7 @@ export function RenewSubscription(
     status: "open",
     sequenceType: "recurring",
     method: mandate?.method ?? "creditcard",
-    metadata: null,
+    metadata: subscription.metadata ?? null,
     customerId: subscription.customerId,
     mandateId: subscription.mandateId ?? null,
     subscriptionId: subscription.id,

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   type CancellationTiming,
   SUBSCRIPTION_INTERVALS,
@@ -38,12 +39,22 @@ export interface OwnSubscription {
 
 export interface EarlyEnd {
   endedAt: number;
-  endsAt: number;
-  key: string;
+  keyHash: string;
 }
 
+type StoredEarlyEnd = [number, string];
+
 interface OwnCustomer {
-  endedEarly: Record<string, EarlyEnd>;
+  endedEarly: Record<string, StoredEarlyEnd>;
+}
+
+const KEY_HASH_LENGTH = 8;
+
+export function KeyHash(idempotencyKey: string): string {
+  return createHash("sha256")
+    .update(idempotencyKey)
+    .digest("hex")
+    .slice(0, KEY_HASH_LENGTH);
 }
 
 export interface SubscriptionRecord {
@@ -129,8 +140,14 @@ async function readCustomer(
   });
 }
 
-function endedEarly(customer: MollieCustomer): Record<string, EarlyEnd> {
+function endedEarly(customer: MollieCustomer): Record<string, StoredEarlyEnd> {
   return ReadOwn<OwnCustomer>(customer.metadata)?.endedEarly ?? {};
+}
+
+function toEarlyEnd(stored: StoredEarlyEnd | undefined): EarlyEnd | undefined {
+  if (!Array.isArray(stored)) return undefined;
+  const [endedAt, keyHash] = stored;
+  return { endedAt, keyHash };
 }
 
 async function earlyEndOf(
@@ -142,9 +159,9 @@ async function earlyEndOf(
     mollie.status === "canceled" && own.cancel?.timing === "period_end";
   if (!isEndingLater) return undefined;
   try {
-    return endedEarly(await readCustomer(account, mollie.customerId))[
-      mollie.id
-    ];
+    return toEarlyEnd(
+      endedEarly(await readCustomer(account, mollie.customerId))[mollie.id],
+    );
   } catch (error) {
     if (IsNotFound(error)) return undefined;
     throw error;
@@ -157,11 +174,10 @@ export async function RecordEarlyEnd(
   earlyEnd: EarlyEnd,
 ): Promise<void> {
   const customer = await readCustomer(account, record.mollie.customerId);
-  const now = Date.now();
-  const current = Object.entries(endedEarly(customer)).filter(
-    ([, entry]) => entry.endsAt > now,
-  );
-  const merged = Object.fromEntries([...current, [record.mollie.id, earlyEnd]]);
+  const merged = {
+    ...endedEarly(customer),
+    [record.mollie.id]: [earlyEnd.endedAt, earlyEnd.keyHash],
+  };
   await account.client.request({
     method: "PATCH",
     path: `/customers/${customer.id}`,

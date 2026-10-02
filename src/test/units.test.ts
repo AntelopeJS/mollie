@@ -122,6 +122,13 @@ describe("[mollie] metadata", () => {
     assert.deepEqual(ReadOwn(written), { reference: "r-1" });
   });
 
+  it("reads metadata it merged into but did not write", () => {
+    assert.deepEqual(
+      ReadCallerMetadata({ plan: "gold", antelope: { endedEarly: {} } }),
+      { plan: "gold" },
+    );
+  });
+
   it("reads metadata Mollie hands back as a JSON string", () => {
     assert.deepEqual(ReadCallerMetadata('{"order_id":"12345","count":3}'), {
       order_id: "12345",

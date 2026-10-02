@@ -8,10 +8,10 @@ import {
 
 import { IsMollieId } from "../../mollie/ids";
 import { DefinedFields } from "../../mollie/fields";
-import { WriteMetadata } from "../../mollie/metadata";
 import { ToPayment, ToPaymentStatus } from "./mapping";
 import { type Account, GetAccount } from "../../accounts";
 import { type Entity, NotFound, Translating } from "./errors";
+import { ReadOwn, WriteMetadata } from "../../mollie/metadata";
 import { FromMollieAmount, ToMollieAmount } from "../../mollie/amounts";
 import { SubscriptionOfPayment } from "../shared/subscription-of-payment";
 import type { MolliePayment, MollieSequenceType } from "../../mollie/types";
@@ -25,6 +25,7 @@ import {
 
 const PAYMENT_ENTITY = "payment";
 const MANUAL = "manual";
+const CAPTURE_PAGE = "?limit=250";
 
 function sequenceType(
   request: PaymentRequest,
@@ -142,6 +143,28 @@ function assertCapturableAmount(payment: MolliePayment, amount?: Amount): void {
   }
 }
 
+interface Capture {
+  metadata?: MolliePayment["metadata"];
+}
+
+interface OwnCapture {
+  key: string;
+}
+
+async function hasCaptured(
+  account: Account,
+  id: string,
+  idempotencyKey: string,
+): Promise<boolean> {
+  const captures = await account.client.list<Capture>(
+    `/payments/${id}/captures${CAPTURE_PAGE}`,
+    "captures",
+  );
+  return captures.some(
+    (capture) => ReadOwn<OwnCapture>(capture.metadata)?.key === idempotencyKey,
+  );
+}
+
 export async function CapturePayment(
   id: string,
   idempotencyKey: string,
@@ -150,13 +173,25 @@ export async function CapturePayment(
 ): Promise<Payment> {
   const account = GetAccount(provider);
   const payment = await ReadPayment(account, id);
+  if (
+    await Translating(id, PAYMENT_ENTITY, () =>
+      hasCaptured(account, id, idempotencyKey),
+    )
+  ) {
+    return ToPayment(payment);
+  }
   if (payment.status !== "authorized") refuse(payment, "captured");
   assertCapturableAmount(payment, amount);
   return Translating(id, PAYMENT_ENTITY, async () => {
     await account.client.request({
       method: "POST",
       path: `/payments/${id}/captures`,
-      body: amount ? { amount: ToMollieAmount(amount) } : {},
+      body: {
+        metadata: WriteMetadata({ key: idempotencyKey }),
+        ...DefinedFields({
+          amount: amount ? ToMollieAmount(amount) : undefined,
+        }),
+      },
       idempotencyKey,
     });
     return ToPayment(await ReadPayment(account, id));
