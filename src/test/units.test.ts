@@ -44,6 +44,10 @@ describe("[mollie] amounts", () => {
       currency: "ISK",
       value: "1050",
     });
+    assert.deepEqual(ToMollieAmount({ value: 1050, currency: "HUF" }), {
+      currency: "HUF",
+      value: "10.50",
+    });
     assert.deepEqual(ToMollieAmount({ value: 1050, currency: "KWD" }), {
       currency: "KWD",
       value: "1.050",

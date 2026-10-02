@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   CreatePayment,
+  GetPayment,
   PaymentError,
   VerifyWebhook,
   WebhookVerificationError,
@@ -66,14 +67,14 @@ describe("[mollie] classic webhooks", function () {
     RequireStandIn(this);
   });
 
-  const MAPPED: [MolliePaymentStatus, string][] = [
-    ["paid", "payment.succeeded"],
-    ["failed", "payment.failed"],
-    ["canceled", "payment.canceled"],
-    ["expired", "payment.canceled"],
+  const MAPPED: [MolliePaymentStatus, string, string][] = [
+    ["paid", "payment.succeeded", "succeeded"],
+    ["failed", "payment.failed", "failed"],
+    ["canceled", "payment.canceled", "canceled"],
+    ["expired", "payment.canceled", "canceled"],
   ];
 
-  for (const [status, type] of MAPPED) {
+  for (const [status, type, reported] of MAPPED) {
     it(`reads a ${status} payment back and reports ${type}`, async () => {
       const id = await openPayment();
       settle(id, status);
@@ -83,6 +84,8 @@ describe("[mollie] classic webhooks", function () {
       assert.ok(event, "a modelled delivery must produce an event");
       assert.equal(event.type, type);
       assert.equal(event.payment?.id, id);
+      assert.equal(event.payment?.status, reported);
+      assert.equal((await GetPayment(id)).status, reported);
       assert.equal(event.payment?.reference.startsWith("module-test-"), true);
       assert.deepEqual(event.payment?.metadata, { order: "webhook-test" });
       assert.ok(

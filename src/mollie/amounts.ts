@@ -3,8 +3,34 @@ import type { Amount } from "@antelopejs/interface-payment";
 import type { MollieAmount } from "./types";
 
 const DECIMALS_BY_CURRENCY: Record<string, number> = {
+  AED: 2,
+  AUD: 2,
+  BRL: 2,
+  CAD: 2,
+  CHF: 2,
+  CZK: 2,
+  DKK: 2,
+  EUR: 2,
+  GBP: 2,
+  HKD: 2,
+  HUF: 2,
+  ILS: 2,
   ISK: 0,
   JPY: 0,
+  MXN: 2,
+  MYR: 2,
+  NOK: 2,
+  NZD: 2,
+  PHP: 2,
+  PLN: 2,
+  RON: 2,
+  RUB: 2,
+  SEK: 2,
+  SGD: 2,
+  THB: 2,
+  TWD: 2,
+  USD: 2,
+  ZAR: 2,
 };
 const DEFAULT_DECIMALS = 2;
 const DECIMAL_SEPARATOR = ".";

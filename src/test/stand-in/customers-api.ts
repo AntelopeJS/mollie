@@ -126,6 +126,9 @@ export function CreateMandate(request: Request): StandInResponse {
   const customerId = request.params[0];
   CustomerOf(request.account, customerId);
   const { body } = request;
+  if (typeof body.consumerName !== "string") {
+    throw Unprocessable("The consumer name is missing", "consumerName");
+  }
   if (
     body.method !== "directdebit" ||
     typeof body.consumerAccount !== "string"
