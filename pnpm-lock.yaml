@@ -23,8 +23,8 @@ importers:
         version: git+https://git@github.com:AntelopeJS/interface-subscriptions.git#481ede61b57cab94d82c9dd301a92935398cf01c(@antelopejs/interface-core@0.1.1)(@antelopejs/interface-payment@git+https://git@github.com:AntelopeJS/interface-payment.git#9d80f653258e23a820a93bb36b1fa1c8cbc8332f(@antelopejs/interface-core@0.1.1))
     devDependencies:
       '@antelopejs/tooling-configs':
-        specifier: ^0.0.4
-        version: 0.0.4(eslint-plugin-perfectionist@5.12.1(eslint@10.11.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.39.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2003))
+        specifier: ^0.0.8
+        version: 0.0.8(eslint-plugin-perfectionist@5.12.1(eslint@10.11.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.39.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2003))
       '@types/mocha':
         specifier: ^10.0.10
         version: 10.0.10
@@ -77,9 +77,10 @@ packages:
       '@antelopejs/interface-core': '>=0.0.5 <1.0.0'
       '@antelopejs/interface-payment': '>=0.1.0 <1.0.0'
 
-  '@antelopejs/tooling-configs@0.0.4':
-    resolution: {integrity: sha512-Nfv71Z9DF78mFu817SwTZnzfF/oWhjXWhAY/zhBV9ArevV3ZwJ/JhZD+3QiLf9fXIS2pXCrmCCYGclpc598psA==}
+  '@antelopejs/tooling-configs@0.0.8':
+    resolution: {integrity: sha512-0oYe8o6if5cO444akfSuwfwiCQJtSeGXcJUM85K1uS11ir99p/QPRXYhAtiKBTpHBfGgeXKgm/KLaeWH5nThIg==}
     engines: {node: '>=22.18.0'}
+    hasBin: true
     peerDependencies:
       '@nuxt/eslint-config': '>=1.2.0'
       eslint-plugin-perfectionist: '>=5.0.0'
@@ -919,8 +920,8 @@ packages:
     peerDependencies:
       acorn: ^6.0.0 || ^7.0.0 || ^8.0.0
 
-  acorn@8.18.0:
-    resolution: {integrity: sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==}
+  acorn@8.19.0:
+    resolution: {integrity: sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==}
     engines: {node: '>=0.4.0'}
     hasBin: true
 
@@ -2004,7 +2005,7 @@ snapshots:
       '@antelopejs/interface-core': 0.1.1
       '@antelopejs/interface-payment': git+https://git@github.com:AntelopeJS/interface-payment.git#9d80f653258e23a820a93bb36b1fa1c8cbc8332f(@antelopejs/interface-core@0.1.1)
 
-  '@antelopejs/tooling-configs@0.0.4(eslint-plugin-perfectionist@5.12.1(eslint@10.11.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.39.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2003))':
+  '@antelopejs/tooling-configs@0.0.8(eslint-plugin-perfectionist@5.12.1(eslint@10.11.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.39.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2003))':
     dependencies:
       '@oxlint/plugins': 1.81.0
     optionalDependencies:
@@ -2630,11 +2631,11 @@ snapshots:
       '@typescript-eslint/types': 8.71.0
       eslint-visitor-keys: 5.0.1
 
-  acorn-jsx@5.3.2(acorn@8.18.0):
+  acorn-jsx@5.3.2(acorn@8.19.0):
     dependencies:
-      acorn: 8.18.0
+      acorn: 8.19.0
 
-  acorn@8.18.0: {}
+  acorn@8.19.0: {}
 
   agent-base@7.1.4: {}
 
@@ -2911,8 +2912,8 @@ snapshots:
 
   espree@11.2.0:
     dependencies:
-      acorn: 8.18.0
-      acorn-jsx: 5.3.2(acorn@8.18.0)
+      acorn: 8.19.0
+      acorn-jsx: 5.3.2(acorn@8.19.0)
       eslint-visitor-keys: 5.0.1
 
   esprima@4.0.1: {}
@@ -3237,7 +3238,7 @@ snapshots:
 
   mlly@1.8.2:
     dependencies:
-      acorn: 8.18.0
+      acorn: 8.19.0
       pathe: 2.0.3
       pkg-types: 1.3.1
       ufo: 1.6.4
