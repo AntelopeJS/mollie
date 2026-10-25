@@ -16,7 +16,7 @@ The AntelopeJS Mollie module, published as `@antelopejs/mollie`. It implements `
 ## Tests
 
 - `pnpm test` builds `dist`, then runs `ajs module test .` (`ajs` comes from the `@antelopejs/core` devDependency). `src/test/antelope.test.ts` starts the stand-in and runs the compiled suites in `dist/test`: the interface conformance suites and this module's own tests. The conformance tests Mollie cannot pass are reported pending by name; `docs/5.testing.md` lists them.
-- `pnpm run checks` runs the suites against the stand-in only. To run them against Mollie's test mode, set `MOLLIE_API_KEY` to a `test_…` key, and `MOLLIE_SECOND_API_KEY` to a second test account for the multi-account tests, then run `pnpm test`. The suite refuses `live_…` keys.
+- With `MOLLIE_API_KEY` unset, `pnpm run checks` runs the suites against the stand-in. To run them against Mollie's test mode, set `MOLLIE_API_KEY` to a `test_…` key, and `MOLLIE_SECOND_API_KEY` to a second test account for the multi-account tests, then run `pnpm test`. The suite refuses `live_…` keys.
 - Every behaviour the stand-in models is listed with its source in `src/test/stand-in/SOURCES.md`. Update it when you change the stand-in.
 
 ## Shipped files
