@@ -1,0 +1,12 @@
+{
+  "rules": {
+    "antelopejs/require-assertion": 1,
+    "anti-slop/no-known-value-widening": 23,
+    "anti-slop/no-runtime-typeof": 20,
+    "anti-slop/no-unknown-parameters": 24,
+    "anti-slop/no-unknown-returns": 5,
+    "anti-slop/no-unsafe-dictionary-type": 8,
+    "anti-slop/require-safety-comment-for-type-assertion": 41
+  },
+  "oversizeFiles": {}
+}
