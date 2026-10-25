@@ -45,8 +45,8 @@
   },
   "dependencies": {
     "@antelopejs/interface-core": ">=0.0.5 <1.0.0",
-    "@antelopejs/interface-payment": "^0.0.2",
-    "@antelopejs/interface-subscriptions": "^0.0.2"
+    "@antelopejs/interface-payment": ">=0.0.2 <1.0.0",
+    "@antelopejs/interface-subscriptions": ">=0.0.2 <1.0.0"
   },
   "devDependencies": {
     "@antelopejs/core": "^1.17.1",

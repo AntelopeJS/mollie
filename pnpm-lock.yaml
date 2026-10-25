@@ -12,10 +12,10 @@ importers:
         specifier: '>=0.0.5 <1.0.0'
         version: 0.1.1
       '@antelopejs/interface-payment':
-        specifier: ^0.0.2
+        specifier: '>=0.0.2 <1.0.0'
         version: 0.0.2(@antelopejs/interface-core@0.1.1)
       '@antelopejs/interface-subscriptions':
-        specifier: ^0.0.2
+        specifier: '>=0.0.2 <1.0.0'
         version: 0.0.2(@antelopejs/interface-core@0.1.1)(@antelopejs/interface-payment@0.0.2(@antelopejs/interface-core@0.1.1))
     devDependencies:
       '@antelopejs/core':
