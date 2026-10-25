@@ -11,7 +11,7 @@ The AntelopeJS Mollie module, published as `@antelopejs/mollie`. It implements `
 
 ## Versioning
 
-- `@antelopejs/interface-payment` and `@antelopejs/interface-subscriptions` are pinned to git commits through `pnpm.overrides` in `package.json`. Keep the `git+https://` form: CI has no SSH key, so a `git+ssh://` override fails `pnpm install`. Move a pin when the interface changes, then update the code, `docs/` and `skills/mollie/SKILL.md` with it.
+- `@antelopejs/interface-payment` and `@antelopejs/interface-subscriptions` come from npm. Do not point them at git through `pnpm.overrides`: CI has no SSH key, and a git-hosted interface is built by a nested `pnpm install` of its own devDependencies, which the overrides do not reach. When you raise an interface's range, update the code, `docs/` and `skills/mollie/SKILL.md` with it.
 
 ## Tests
 

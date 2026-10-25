@@ -4,10 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@antelopejs/interface-payment': git+https://github.com/AntelopeJS/interface-payment.git#9d80f653258e23a820a93bb36b1fa1c8cbc8332f
-  '@antelopejs/interface-subscriptions': git+https://github.com/AntelopeJS/interface-subscriptions.git#481ede61b57cab94d82c9dd301a92935398cf01c
-
 importers:
 
   .:
@@ -16,11 +12,11 @@ importers:
         specifier: '>=0.0.5 <1.0.0'
         version: 0.1.1
       '@antelopejs/interface-payment':
-        specifier: git+https://github.com/AntelopeJS/interface-payment.git#9d80f653258e23a820a93bb36b1fa1c8cbc8332f
-        version: https://codeload.github.com/AntelopeJS/interface-payment/tar.gz/9d80f653258e23a820a93bb36b1fa1c8cbc8332f(@antelopejs/interface-core@0.1.1)
+        specifier: ^0.0.2
+        version: 0.0.2(@antelopejs/interface-core@0.1.1)
       '@antelopejs/interface-subscriptions':
-        specifier: git+https://github.com/AntelopeJS/interface-subscriptions.git#481ede61b57cab94d82c9dd301a92935398cf01c
-        version: https://codeload.github.com/AntelopeJS/interface-subscriptions/tar.gz/481ede61b57cab94d82c9dd301a92935398cf01c(@antelopejs/interface-core@0.1.1)(@antelopejs/interface-payment@https://codeload.github.com/AntelopeJS/interface-payment/tar.gz/9d80f653258e23a820a93bb36b1fa1c8cbc8332f(@antelopejs/interface-core@0.1.1))
+        specifier: ^0.0.2
+        version: 0.0.2(@antelopejs/interface-core@0.1.1)(@antelopejs/interface-payment@0.0.2(@antelopejs/interface-core@0.1.1))
     devDependencies:
       '@antelopejs/core':
         specifier: ^1.17.1
@@ -78,18 +74,16 @@ packages:
   '@antelopejs/interface-core@0.2.6':
     resolution: {integrity: sha512-PJp58D1snKLVEmpfn9Yj2htuohZhUxHqyyec3xtkPPy61mtACs0YznnhcgbYQNhIy/q8J+lSwDICPZIsKjhAIA==}
 
-  '@antelopejs/interface-payment@https://codeload.github.com/AntelopeJS/interface-payment/tar.gz/9d80f653258e23a820a93bb36b1fa1c8cbc8332f':
-    resolution: {tarball: https://codeload.github.com/AntelopeJS/interface-payment/tar.gz/9d80f653258e23a820a93bb36b1fa1c8cbc8332f}
-    version: 0.1.0
+  '@antelopejs/interface-payment@0.0.2':
+    resolution: {integrity: sha512-U72ATKewYgs628xT5MVO70IutcVXGOpw8Vnb7iUh3wjOLLn3pK13RR5rMrMuSnBbIzhltvFpBT4f4rjSDArHSw==}
     peerDependencies:
       '@antelopejs/interface-core': '>=0.0.3 <1.0.0'
 
-  '@antelopejs/interface-subscriptions@https://codeload.github.com/AntelopeJS/interface-subscriptions/tar.gz/481ede61b57cab94d82c9dd301a92935398cf01c':
-    resolution: {tarball: https://codeload.github.com/AntelopeJS/interface-subscriptions/tar.gz/481ede61b57cab94d82c9dd301a92935398cf01c}
-    version: 0.1.0
+  '@antelopejs/interface-subscriptions@0.0.2':
+    resolution: {integrity: sha512-ineU+bO4dpeP7nv52mV+klnTzUNmzktXPF/y6PQ3T0KqTOg1awl2OWkOnN4ULvOCvih3SG/zor/QOWWLPhQriw==}
     peerDependencies:
       '@antelopejs/interface-core': '>=0.0.5 <1.0.0'
-      '@antelopejs/interface-payment': '>=0.1.0 <1.0.0'
+      '@antelopejs/interface-payment': '>=0.0.2 <1.0.0'
 
   '@antelopejs/tooling-configs@0.2.0':
     resolution: {integrity: sha512-D3yCA9ZuvuDfzz8lS5VKyP8sgDkSdM0k1Awp3Q8qwq3u1/dc8UF4ep3SHW5fZpTQpLwNRcEDv1DSrRx+b7w9aA==}
@@ -2518,14 +2512,14 @@ snapshots:
     dependencies:
       reflect-metadata: 0.2.2
 
-  '@antelopejs/interface-payment@https://codeload.github.com/AntelopeJS/interface-payment/tar.gz/9d80f653258e23a820a93bb36b1fa1c8cbc8332f(@antelopejs/interface-core@0.1.1)':
+  '@antelopejs/interface-payment@0.0.2(@antelopejs/interface-core@0.1.1)':
     dependencies:
       '@antelopejs/interface-core': 0.1.1
 
-  '@antelopejs/interface-subscriptions@https://codeload.github.com/AntelopeJS/interface-subscriptions/tar.gz/481ede61b57cab94d82c9dd301a92935398cf01c(@antelopejs/interface-core@0.1.1)(@antelopejs/interface-payment@https://codeload.github.com/AntelopeJS/interface-payment/tar.gz/9d80f653258e23a820a93bb36b1fa1c8cbc8332f(@antelopejs/interface-core@0.1.1))':
+  '@antelopejs/interface-subscriptions@0.0.2(@antelopejs/interface-core@0.1.1)(@antelopejs/interface-payment@0.0.2(@antelopejs/interface-core@0.1.1))':
     dependencies:
       '@antelopejs/interface-core': 0.1.1
-      '@antelopejs/interface-payment': https://codeload.github.com/AntelopeJS/interface-payment/tar.gz/9d80f653258e23a820a93bb36b1fa1c8cbc8332f(@antelopejs/interface-core@0.1.1)
+      '@antelopejs/interface-payment': 0.0.2(@antelopejs/interface-core@0.1.1)
 
   '@antelopejs/tooling-configs@0.2.0(eslint-plugin-perfectionist@5.12.1(eslint@10.11.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.39.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2003))':
     dependencies:
