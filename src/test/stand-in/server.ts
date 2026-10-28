@@ -21,6 +21,7 @@ import {
   type Account,
   type Delivery,
   NewAccount,
+  type StandInBody,
   type StandInResponse,
 } from "./state";
 
@@ -109,7 +110,7 @@ const PAGE_ROUTES = {
   "POST /checkout/test-mode": pages.SubmitTestMode,
 } satisfies Record<string, PageHandler>;
 
-function isTextBody(body: unknown): body is string {
+function isTextBody(body: StandInBody | undefined): body is string {
   return typeof body === "string";
 }
 

@@ -279,7 +279,7 @@ async function settleFirstPeriod(
     const payment = await chargeFirstPeriod(account, id, mollie, creation);
     if (payment.status === "failed") await refuse(account, mollie, payment);
     mollie = await updateOwn(account, mollie, { firstPayment: payment.id });
-    own = ownOf(mollie);
+    own = ReadOwnSubscription(mollie) as OwnSubscription;
   }
   return CompleteRecord(account, id, mollie, own);
 }

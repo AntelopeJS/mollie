@@ -3,12 +3,12 @@ import type { Request } from "./payments-api";
 import { NO_CONTENT, NotFound, Ok, Unprocessable } from "./responses";
 import {
   type Account,
-  IsString,
   NewId,
   NowIso,
   type StandInResponse,
   TextOf,
 } from "./state";
+import { IsJsonString } from "../../mollie/metadata";
 import type {
   MollieCustomer,
   MollieMandate,
@@ -133,10 +133,10 @@ export function CreateMandate(request: Request): StandInResponse {
   const customerId = request.params[0];
   CustomerOf(request.account, customerId);
   const { body } = request;
-  if (!IsString(body.consumerName)) {
+  if (!IsJsonString(body.consumerName)) {
     throw Unprocessable("The consumer name is missing", "consumerName");
   }
-  if (body.method !== "directdebit" || !IsString(body.consumerAccount)) {
+  if (body.method !== "directdebit" || !IsJsonString(body.consumerAccount)) {
     throw Unprocessable(
       "Only SEPA Direct Debit mandates with an IBAN are supported here",
       "method",

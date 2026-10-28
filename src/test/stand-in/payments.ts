@@ -1,15 +1,7 @@
 import { DefinedFields, Lookup } from "../../mollie/fields";
 import { NotFound, Unprocessable } from "./responses";
-import { IsJsonObject } from "../../mollie/metadata";
-import {
-  type Account,
-  IsString,
-  IsoIn,
-  NewId,
-  NowIso,
-  Text,
-  TextOf,
-} from "./state";
+import { IsJsonObject, IsJsonString } from "../../mollie/metadata";
+import { type Account, IsoIn, NewId, NowIso, Text, TextOf } from "./state";
 import type {
   JsonObject,
   JsonValue,
@@ -204,7 +196,7 @@ function draftOf(account: Account, body: Body): Draft {
       "customerId",
     );
   }
-  if (!IsString(body.redirectUrl)) {
+  if (!IsJsonString(body.redirectUrl)) {
     throw Unprocessable("The redirect URL is missing", "redirectUrl");
   }
   if (
@@ -222,7 +214,7 @@ export function CreatePaymentRecord(
   body: Body,
 ): MolliePayment {
   const amount = ReadAmount(body.amount, "amount");
-  if (!IsString(body.description)) {
+  if (!IsJsonString(body.description)) {
     throw Unprocessable("The description is missing", "description");
   }
   AssertWebhookUrl(body.webhookUrl);

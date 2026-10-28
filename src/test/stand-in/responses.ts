@@ -1,4 +1,4 @@
-import type { StandInResponse } from "./state";
+import type { StandInBody, StandInResponse } from "./state";
 import { DefinedFields, Lookup } from "../../mollie/fields";
 
 const DOCUMENTATION = {
@@ -48,7 +48,7 @@ export function Unprocessable(detail: string, field?: string): StandInError {
   return new StandInError(422, detail, field);
 }
 
-export function Ok<T>(body: T, status = 200): StandInResponse {
+export function Ok(body: StandInBody, status = 200): StandInResponse {
   return { status, body };
 }
 

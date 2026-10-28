@@ -14,13 +14,13 @@ import {
 import {
   type Account,
   CountOf,
-  IsString,
   NewId,
   NowIso,
   type StandInResponse,
   Text,
   TextOf,
 } from "./state";
+import { IsJsonString } from "../../mollie/metadata";
 import {
   AssertWebhookUrl,
   type PaymentHooks,
@@ -81,7 +81,7 @@ function assertUniqueDescription(
   customerId: string,
   description: JsonValue | undefined,
 ): string {
-  if (!IsString(description) || !description) {
+  if (!IsJsonString(description) || !description) {
     throw Unprocessable("The description is missing", "description");
   }
   const isTaken = [...account.subscriptions.values()].some(
