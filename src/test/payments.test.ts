@@ -55,22 +55,6 @@ async function paidPayment(): Promise<string> {
   return payment.id;
 }
 
-async function rejectsWithout(
-  work: Promise<unknown>,
-  unwanted: Function,
-  wanted: Function,
-) {
-  const error = await work.then(
-    () => undefined,
-    (reason: unknown) => reason,
-  );
-  assert.ok(
-    error instanceof wanted,
-    `expected ${wanted.name}, got ${String(error)}`,
-  );
-  assert.ok(!(error instanceof unwanted), `must not be ${unwanted.name}`);
-}
-
 describe("[mollie] authorize and capture, settled the way Mollie settles", function () {
   this.timeout(TEST_TIMEOUT);
 
@@ -268,10 +252,20 @@ describe("[mollie] payments edge cases", function () {
     const id = await paidPayment();
     StandIn().outage = 422;
     try {
-      await rejectsWithout(
-        RefundPayment({ payment: id, amount: EUR(100) }, Key()),
-        InvalidPaymentStateError,
-        PaymentError,
+      const error = await RefundPayment(
+        { payment: id, amount: EUR(100) },
+        Key(),
+      ).then(
+        () => undefined,
+        (reason: unknown) => reason,
+      );
+      assert.ok(
+        error instanceof PaymentError,
+        `expected ${PaymentError.name}, got ${String(error)}`,
+      );
+      assert.ok(
+        !(error instanceof InvalidPaymentStateError),
+        `must not be ${InvalidPaymentStateError.name}`,
       );
     } finally {
       StandIn().outage = undefined;

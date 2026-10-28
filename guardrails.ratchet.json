@@ -1,6 +1,5 @@
 {
   "rules": {
-    "antelopejs/require-assertion": 1,
     "anti-slop/no-known-value-widening": 23,
     "anti-slop/no-runtime-typeof": 18,
     "anti-slop/no-unknown-parameters": 24,
