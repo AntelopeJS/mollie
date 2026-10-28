@@ -48,7 +48,7 @@ export function Unprocessable(detail: string, field?: string): StandInError {
   return new StandInError(422, detail, field);
 }
 
-export function Ok(body: unknown, status = 200): StandInResponse {
+export function Ok<T>(body: T, status = 200): StandInResponse {
   return { status, body };
 }
 

@@ -11,7 +11,12 @@ import { TranslatingSubscription } from "./errors";
 import { IsSubscriptionInterval } from "./calendar";
 import { DefinedFields } from "../../mollie/fields";
 import { ParseSubscriptionId } from "../../mollie/ids";
-import { MergeOwn, ReadOwn } from "../../mollie/metadata";
+import {
+  IsJsonNumber,
+  IsJsonString,
+  MergeOwn,
+  ReadOwn,
+} from "../../mollie/metadata";
 import type {
   MollieCustomer,
   MolliePayment,
@@ -81,9 +86,9 @@ export function ReadOwnSubscription(
 ): OwnSubscription | undefined {
   const own = ReadOwn<OwnSubscription>(mollie.metadata);
   const isOwn =
-    typeof own?.reference === "string" &&
+    IsJsonString(own?.reference) &&
     IsSubscriptionInterval(own.interval) &&
-    typeof own.intervalCount === "number" &&
+    IsJsonNumber(own.intervalCount) &&
     START_KINDS.has(own.start ?? "");
   return isOwn ? (own as OwnSubscription) : undefined;
 }

@@ -256,6 +256,16 @@ async function refuse(
   throw refusal(payment);
 }
 
+function ownOf(mollie: MollieSubscription): OwnSubscription {
+  const own = ReadOwnSubscription(mollie);
+  if (!own) {
+    throw new TypeError(
+      `Subscription ${mollie.id} carries no metadata of this module`,
+    );
+  }
+  return own;
+}
+
 async function settleFirstPeriod(
   account: Account,
   id: string,
@@ -263,13 +273,13 @@ async function settleFirstPeriod(
   creation: Creation,
 ): Promise<SubscriptionRecord> {
   let mollie = created;
-  let own = ReadOwnSubscription(mollie) as OwnSubscription;
+  let own = ownOf(mollie);
   if (own.refused) throw refusal(await readPayment(account, own.refused));
   if (own.start === "charged" && !own.firstPayment) {
     const payment = await chargeFirstPeriod(account, id, mollie, creation);
     if (payment.status === "failed") await refuse(account, mollie, payment);
     mollie = await updateOwn(account, mollie, { firstPayment: payment.id });
-    own = ReadOwnSubscription(mollie) as OwnSubscription;
+    own = ownOf(mollie);
   }
   return CompleteRecord(account, id, mollie, own);
 }

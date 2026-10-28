@@ -9,11 +9,19 @@ export function IsJsonObject(
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export function IsJsonString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
+}
+
+export function IsJsonNumber(value: JsonValue | undefined): value is number {
+  return typeof value === "number";
+}
+
 function parse(metadata: MollieMetadata | undefined): JsonObject {
   if (IsJsonObject(metadata)) {
     return metadata;
   }
-  if (typeof metadata !== "string") {
+  if (!IsJsonString(metadata)) {
     return {};
   }
   try {

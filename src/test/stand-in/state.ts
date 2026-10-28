@@ -95,6 +95,24 @@ function isText(value: JsonValue | undefined): value is string | number {
   return typeof value === "string" || typeof value === "number";
 }
 
+export function IsString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
+}
+
+function isNumber(value: JsonValue | undefined): value is number {
+  return typeof value === "number";
+}
+
+/** The value when it is a JSON string, otherwise `undefined`. */
+export function TextOf(value: JsonValue | undefined): string | undefined {
+  return IsString(value) ? value : undefined;
+}
+
+/** The value when it is a JSON number, otherwise `undefined`. */
+export function CountOf(value: JsonValue | undefined): number | undefined {
+  return isNumber(value) ? value : undefined;
+}
+
 export function Text(value: JsonValue | undefined): string {
   return isText(value) ? String(value) : "";
 }

@@ -13,10 +13,13 @@ import {
 } from "./customers-api";
 import {
   type Account,
+  CountOf,
+  IsString,
   NewId,
   NowIso,
   type StandInResponse,
   Text,
+  TextOf,
 } from "./state";
 import {
   AssertWebhookUrl,
@@ -78,7 +81,7 @@ function assertUniqueDescription(
   customerId: string,
   description: JsonValue | undefined,
 ): string {
-  if (typeof description !== "string" || !description) {
+  if (!IsString(description) || !description) {
     throw Unprocessable("The description is missing", "description");
   }
   const isTaken = [...account.subscriptions.values()].some(
@@ -128,14 +131,14 @@ export function CreateSubscription(request: Request): StandInResponse {
     id: NewId("sub"),
     status: "active",
     amount: ReadAmount(body.amount, "amount"),
-    times: (body.times as number | undefined) ?? null,
-    timesRemaining: (body.times as number | undefined) ?? null,
+    times: CountOf(body.times) ?? null,
+    timesRemaining: CountOf(body.times) ?? null,
     interval: readInterval(body.interval),
     startDate,
     nextPaymentDate: startDate,
     description: assertUniqueDescription(account, customerId, body.description),
     metadata: body.metadata ?? null,
-    webhookUrl: (body.webhookUrl as string | undefined) ?? null,
+    webhookUrl: TextOf(body.webhookUrl) ?? null,
     customerId,
     mandateId: mandate.id,
     createdAt: NowIso(),

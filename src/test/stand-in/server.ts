@@ -14,7 +14,8 @@ import { StandInError } from "./responses";
 import * as customers from "./customers-api";
 import { DefinedFields, Lookup } from "../../mollie/fields";
 import * as subscriptions from "./subscriptions-api";
-import type { MolliePayment } from "../../mollie/types";
+import { IsJsonObject } from "../../mollie/metadata";
+import type { JsonValue, MolliePayment } from "../../mollie/types";
 import { type PaymentHooks, Transition } from "./payments";
 import {
   type Account,
@@ -108,8 +109,28 @@ const PAGE_ROUTES = {
   "POST /checkout/test-mode": pages.SubmitTestMode,
 } satisfies Record<string, PageHandler>;
 
+function isTextBody(body: unknown): body is string {
+  return typeof body === "string";
+}
+
+function isTcpAddress(
+  address: string | AddressInfo | null,
+): address is AddressInfo {
+  return typeof address === "object" && address !== null;
+}
+
+function isSingleHeader(value: string | string[] | undefined): value is string {
+  return typeof value === "string";
+}
+
+function parseRequestBody(raw: string): payments.Request["body"] {
+  if (!raw) return {};
+  const parsed: JsonValue = JSON.parse(raw);
+  return IsJsonObject(parsed) ? parsed : {};
+}
+
 function send(response: ServerResponse, result: StandInResponse): void {
-  const isText = typeof result.body === "string";
+  const isText = isTextBody(result.body);
   const isJson = !isText && result.body !== undefined;
   response.writeHead(result.status, {
     ...(isJson && JSON_TYPE),
@@ -151,7 +172,10 @@ export class MollieStandIn {
     await new Promise<void>((resolve) =>
       this.server?.listen(0, "127.0.0.1", resolve),
     );
-    const { port } = this.server.address() as AddressInfo;
+    const address = this.server.address();
+    if (!isTcpAddress(address))
+      throw new Error("The stand-in is not listening on a TCP port");
+    const { port } = address;
     this.baseUrl = `http://127.0.0.1:${port}`;
     this.hooks.baseUrl = this.baseUrl;
     return this.baseUrl;
@@ -290,7 +314,7 @@ export class MollieStandIn {
         404,
         `No route for ${message.method} ${url.pathname}`,
       );
-    const body = raw ? (JSON.parse(raw) as payments.Request["body"]) : {};
+    const body = parseRequestBody(raw);
     const run = () =>
       route.candidate.handle({
         account,
@@ -305,10 +329,10 @@ export class MollieStandIn {
       path: url.pathname,
       body,
       ...DefinedFields({
-        idempotencyKey: typeof key === "string" ? key : undefined,
+        idempotencyKey: isSingleHeader(key) ? key : undefined,
       }),
     });
-    if (message.method !== "POST" || typeof key !== "string") return run();
+    if (message.method !== "POST" || !isSingleHeader(key)) return run();
     return this.idempotent(
       account,
       key,

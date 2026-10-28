@@ -32,7 +32,6 @@ export interface ModuleConfig {
   accounts?: Record<string, AccountConfig>;
 }
 
-const HARNESS = Symbol.for("antelopejs.mollie.test-harness");
 const STAND_IN_PAYER_INTERVAL_MS = 50;
 const LIVE_PAYER_INTERVAL_MS = 1_000;
 const SETTLE_TIMEOUT_MS = 60_000;
@@ -42,8 +41,9 @@ const PROVISIONING_AMOUNT = { currency: "EUR", value: "1.00" };
 export const SECOND_ACCOUNT = "second";
 export const SUBSCRIPTIONS_SUITE_METHOD = "creditcard";
 
-interface Global {
-  [HARNESS]?: Harness;
+declare global {
+  /** The harness the test config starts, read by the compiled suites. */
+  var antelopejsMollieTestHarness: Harness | undefined;
 }
 
 async function waitForStatus(
@@ -143,12 +143,12 @@ export async function StartHarness(
         : undefined,
     }),
   };
-  (globalThis as Global)[HARNESS] = harness;
+  globalThis.antelopejsMollieTestHarness = harness;
   return harness;
 }
 
 export function CurrentHarness(): Harness {
-  const harness = (globalThis as Global)[HARNESS];
+  const harness = globalThis.antelopejsMollieTestHarness;
   if (!harness)
     throw new Error(
       "The Mollie test harness was not started by the test config",
@@ -157,7 +157,7 @@ export function CurrentHarness(): Harness {
 }
 
 export async function StopHarness(): Promise<void> {
-  const harness = (globalThis as Global)[HARNESS];
+  const harness = globalThis.antelopejsMollieTestHarness;
   if (!harness) return;
   await harness.payer.stop();
   for (const error of harness.payer.errors) {
@@ -171,7 +171,7 @@ export async function StopHarness(): Promise<void> {
     }
   }
   await harness.standIn?.stop();
-  delete (globalThis as Global)[HARNESS];
+  delete globalThis.antelopejsMollieTestHarness;
 }
 
 export function ModuleConfigFor(harness: Harness): ModuleConfig {

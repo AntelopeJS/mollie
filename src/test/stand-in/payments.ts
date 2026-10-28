@@ -1,6 +1,15 @@
 import { DefinedFields, Lookup } from "../../mollie/fields";
 import { NotFound, Unprocessable } from "./responses";
-import { type Account, IsoIn, NewId, NowIso, Text } from "./state";
+import { IsJsonObject } from "../../mollie/metadata";
+import {
+  type Account,
+  IsString,
+  IsoIn,
+  NewId,
+  NowIso,
+  Text,
+  TextOf,
+} from "./state";
 import type {
   JsonObject,
   JsonValue,
@@ -30,6 +39,11 @@ const MANUAL_CAPTURE = new Set([
   "vipps",
 ]);
 const ZERO_DECIMALS = new Set(["ISK", "JPY"]);
+const SEQUENCE_TYPES: MolliePayment["sequenceType"][] = [
+  "oneoff",
+  "first",
+  "recurring",
+];
 const LOCAL_HOSTS = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/;
 const TEST_CARD = {
   cardHolder: "T. TEST",
@@ -56,19 +70,18 @@ export function ReadAmount(
   value: JsonValue | undefined,
   field: string,
 ): MollieAmount {
-  const amount = value as MollieAmount | undefined;
-  const decimals = ZERO_DECIMALS.has(amount?.currency ?? "") ? 0 : 2;
+  const amount = IsJsonObject(value) ? value : undefined;
+  const currency = TextOf(amount?.currency);
+  const units = TextOf(amount?.value);
+  const decimals = ZERO_DECIMALS.has(currency ?? "") ? 0 : 2;
   const pattern = decimals === 0 ? /^\d+$/ : /^\d+\.\d{2}$/;
-  if (
-    typeof amount?.currency !== "string" ||
-    !pattern.test(amount.value ?? "")
-  ) {
+  if (currency === undefined || units === undefined || !pattern.test(units)) {
     throw Unprocessable(
-      `The amount contains an invalid value or the wrong number of decimals for ${String(amount?.currency)}`,
+      `The amount contains an invalid value or the wrong number of decimals for ${currency ?? "undefined"}`,
       field,
     );
   }
-  return { currency: amount.currency, value: amount.value };
+  return { currency, value: units };
 }
 
 function link(href: string, type = "application/hal+json") {
@@ -129,7 +142,7 @@ function checkoutLinks(
   token: string,
   method: JsonValue | undefined,
 ) {
-  const preset = typeof method === "string" ? method : undefined;
+  const preset = TextOf(method);
   return {
     checkout: link(
       preset
@@ -168,8 +181,17 @@ interface Draft {
   mandate?: MollieMandate;
 }
 
+function isSequenceType(
+  value: JsonValue,
+): value is MolliePayment["sequenceType"] {
+  return SEQUENCE_TYPES.some((sequenceType) => sequenceType === value);
+}
+
 function draftOf(account: Account, body: Body): Draft {
-  const sequenceType = (body.sequenceType ?? "oneoff") as Draft["sequenceType"];
+  const sequenceType = body.sequenceType ?? "oneoff";
+  if (!isSequenceType(sequenceType)) {
+    throw Unprocessable("The sequence type is invalid", "sequenceType");
+  }
   if (sequenceType === "recurring") {
     return { sequenceType, mandate: chargeableMandate(account, body) };
   }
@@ -182,7 +204,7 @@ function draftOf(account: Account, body: Body): Draft {
       "customerId",
     );
   }
-  if (typeof body.redirectUrl !== "string") {
+  if (!IsString(body.redirectUrl)) {
     throw Unprocessable("The redirect URL is missing", "redirectUrl");
   }
   if (
@@ -200,7 +222,7 @@ export function CreatePaymentRecord(
   body: Body,
 ): MolliePayment {
   const amount = ReadAmount(body.amount, "amount");
-  if (typeof body.description !== "string") {
+  if (!IsString(body.description)) {
     throw Unprocessable("The description is missing", "description");
   }
   AssertWebhookUrl(body.webhookUrl);
@@ -216,15 +238,12 @@ export function CreatePaymentRecord(
     amount,
     status: "open",
     sequenceType: draft.sequenceType,
-    method: typeof method === "string" ? method : null,
+    method: TextOf(method) ?? null,
     metadata: body.metadata ?? null,
-    customerId:
-      draft.mandate?.customerId ??
-      (body.customerId as string | undefined) ??
-      null,
+    customerId: draft.mandate?.customerId ?? TextOf(body.customerId) ?? null,
     mandateId: draft.mandate?.id ?? null,
-    redirectUrl: (body.redirectUrl as string | undefined) ?? null,
-    webhookUrl: (body.webhookUrl as string | undefined) ?? null,
+    redirectUrl: TextOf(body.redirectUrl) ?? null,
+    webhookUrl: TextOf(body.webhookUrl) ?? null,
     createdAt: NowIso(),
     isCancelable: true,
     _links: {},
