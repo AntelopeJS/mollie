@@ -188,7 +188,7 @@ export function ModuleConfigFor(harness: Harness): ModuleConfig {
   };
 }
 
-export function SuiteEnvironment(harness: Harness): Record<string, string> {
+export function SuiteEnvironment(harness: Harness) {
   return {
     ANTELOPE_PAYMENT_TEST_METHOD: harness.chargeable,
     ANTELOPE_PAYMENT_TEST_METHOD_DECLINED: harness.declining,

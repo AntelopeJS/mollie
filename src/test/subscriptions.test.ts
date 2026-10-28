@@ -17,7 +17,7 @@ import {
   type SubscriptionRequest,
 } from "@antelopejs/interface-subscriptions";
 
-import { ReadOwn } from "../mollie/metadata";
+import { IsJsonObject, ReadOwn } from "../mollie/metadata";
 import { CurrentHarness } from "./support/harness";
 import { NewPayer, type Payer } from "./support/payers";
 import { RenewSubscription } from "./stand-in/subscriptions-api";
@@ -33,6 +33,7 @@ import {
   Key,
   PrimaryAccount,
   Reference,
+  Rejected,
   RequireStandIn,
   SettledPayment,
   StandIn,
@@ -235,9 +236,11 @@ describe("[mollie] subscription creation", function () {
     const body = request(payer);
     const first = await CreateSubscription(body, key);
     const mollie = atMollie(first);
-    const own = ReadOwn<Record<string, unknown>>(mollie.metadata) ?? {};
+    const metadata = mollie.metadata;
+    assert.ok(IsJsonObject(metadata) && IsJsonObject(metadata.antelope));
+    const own = { ...metadata.antelope };
     delete own.firstPayment;
-    mollie.metadata = { ...(mollie.metadata as object), antelope: own };
+    mollie.metadata = { ...metadata, antelope: own };
 
     const replay = await Within(2 * HOUR_MS, () =>
       CreateSubscription(body, key),
@@ -259,20 +262,18 @@ describe("[mollie] subscription creation", function () {
     PrimaryAccount().declinesAtCreation.add(child);
     const key = Key();
     const body = request(payer);
-    const first = await CreateSubscription(body, key).then(
-      () => undefined,
-      (error: unknown) => error,
+    const first = await Rejected(
+      CreateSubscription(body, key),
+      SubscriptionPaymentError,
     );
-    assert.ok(first instanceof SubscriptionPaymentError, String(first));
     assert.equal(first.payment.status, "failed");
     assert.equal(first.payment.failure?.code, "declined");
     assert.deepEqual(await ListSubscriptions(payer.customer), []);
 
-    const replay = await CreateSubscription(body, key).then(
-      () => undefined,
-      (error: unknown) => error,
+    const replay = await Rejected(
+      CreateSubscription(body, key),
+      SubscriptionPaymentError,
     );
-    assert.ok(replay instanceof SubscriptionPaymentError);
     assert.equal(replay.payment.id, first.payment.id);
     PrimaryAccount().declinesAtCreation.delete(child);
   });

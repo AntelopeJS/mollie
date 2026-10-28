@@ -55,7 +55,7 @@ export function CreateCustomer(request: Request): StandInResponse {
     id: NewId("cst"),
     name: (body.name as string | undefined) ?? null,
     email: (body.email as string | undefined) ?? null,
-    metadata: (body.metadata as MollieCustomer["metadata"]) ?? null,
+    metadata: body.metadata ?? null,
     createdAt: NowIso(),
   };
   request.account.customers.set(customer.id, customer);

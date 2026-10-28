@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { MollieClient } from "../mollie/client";
 import { MollieApiError } from "../mollie/errors";
+import { Rejected } from "./support/helpers";
 import { CurrentHarness, ModuleConfigFor } from "./support/harness";
 import {
   LIVE_KEY_VARIABLE,
@@ -51,11 +52,13 @@ describe("[mollie] switching between the stand-in and live Mollie", function () 
       apiKey: `test_${"x".repeat(30)}`,
       apiUrl: standIn.url,
     });
-    const statusOf = (client: MollieClient) =>
-      client.request({ method: "GET", path: "/payments/tr_abcdefghij" }).then(
-        () => 200,
-        (error: unknown) => (error as MollieApiError).status,
-      );
+    const statusOf = async (client: MollieClient) =>
+      (
+        await Rejected(
+          client.request({ method: "GET", path: "/payments/tr_abcdefghij" }),
+          MollieApiError,
+        )
+      ).status;
     assert.equal(await statusOf(malformed), 400);
     assert.equal(await statusOf(unknown), 401);
   });
@@ -72,13 +75,10 @@ describe("[mollie] switching between the stand-in and live Mollie", function () 
 
   it("reaches the real Mollie API and reads a refused key as an error, not a missing record", async function () {
     const client = new MollieClient({ apiKey: BOGUS_TEST_KEY });
-    const error = await client
-      .request({ method: "GET", path: "/payments/tr_antelopeprobe" })
-      .then(
-        () => undefined,
-        (reason: unknown) => reason,
-      );
-    assert.ok(error instanceof MollieApiError, String(error));
+    const error = await Rejected(
+      client.request({ method: "GET", path: "/payments/tr_antelopeprobe" }),
+      MollieApiError,
+    );
     if (error.status === 0) this.skip();
     assert.equal(error.status, 401);
     assert.equal(error.isNotFound, false);

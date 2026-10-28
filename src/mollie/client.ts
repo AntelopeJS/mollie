@@ -1,4 +1,6 @@
 import { MollieApiError, type MollieErrorBody } from "./errors";
+import { DefinedFields } from "./fields";
+import type { JsonValue } from "./types";
 
 const LIVE_API_URL = "https://api.mollie.com";
 
@@ -93,23 +95,23 @@ export class MollieClient {
     return `${this.apiUrl}${path}${query ? `?${query}` : ""}`;
   }
 
-  private headers(request: MollieRequest): Record<string, string> {
-    const headers: Record<string, string> = {
+  private headers(request: MollieRequest) {
+    return {
       Accept: "application/hal+json",
       Authorization: `Bearer ${this.apiKey}`,
       "User-Agent": USER_AGENT,
+      ...DefinedFields({
+        "Content-Type": request.body ? "application/json" : undefined,
+        "Idempotency-Key":
+          request.idempotencyKey && IDEMPOTENT_METHODS.has(request.method)
+            ? request.idempotencyKey
+            : undefined,
+      }),
     };
-    if (request.body) {
-      headers["Content-Type"] = "application/json";
-    }
-    if (request.idempotencyKey && IDEMPOTENT_METHODS.has(request.method)) {
-      headers["Idempotency-Key"] = request.idempotencyKey;
-    }
-    return headers;
   }
 }
 
-function parseBody(text: string): unknown {
+function parseBody(text: string): JsonValue {
   if (!text) {
     return {};
   }

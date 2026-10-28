@@ -21,6 +21,7 @@ import {
   Key,
   PrimaryAccount,
   Reference,
+  Rejected,
   RequireStandIn,
   ReturnUrl,
   SettledPayment,
@@ -105,7 +106,7 @@ describe("[mollie] authorize and capture, settled the way Mollie settles", funct
     const before = PrimaryAccount().payments.size;
     await assert.rejects(
       () => offSession(`${parent}:${mandate.id}`, { authorizeOnly: true }),
-      (error: unknown) =>
+      (error) =>
         error instanceof PaymentError && /directdebit/.test(error.message),
     );
     assert.equal(
@@ -157,8 +158,7 @@ describe("[mollie] authorize and capture, settled the way Mollie settles", funct
           },
           Key(),
         ),
-      (error: unknown) =>
-        error instanceof PaymentError && /ideal/.test(error.message),
+      (error) => error instanceof PaymentError && /ideal/.test(error.message),
     );
   });
 });
@@ -252,16 +252,9 @@ describe("[mollie] payments edge cases", function () {
     const id = await paidPayment();
     StandIn().outage = 422;
     try {
-      const error = await RefundPayment(
-        { payment: id, amount: EUR(100) },
-        Key(),
-      ).then(
-        () => undefined,
-        (reason: unknown) => reason,
-      );
-      assert.ok(
-        error instanceof PaymentError,
-        `expected ${PaymentError.name}, got ${String(error)}`,
+      const error = await Rejected(
+        RefundPayment({ payment: id, amount: EUR(100) }, Key()),
+        PaymentError,
       );
       assert.ok(
         !(error instanceof InvalidPaymentStateError),
@@ -380,8 +373,7 @@ describe("[mollie] payment requests the module refuses itself", function () {
           },
           key,
         ),
-      (error: unknown) =>
-        error instanceof PaymentError && error.providerCode === "400",
+      (error) => error instanceof PaymentError && error.providerCode === "400",
     );
   });
 

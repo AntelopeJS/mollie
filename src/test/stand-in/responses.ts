@@ -1,5 +1,5 @@
 import type { StandInResponse } from "./state";
-import { DefinedFields } from "../../mollie/fields";
+import { DefinedFields, Lookup } from "../../mollie/fields";
 
 const DOCUMENTATION = {
   documentation: {
@@ -8,14 +8,14 @@ const DOCUMENTATION = {
   },
 };
 
-const TITLES: Record<number, string> = {
+const TITLES = {
   400: "Bad Request",
   401: "Unauthorized Request",
   404: "Not Found",
   409: "Conflict",
   422: "Unprocessable Entity",
   503: "Service Unavailable",
-};
+} satisfies Record<number, string>;
 
 export class StandInError extends Error {
   constructor(
@@ -31,7 +31,7 @@ export class StandInError extends Error {
       status: this.status,
       body: {
         status: this.status,
-        title: TITLES[this.status] ?? "Error",
+        title: Lookup(TITLES, this.status) ?? "Error",
         detail: this.detail,
         ...DefinedFields({ field: this.field }),
         _links: DOCUMENTATION,

@@ -1,7 +1,9 @@
-import { DefinedFields } from "../../mollie/fields";
+import { DefinedFields, Lookup } from "../../mollie/fields";
 import { NotFound, Unprocessable } from "./responses";
 import { type Account, IsoIn, NewId, NowIso, Text } from "./state";
 import type {
+  JsonObject,
+  JsonValue,
   MollieAmount,
   MollieMandate,
   MolliePayment,
@@ -13,7 +15,7 @@ export interface PaymentHooks {
   notify(account: Account, payment: MolliePayment): void;
 }
 
-export type Body = Record<string, unknown>;
+export type Body = JsonObject;
 
 const CHECKOUT_LIFETIME_MS = 15 * 60 * 1000;
 const AUTHORIZATION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
@@ -36,7 +38,7 @@ const TEST_CARD = {
   cardFingerprint: "fp_conformance",
   cardExpiryDate: "2030-12-31",
 };
-const MAGIC_FAILURES: Record<string, string> = {
+const MAGIC_FAILURES = {
   "1001.00": "invalid_card_number",
   "1002.00": "invalid_cvv",
   "1003.00": "invalid_card_holder_name",
@@ -48,9 +50,12 @@ const MAGIC_FAILURES: Record<string, string> = {
   "1009.00": "possible_fraud",
   "1010.00": "authentication_failed",
   "1011.00": "card_declined",
-};
+} satisfies Record<string, string>;
 
-export function ReadAmount(value: unknown, field: string): MollieAmount {
+export function ReadAmount(
+  value: JsonValue | undefined,
+  field: string,
+): MollieAmount {
   const amount = value as MollieAmount | undefined;
   const decimals = ZERO_DECIMALS.has(amount?.currency ?? "") ? 0 : 2;
   const pattern = decimals === 0 ? /^\d+$/ : /^\d+\.\d{2}$/;
@@ -70,7 +75,7 @@ function link(href: string, type = "application/hal+json") {
   return { href, type };
 }
 
-export function AssertWebhookUrl(value: unknown): void {
+export function AssertWebhookUrl(value: JsonValue | undefined): void {
   if (value === undefined || value === null) return;
   const host = URL.canParse(Text(value)) ? new URL(Text(value)).hostname : "";
   if (!host || LOCAL_HOSTS.test(host)) {
@@ -108,10 +113,10 @@ function chargeableMandate(account: Account, body: Body): MollieMandate {
   return mandate;
 }
 
-function assertCaptureMode(body: Body, method: unknown): void {
+function assertCaptureMode(body: Body, method: JsonValue | undefined): void {
   if (body.captureMode !== "manual") return;
   const methods = Array.isArray(method) ? method : [method];
-  if (method && !methods.every((entry) => MANUAL_CAPTURE.has(String(entry)))) {
+  if (method && !methods.every((entry) => MANUAL_CAPTURE.has(Text(entry)))) {
     throw Unprocessable(
       "This payment method does not support manual capture",
       "captureMode",
@@ -119,7 +124,11 @@ function assertCaptureMode(body: Body, method: unknown): void {
   }
 }
 
-function checkoutLinks(hooks: PaymentHooks, token: string, method: unknown) {
+function checkoutLinks(
+  hooks: PaymentHooks,
+  token: string,
+  method: JsonValue | undefined,
+) {
   const preset = typeof method === "string" ? method : undefined;
   return {
     checkout: link(
@@ -144,7 +153,7 @@ export function PaymentLinks(
   hooks: PaymentHooks,
   payment: MolliePayment,
   token: string,
-  method: unknown,
+  method: JsonValue | undefined,
 ) {
   const self = link(`${hooks.baseUrl}/v2/payments/${payment.id}`);
   const flow =
@@ -166,7 +175,7 @@ function draftOf(account: Account, body: Body): Draft {
   }
   if (
     sequenceType === "first" &&
-    !account.customers.has(String(body.customerId))
+    !account.customers.has(Text(body.customerId))
   ) {
     throw Unprocessable(
       "A first payment needs an existing customer",
@@ -208,7 +217,7 @@ export function CreatePaymentRecord(
     status: "open",
     sequenceType: draft.sequenceType,
     method: typeof method === "string" ? method : null,
-    metadata: (body.metadata as MolliePayment["metadata"]) ?? null,
+    metadata: body.metadata ?? null,
     customerId:
       draft.mandate?.customerId ??
       (body.customerId as string | undefined) ??
@@ -299,7 +308,7 @@ const TRANSITIONS: Partial<Record<MolliePaymentStatus, Transition>> = {
     payment.failedAt = NowIso();
     const reason =
       payment.method === "creditcard"
-        ? MAGIC_FAILURES[payment.amount.value]
+        ? Lookup(MAGIC_FAILURES, payment.amount.value)
         : undefined;
     if (reason)
       payment.details = {

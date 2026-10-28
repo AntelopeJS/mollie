@@ -1,11 +1,8 @@
 {
   "rules": {
-    "anti-slop/no-known-value-widening": 23,
-    "anti-slop/no-runtime-typeof": 18,
-    "anti-slop/no-unknown-parameters": 24,
-    "anti-slop/no-unknown-returns": 5,
-    "anti-slop/no-unsafe-dictionary-type": 8,
-    "anti-slop/require-safety-comment-for-type-assertion": 41
+    "anti-slop/no-runtime-typeof": 14,
+    "anti-slop/no-unknown-parameters": 1,
+    "anti-slop/require-safety-comment-for-type-assertion": 25
   },
   "oversizeFiles": {}
 }

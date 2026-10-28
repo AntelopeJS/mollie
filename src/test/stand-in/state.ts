@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 
 import type {
+  JsonObject,
+  JsonValue,
   MollieAmount,
   MollieCustomer,
   MollieMandate,
@@ -32,7 +34,7 @@ export interface Delivery {
 interface LoggedRequest {
   method: string;
   path: string;
-  body: Record<string, unknown>;
+  body: JsonObject;
   idempotencyKey?: string;
 }
 
@@ -43,7 +45,7 @@ export interface Capture {
   amount: MollieAmount;
   status: "succeeded";
   paymentId: string;
-  metadata: unknown;
+  metadata: JsonValue;
   createdAt: string;
 }
 
@@ -89,10 +91,12 @@ export function NewId(prefix: string): string {
   return `${prefix}_${body}`;
 }
 
-export function Text(value: unknown): string {
-  return typeof value === "string" || typeof value === "number"
-    ? String(value)
-    : "";
+function isText(value: JsonValue | undefined): value is string | number {
+  return typeof value === "string" || typeof value === "number";
+}
+
+export function Text(value: JsonValue | undefined): string {
+  return isText(value) ? String(value) : "";
 }
 
 export function NowIso(): string {
