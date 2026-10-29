@@ -33,7 +33,7 @@ export interface CancelMark {
 
 export interface OwnSubscription {
   reference: string;
-  createKey: string;
+  createKey?: string;
   interval: SubscriptionInterval;
   intervalCount: number;
   start: StartKind;
@@ -85,12 +85,21 @@ export function ReadOwnSubscription(
   mollie: MollieSubscription,
 ): OwnSubscription | undefined {
   const own = ReadOwn<OwnSubscription>(mollie.metadata);
-  const isOwn =
-    IsJsonString(own?.reference) &&
-    IsSubscriptionInterval(own.interval) &&
-    IsJsonNumber(own.intervalCount) &&
-    START_KINDS.has(own.start ?? "");
-  return isOwn ? (own as OwnSubscription) : undefined;
+  if (
+    !IsJsonString(own?.reference) ||
+    !IsSubscriptionInterval(own.interval) ||
+    !IsJsonNumber(own.intervalCount) ||
+    own.start === undefined ||
+    !START_KINDS.has(own.start)
+  )
+    return undefined;
+  return {
+    ...own,
+    reference: own.reference,
+    interval: own.interval,
+    intervalCount: own.intervalCount,
+    start: own.start,
+  };
 }
 
 export function SubscriptionPath(customerId: string, id: string): string {
