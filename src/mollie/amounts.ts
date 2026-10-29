@@ -1,8 +1,9 @@
 import type { Amount } from "@antelopejs/interface-payment";
 
+import { Lookup } from "./fields";
 import type { MollieAmount } from "./types";
 
-const DECIMALS_BY_CURRENCY: Record<string, number> = {
+const DECIMALS_BY_CURRENCY = {
   AED: 2,
   AUD: 2,
   BRL: 2,
@@ -31,14 +32,14 @@ const DECIMALS_BY_CURRENCY: Record<string, number> = {
   TWD: 2,
   USD: 2,
   ZAR: 2,
-};
+} satisfies Record<string, number>;
 const DEFAULT_DECIMALS = 2;
 const DECIMAL_SEPARATOR = ".";
 const DIGITS = /^\d+$/;
 const BASE = 10;
 
 function decimalsOf(currency: string): number {
-  const known = DECIMALS_BY_CURRENCY[currency];
+  const known = Lookup(DECIMALS_BY_CURRENCY, currency);
   if (known !== undefined) {
     return known;
   }

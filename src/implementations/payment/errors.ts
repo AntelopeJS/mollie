@@ -10,19 +10,27 @@ import { MollieApiError } from "../../mollie/errors";
 
 export type Entity = CustomerEntity | PaymentEntity;
 
-const CUSTOMER_ENTITIES = new Set<Entity>(["customer", "payment method"]);
+const CUSTOMER_ENTITIES: ReadonlySet<Entity> = new Set<CustomerEntity>([
+  "customer",
+  "payment method",
+]);
 
-export function NotFound(id: string, entity: Entity, code?: string): Error {
-  if (CUSTOMER_ENTITIES.has(entity)) {
-    return new CustomerNotFoundError(id, entity as CustomerEntity, code);
-  }
-  return new PaymentNotFoundError(id, entity as PaymentEntity, code);
+function isCustomerEntity(entity: Entity): entity is CustomerEntity {
+  return CUSTOMER_ENTITIES.has(entity);
 }
 
-function TranslateError(error: unknown, id: string, entity: Entity): unknown {
-  if (!(error instanceof MollieApiError)) {
-    return error;
+export function NotFound(id: string, entity: Entity, code?: string): Error {
+  if (isCustomerEntity(entity)) {
+    return new CustomerNotFoundError(id, entity, code);
   }
+  return new PaymentNotFoundError(id, entity, code);
+}
+
+function TranslateError(
+  error: MollieApiError,
+  id: string,
+  entity: Entity,
+): Error {
   if (error.isNotFound) {
     return NotFound(id, entity, error.providerCode);
   }
@@ -37,6 +45,7 @@ export async function Translating<T>(
   try {
     return await call();
   } catch (error) {
+    if (!(error instanceof MollieApiError)) throw error;
     throw TranslateError(error, id, entity);
   }
 }

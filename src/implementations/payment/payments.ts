@@ -39,7 +39,7 @@ function PaymentBody(
   request: PaymentRequest,
   instrument: Instrument,
   account: Account,
-): Record<string, unknown> {
+) {
   const isRecurring = instrument.kind === "mandate";
   return {
     amount: ToMollieAmount(request.amount),
@@ -202,7 +202,7 @@ type Cancellation = (
   account: Account,
   payment: MolliePayment,
   idempotencyKey: string,
-) => Promise<unknown>;
+) => Promise<void>;
 
 const CANCELLATIONS: Partial<Record<MolliePayment["status"], Cancellation>> = {
   authorized: (account, payment, idempotencyKey) =>
@@ -221,7 +221,7 @@ const CANCELLATIONS: Partial<Record<MolliePayment["status"], Cancellation>> = {
 async function cancelOpen(
   account: Account,
   payment: MolliePayment,
-): Promise<unknown> {
+): Promise<void> {
   if (!payment.isCancelable) refuse(payment, "canceled any more");
   return account.client.request({
     method: "DELETE",

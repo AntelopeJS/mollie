@@ -141,9 +141,9 @@ describe("[mollie] subscription events", function () {
       return failed;
     });
     const { child } = ParseSubscriptionId(subscription.id) ?? { child: "" };
-    CancelSubscriptionRecord(
-      PrimaryAccount().subscriptions.get(child) as never,
-    );
+    const record = PrimaryAccount().subscriptions.get(child);
+    assert.ok(record);
+    CancelSubscriptionRecord(record);
     await VerifyWebhook({ body: WebhookBody(renewal.id), headers: FORM });
     const canceled = eventsOf(subscription, "subscription.canceled");
     assert.equal(canceled.length >= 1, true);

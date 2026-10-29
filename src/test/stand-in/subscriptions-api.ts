@@ -1,6 +1,11 @@
 import { Page, type Request } from "./payments-api";
 import { NotFound, Ok, Unprocessable } from "./responses";
-import type { MolliePayment, MollieSubscription } from "../../mollie/types";
+import { Lookup } from "../../mollie/fields";
+import type {
+  JsonValue,
+  MolliePayment,
+  MollieSubscription,
+} from "../../mollie/types";
 import {
   CancelSubscriptionRecord,
   CustomerOf,
@@ -8,11 +13,14 @@ import {
 } from "./customers-api";
 import {
   type Account,
+  CountOf,
   NewId,
   NowIso,
   type StandInResponse,
   Text,
+  TextOf,
 } from "./state";
+import { IsJsonString } from "../../mollie/metadata";
 import {
   AssertWebhookUrl,
   type PaymentHooks,
@@ -21,11 +29,11 @@ import {
 } from "./payments";
 
 const INTERVAL = /^(\d+) (day|days|week|weeks|month|months)$/;
-const MAXIMUM_BY_UNIT: Record<string, number> = {
+const MAXIMUM_BY_UNIT = {
   day: 365,
   month: 12,
   week: 52,
-};
+} satisfies Record<string, number>;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAYS_PER_WEEK = 7;
 const UPDATABLE = [
@@ -39,13 +47,14 @@ const UPDATABLE = [
   "webhookUrl",
 ] as const;
 
-function readInterval(value: unknown): string {
+function readInterval(value: JsonValue | undefined): string {
   const match = INTERVAL.exec(Text(value));
   const unit = match?.[2].replace(/s$/, "") ?? "";
+  const maximum = Lookup(MAXIMUM_BY_UNIT, unit);
   if (
     !match ||
     Number(match[1]) < 1 ||
-    Number(match[1]) > MAXIMUM_BY_UNIT[unit]
+    (maximum !== undefined && Number(match[1]) > maximum)
   ) {
     throw Unprocessable(
       "The interval is invalid. The maximum interval is one year (12 months, 52 weeks, or 365 days)",
@@ -55,7 +64,7 @@ function readInterval(value: unknown): string {
   return Text(value);
 }
 
-function readStartDate(value: unknown): string {
+function readStartDate(value: JsonValue | undefined): string {
   const today = NowIso().slice(0, 10);
   const date = value === undefined ? today : Text(value);
   if (!ISO_DATE.test(date)) {
@@ -70,9 +79,9 @@ function readStartDate(value: unknown): string {
 function assertUniqueDescription(
   account: Account,
   customerId: string,
-  description: unknown,
+  description: JsonValue | undefined,
 ): string {
-  if (typeof description !== "string" || !description) {
+  if (!IsJsonString(description) || !description) {
     throw Unprocessable("The description is missing", "description");
   }
   const isTaken = [...account.subscriptions.values()].some(
@@ -122,14 +131,14 @@ export function CreateSubscription(request: Request): StandInResponse {
     id: NewId("sub"),
     status: "active",
     amount: ReadAmount(body.amount, "amount"),
-    times: (body.times as number | undefined) ?? null,
-    timesRemaining: (body.times as number | undefined) ?? null,
+    times: CountOf(body.times) ?? null,
+    timesRemaining: CountOf(body.times) ?? null,
     interval: readInterval(body.interval),
     startDate,
     nextPaymentDate: startDate,
     description: assertUniqueDescription(account, customerId, body.description),
-    metadata: (body.metadata as MollieSubscription["metadata"]) ?? null,
-    webhookUrl: (body.webhookUrl as string | undefined) ?? null,
+    metadata: body.metadata ?? null,
+    webhookUrl: TextOf(body.webhookUrl) ?? null,
     customerId,
     mandateId: mandate.id,
     createdAt: NowIso(),
@@ -165,7 +174,7 @@ export function UpdateSubscription(request: Request): StandInResponse {
     throw Unprocessable("Canceled subscriptions cannot be updated");
   }
   if ("mandateId" in request.body) {
-    MandateOf(request.account, customerId, String(request.body.mandateId));
+    MandateOf(request.account, customerId, Text(request.body.mandateId));
   }
   for (const field of UPDATABLE) {
     if (field in request.body)

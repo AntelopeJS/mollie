@@ -10,7 +10,19 @@ interface MollieLink {
 
 type MollieLinks = Record<string, MollieLink | null | undefined>;
 
-export type MollieMetadata = Record<string, unknown> | string | null;
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | JsonObject;
+
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
+export type MollieMetadata = JsonValue;
 
 export type MolliePaymentStatus =
   | "open"

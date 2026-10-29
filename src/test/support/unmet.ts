@@ -3,6 +3,7 @@ import {
   DateOf,
   StartOf,
 } from "../../implementations/subscriptions/calendar";
+import { Lookup } from "../../mollie/fields";
 import "./relay";
 
 const CHARGES = "(requires ANTELOPE_PAYMENT_TEST_METHOD)";
@@ -26,7 +27,7 @@ function sometimesUnmet(title: string, now: number): string | undefined {
   return `the month from today crosses a daylight-saving change in Europe/Amsterdam, so a period between two Mollie dates is an hour off whole days; the suite allows at most ${lasts} days of exactly 24 hours`;
 }
 
-const UNMET: Record<string, string> = {
+const UNMET = {
   [`direct payments ${CHARGES} saves a method against a customer and lists it back`]:
     "the suite charges one test token for a brand-new customer; a Mollie saved method is a mandate that belongs to one customer and cannot be charged for another",
   [`authorize and capture ${CHARGES} authorizes without capturing, then captures in part`]:
@@ -39,11 +40,11 @@ const UNMET: Record<string, string> = {
     "Mollie schedules by calendar date: a trial ends at the start of the first Europe/Amsterdam day after the requested time, not at the requested second",
   [`creating a subscription ${CHARGES} defers the first charge to a billing anchor`]:
     "as above, for the billing anchor",
-};
+} satisfies Record<string, string>;
 
 beforeEach(function () {
   const title = this.currentTest?.fullTitle() ?? "";
-  const reason = UNMET[title] ?? sometimesUnmet(title, Date.now());
+  const reason = Lookup(UNMET, title) ?? sometimesUnmet(title, Date.now());
   if (!reason) return;
   process.stderr.write(
     `      not met by Mollie: ${title}\n        ${reason}\n`,

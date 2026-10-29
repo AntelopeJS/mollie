@@ -1,17 +1,22 @@
 import { createHash } from "node:crypto";
 import {
   type CancellationTiming,
-  SUBSCRIPTION_INTERVALS,
   type SubscriptionInterval,
   SubscriptionNotFoundError,
 } from "@antelopejs/interface-subscriptions";
 
 import type { Account } from "../../accounts";
-import { IsNotFound } from "../../mollie/errors";
+import { MollieApiError } from "../../mollie/errors";
 import { TranslatingSubscription } from "./errors";
+import { IsSubscriptionInterval } from "./calendar";
 import { DefinedFields } from "../../mollie/fields";
 import { ParseSubscriptionId } from "../../mollie/ids";
-import { MergeOwn, ReadOwn } from "../../mollie/metadata";
+import {
+  IsJsonNumber,
+  IsJsonString,
+  MergeOwn,
+  ReadOwn,
+} from "../../mollie/metadata";
 import type {
   MollieCustomer,
   MolliePayment,
@@ -81,9 +86,9 @@ export function ReadOwnSubscription(
 ): OwnSubscription | undefined {
   const own = ReadOwn<OwnSubscription>(mollie.metadata);
   const isOwn =
-    typeof own?.reference === "string" &&
-    SUBSCRIPTION_INTERVALS.includes(own.interval as SubscriptionInterval) &&
-    typeof own.intervalCount === "number" &&
+    IsJsonString(own?.reference) &&
+    IsSubscriptionInterval(own.interval) &&
+    IsJsonNumber(own.intervalCount) &&
     START_KINDS.has(own.start ?? "");
   return isOwn ? (own as OwnSubscription) : undefined;
 }
@@ -163,7 +168,7 @@ async function earlyEndOf(
       endedEarly(await readCustomer(account, mollie.customerId))[mollie.id],
     );
   } catch (error) {
-    if (IsNotFound(error)) return undefined;
+    if (error instanceof MollieApiError && error.isNotFound) return undefined;
     throw error;
   }
 }

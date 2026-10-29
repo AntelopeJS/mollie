@@ -20,6 +20,13 @@ function finalStates(payment: MolliePayment): MolliePaymentStatus[] {
   return ["paid", "failed", "canceled", "expired", "open"];
 }
 
+function isFinalState(
+  states: MolliePaymentStatus[],
+  value: string,
+): value is MolliePaymentStatus {
+  return states.some((state) => state === value);
+}
+
 function page(title: string, body: string): StandInResponse {
   return {
     status: 200,
@@ -80,8 +87,8 @@ export function TestModePage(request: PageRequest): StandInResponse {
 
 export function SubmitTestMode(request: PageRequest): StandInResponse {
   const payment = PaymentOfToken(request);
-  const state = request.form.get("final_state") as MolliePaymentStatus | null;
-  if (!state || !finalStates(payment).includes(state)) {
+  const state = request.form.get("final_state");
+  if (!state || !isFinalState(finalStates(payment), state)) {
     return page("Test mode", "<p>Choose a final state.</p>");
   }
   if (state !== "open")

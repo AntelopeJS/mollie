@@ -8,7 +8,7 @@ import {
 
 import { ToSubscription } from "./mapping";
 import type { Account } from "../../accounts";
-import { IsNotFound } from "../../mollie/errors";
+import { MollieApiError } from "../../mollie/errors";
 import { LifecycleEvent, Raise } from "./events";
 import { DefinedFields } from "../../mollie/fields";
 import { ToMollieAmount } from "../../mollie/amounts";
@@ -97,18 +97,18 @@ export async function ChargeableMandate(
       `Payment method ${paymentMethod} is not saved against ${customer}`,
     );
   }
-  const mandate = await TranslatingSubscription(paymentMethod, () =>
-    account.client
-      .request<MollieMandate>({
+  const mandate = await TranslatingSubscription(paymentMethod, async () => {
+    try {
+      return await account.client.request<MollieMandate>({
         method: "GET",
         path: `/customers/${customer}/mandates/${parsed.child}`,
-      })
-      .catch((error: unknown) => {
-        if (IsNotFound(error))
-          throw invalid(`No such payment method: ${paymentMethod}`);
-        throw error;
-      }),
-  );
+      });
+    } catch (error) {
+      if (error instanceof MollieApiError && error.isNotFound)
+        throw invalid(`No such payment method: ${paymentMethod}`);
+      throw error;
+    }
+  });
   if (!IsChargeableOffSession(mandate)) {
     throw invalid(
       `Payment method ${paymentMethod} cannot be charged off-session`,
@@ -135,7 +135,7 @@ function subscriptionBody(
   account: Account,
   creation: Creation,
   schedule: Schedule,
-): Record<string, unknown> {
+) {
   const { request, period } = creation;
   const own: OwnSubscription = {
     reference: request.reference,
@@ -256,6 +256,16 @@ async function refuse(
   throw refusal(payment);
 }
 
+function ownOf(mollie: MollieSubscription): OwnSubscription {
+  const own = ReadOwnSubscription(mollie);
+  if (!own) {
+    throw new TypeError(
+      `Subscription ${mollie.id} carries no metadata of this module`,
+    );
+  }
+  return own;
+}
+
 async function settleFirstPeriod(
   account: Account,
   id: string,
@@ -263,7 +273,7 @@ async function settleFirstPeriod(
   creation: Creation,
 ): Promise<SubscriptionRecord> {
   let mollie = created;
-  let own = ReadOwnSubscription(mollie) as OwnSubscription;
+  let own = ownOf(mollie);
   if (own.refused) throw refusal(await readPayment(account, own.refused));
   if (own.start === "charged" && !own.firstPayment) {
     const payment = await chargeFirstPeriod(account, id, mollie, creation);

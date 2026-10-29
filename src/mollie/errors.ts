@@ -36,7 +36,3 @@ export class MollieApiError extends Error {
     return this.field ? `${this.status}:${this.field}` : String(this.status);
   }
 }
-
-export function IsNotFound(error: unknown): boolean {
-  return error instanceof MollieApiError && error.isNotFound;
-}
