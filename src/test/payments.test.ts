@@ -21,6 +21,7 @@ import {
   Key,
   PrimaryAccount,
   Reference,
+  Rejected,
   RequireStandIn,
   ReturnUrl,
   SettledPayment,
@@ -53,22 +54,6 @@ async function paidPayment(): Promise<string> {
   const settled = await SettledPayment(payment.id);
   assert.equal(settled.status, "succeeded");
   return payment.id;
-}
-
-async function rejectsWithout(
-  work: Promise<unknown>,
-  unwanted: Function,
-  wanted: Function,
-) {
-  const error = await work.then(
-    () => undefined,
-    (reason: unknown) => reason,
-  );
-  assert.ok(
-    error instanceof wanted,
-    `expected ${wanted.name}, got ${String(error)}`,
-  );
-  assert.ok(!(error instanceof unwanted), `must not be ${unwanted.name}`);
 }
 
 describe("[mollie] authorize and capture, settled the way Mollie settles", function () {
@@ -121,7 +106,7 @@ describe("[mollie] authorize and capture, settled the way Mollie settles", funct
     const before = PrimaryAccount().payments.size;
     await assert.rejects(
       () => offSession(`${parent}:${mandate.id}`, { authorizeOnly: true }),
-      (error: unknown) =>
+      (error) =>
         error instanceof PaymentError && /directdebit/.test(error.message),
     );
     assert.equal(
@@ -173,8 +158,7 @@ describe("[mollie] authorize and capture, settled the way Mollie settles", funct
           },
           Key(),
         ),
-      (error: unknown) =>
-        error instanceof PaymentError && /ideal/.test(error.message),
+      (error) => error instanceof PaymentError && /ideal/.test(error.message),
     );
   });
 });
@@ -268,10 +252,13 @@ describe("[mollie] payments edge cases", function () {
     const id = await paidPayment();
     StandIn().outage = 422;
     try {
-      await rejectsWithout(
+      const error = await Rejected(
         RefundPayment({ payment: id, amount: EUR(100) }, Key()),
-        InvalidPaymentStateError,
         PaymentError,
+      );
+      assert.ok(
+        !(error instanceof InvalidPaymentStateError),
+        `must not be ${InvalidPaymentStateError.name}`,
       );
     } finally {
       StandIn().outage = undefined;
@@ -386,8 +373,7 @@ describe("[mollie] payment requests the module refuses itself", function () {
           },
           key,
         ),
-      (error: unknown) =>
-        error instanceof PaymentError && error.providerCode === "400",
+      (error) => error instanceof PaymentError && error.providerCode === "400",
     );
   });
 

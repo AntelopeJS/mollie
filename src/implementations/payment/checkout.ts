@@ -71,7 +71,7 @@ function toSession(payment: MolliePayment): CheckoutSession {
   };
 }
 
-function sessionBody(request: CheckoutSessionRequest): Record<string, unknown> {
+function sessionBody(request: CheckoutSessionRequest) {
   const locale = toMollieLocale(request.locale);
   return {
     amount: ToMollieAmount(request.amount),

@@ -7,8 +7,7 @@ import {
 import { MollieApiError } from "../../mollie/errors";
 import { type Account, GetAccount } from "../../accounts";
 
-function TranslateSubscriptionError(error: unknown, id: string): unknown {
-  if (!(error instanceof MollieApiError)) return error;
+function TranslateSubscriptionError(error: MollieApiError, id: string): Error {
   if (error.isNotFound) {
     return new SubscriptionNotFoundError(id, error.providerCode);
   }
@@ -22,6 +21,7 @@ export async function TranslatingSubscription<T>(
   try {
     return await call();
   } catch (error) {
+    if (!(error instanceof MollieApiError)) throw error;
     throw TranslateSubscriptionError(error, id);
   }
 }

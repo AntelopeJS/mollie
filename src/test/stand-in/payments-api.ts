@@ -240,7 +240,7 @@ export function CreateRefund(request: Request): StandInResponse {
     status: "pending",
     paymentId: payment.id,
     description: Text(request.body.description),
-    metadata: (request.body.metadata as MollieRefund["metadata"]) ?? null,
+    metadata: request.body.metadata ?? null,
     createdAt: NowIso(),
   };
   adjust(payment, amount.value);

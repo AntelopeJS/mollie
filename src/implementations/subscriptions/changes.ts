@@ -9,7 +9,7 @@ import {
 import { ToSubscription } from "./mapping";
 import type { Account } from "../../accounts";
 import { ChargeableMandate } from "./creation";
-import { IsNotFound } from "../../mollie/errors";
+import { MollieApiError } from "../../mollie/errors";
 import { MergeOwn } from "../../mollie/metadata";
 import { LifecycleEvent, Raise } from "./events";
 import { DefinedFields } from "../../mollie/fields";
@@ -46,7 +46,7 @@ async function listed(
       "subscriptions",
     );
   } catch (error) {
-    if (IsNotFound(error)) return [];
+    if (error instanceof MollieApiError && error.isNotFound) return [];
     throw error;
   }
 }

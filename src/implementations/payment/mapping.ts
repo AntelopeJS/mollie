@@ -11,7 +11,7 @@ import type {
 } from "@antelopejs/interface-payment";
 
 import { PaymentMethodId, RefundId } from "../../mollie/ids";
-import { DefinedFields, NonEmpty } from "../../mollie/fields";
+import { DefinedFields, Lookup, NonEmpty } from "../../mollie/fields";
 import { FromMollieAmount, ZeroAmount } from "../../mollie/amounts";
 import { ReadCallerMetadata, ReadOwn } from "../../mollie/metadata";
 import type {
@@ -40,7 +40,7 @@ const STATUS_BY_MOLLIE: Record<MolliePaymentStatus, PaymentStatus> = {
   pending: "pending",
 };
 
-const FAILURE_BY_REASON: Record<string, PaymentFailureCode> = {
+const FAILURE_BY_REASON = {
   authentication_abandoned: "authentication_failed",
   authentication_failed: "authentication_failed",
   authentication_required: "authentication_failed",
@@ -56,12 +56,12 @@ const FAILURE_BY_REASON: Record<string, PaymentFailureCode> = {
   possible_fraud: "declined",
   refused_by_issuer: "declined",
   unknown_reason: "declined",
-};
+} satisfies Record<string, PaymentFailureCode>;
 
-const FAILURE_BY_BANK_REASON: Record<string, PaymentFailureCode> = {
+const FAILURE_BY_BANK_REASON = {
   AC01: "incorrect_details",
   AM04: "insufficient_funds",
-};
+} satisfies Record<string, PaymentFailureCode>;
 
 const REFUND_STATUS_BY_MOLLIE: Record<MollieRefundStatus, RefundStatus> = {
   canceled: "failed",
@@ -72,7 +72,10 @@ const REFUND_STATUS_BY_MOLLIE: Record<MollieRefundStatus, RefundStatus> = {
   refunded: "succeeded",
 };
 
-const METHOD_TYPE_BY_MANDATE: Record<string, PaymentMethodType> = {
+const METHOD_TYPE_BY_MANDATE: Record<
+  MollieMandate["method"],
+  PaymentMethodType
+> = {
   creditcard: "card",
   directdebit: "bank_account",
   paypal: "wallet",
@@ -104,8 +107,8 @@ function toFailure(payment: MolliePayment): PaymentFailure {
   const providerCode =
     details.failureReason ?? details.bankReasonCode ?? undefined;
   const code =
-    FAILURE_BY_REASON[details.failureReason ?? ""] ??
-    FAILURE_BY_BANK_REASON[details.bankReasonCode ?? ""] ??
+    Lookup(FAILURE_BY_REASON, details.failureReason ?? "") ??
+    Lookup(FAILURE_BY_BANK_REASON, details.bankReasonCode ?? "") ??
     "declined";
   return {
     code,
