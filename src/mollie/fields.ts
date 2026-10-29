@@ -1,9 +1,16 @@
-export type DefinedFields<T> = { [K in keyof T]?: Exclude<T[K], undefined> };
+export type DefinedFields<T> = { [K in keyof T]?: T[K] & ({} | null) };
 
 export function DefinedFields<T extends object>(fields: T): DefinedFields<T> {
-  return Object.fromEntries(
-    Object.entries(fields).filter(([, value]) => value !== undefined),
-  ) as DefinedFields<T>;
+  const defined: DefinedFields<T> = {};
+  for (const key in fields) {
+    const value = fields[key];
+    if (
+      Object.prototype.hasOwnProperty.call(fields, key) &&
+      value !== undefined
+    )
+      defined[key] = value;
+  }
+  return defined;
 }
 
 function isKeyOf<T extends object>(table: T, key: PropertyKey): key is keyof T {
