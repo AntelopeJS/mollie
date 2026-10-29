@@ -1,31 +1,39 @@
-import type { MollieMetadata } from "./types";
+import type { JsonObject, JsonValue, MollieMetadata } from "./types";
 
 const OWN_KEY = "antelope";
 const CALLER_KEY = "metadata";
 
-type JsonObject = Record<string, unknown>;
-
-function isObject(value: unknown): value is JsonObject {
+export function IsJsonObject(
+  value: JsonValue | undefined,
+): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export function IsJsonString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
+}
+
+export function IsJsonNumber(value: JsonValue | undefined): value is number {
+  return typeof value === "number";
+}
+
 function parse(metadata: MollieMetadata | undefined): JsonObject {
-  if (isObject(metadata)) {
+  if (IsJsonObject(metadata)) {
     return metadata;
   }
-  if (typeof metadata !== "string") {
+  if (!IsJsonString(metadata)) {
     return {};
   }
   try {
-    const parsed: unknown = JSON.parse(metadata);
-    return isObject(parsed) ? parsed : {};
+    const parsed: JsonValue = JSON.parse(metadata);
+    return IsJsonObject(parsed) ? parsed : {};
   } catch {
     return {};
   }
 }
 
-function strings(value: unknown): Record<string, string> {
-  if (!isObject(value)) {
+function strings(value: JsonValue | undefined): Record<string, string> {
+  if (!IsJsonObject(value)) {
     return {};
   }
   return Object.fromEntries(
@@ -39,14 +47,14 @@ export function ReadOwn<T extends object>(
   metadata: MollieMetadata | undefined,
 ): Partial<T> | undefined {
   const own = parse(metadata)[OWN_KEY];
-  return isObject(own) ? (own as Partial<T>) : undefined;
+  return IsJsonObject(own) ? (own as Partial<T>) : undefined;
 }
 
 export function ReadCallerMetadata(
   metadata: MollieMetadata | undefined,
 ): Record<string, string> {
   const parsed = parse(metadata);
-  if (OWN_KEY in parsed && isObject(parsed[CALLER_KEY])) {
+  if (OWN_KEY in parsed && IsJsonObject(parsed[CALLER_KEY])) {
     return strings(parsed[CALLER_KEY]);
   }
   return strings(
@@ -59,15 +67,15 @@ export function ReadCallerMetadata(
 export function WriteMetadata<T extends object>(
   own: T,
   caller: Record<string, string> = {},
-): JsonObject {
+) {
   return { [OWN_KEY]: own, [CALLER_KEY]: caller };
 }
 
 export function MergeOwn<T extends object>(
   metadata: MollieMetadata | undefined,
   changes: T,
-): JsonObject {
+) {
   const parsed = parse(metadata);
-  const own = isObject(parsed[OWN_KEY]) ? parsed[OWN_KEY] : {};
+  const own = IsJsonObject(parsed[OWN_KEY]) ? parsed[OWN_KEY] : {};
   return { ...parsed, [OWN_KEY]: { ...own, ...changes } };
 }

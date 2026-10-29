@@ -1,6 +1,6 @@
 import type { Account } from "../../accounts";
 import { ReadOwn } from "../../mollie/metadata";
-import { IsNotFound } from "../../mollie/errors";
+import { MollieApiError } from "../../mollie/errors";
 import { SubscriptionId } from "../../mollie/ids";
 import type { MolliePayment, MollieSubscription } from "../../mollie/types";
 
@@ -12,10 +12,21 @@ interface OwnChargeData {
   subscription: string;
 }
 
+function isOwnSubscriptionData(
+  own: Partial<OwnSubscriptionData> | undefined,
+): own is OwnSubscriptionData {
+  return typeof own?.reference === "string";
+}
+
+function isOwnChargeData(
+  own: Partial<OwnChargeData> | undefined,
+): own is OwnChargeData {
+  return typeof own?.subscription === "string";
+}
+
 function IsOwnSubscription(subscription: MollieSubscription): boolean {
-  return (
-    typeof ReadOwn<OwnSubscriptionData>(subscription.metadata)?.reference ===
-    "string"
+  return isOwnSubscriptionData(
+    ReadOwn<OwnSubscriptionData>(subscription.metadata),
   );
 }
 
@@ -30,7 +41,7 @@ async function spawnedBy(
       path: `/customers/${customerId}/subscriptions/${subscriptionId}`,
     });
   } catch (error) {
-    if (IsNotFound(error)) return undefined;
+    if (error instanceof MollieApiError && error.isNotFound) return undefined;
     throw error;
   }
 }
@@ -39,8 +50,8 @@ export async function SubscriptionOfPayment(
   account: Account,
   payment: MolliePayment,
 ): Promise<string | undefined> {
-  const charged = ReadOwn<OwnChargeData>(payment.metadata)?.subscription;
-  if (typeof charged === "string") return charged;
+  const charged = ReadOwn<OwnChargeData>(payment.metadata);
+  if (isOwnChargeData(charged)) return charged.subscription;
   if (!payment.subscriptionId || !payment.customerId) return undefined;
   const subscription = await spawnedBy(
     account,

@@ -1,7 +1,14 @@
 import { Page } from "./payments-api";
 import type { Request } from "./payments-api";
 import { NO_CONTENT, NotFound, Ok, Unprocessable } from "./responses";
-import { type Account, NewId, NowIso, type StandInResponse } from "./state";
+import {
+  type Account,
+  NewId,
+  NowIso,
+  type StandInResponse,
+  TextOf,
+} from "./state";
+import { IsJsonString } from "../../mollie/metadata";
 import type {
   MollieCustomer,
   MollieMandate,
@@ -53,9 +60,9 @@ export function CreateCustomer(request: Request): StandInResponse {
   const customer: MollieCustomer = {
     resource: "customer",
     id: NewId("cst"),
-    name: (body.name as string | undefined) ?? null,
-    email: (body.email as string | undefined) ?? null,
-    metadata: (body.metadata as MollieCustomer["metadata"]) ?? null,
+    name: TextOf(body.name) ?? null,
+    email: TextOf(body.email) ?? null,
+    metadata: body.metadata ?? null,
     createdAt: NowIso(),
   };
   request.account.customers.set(customer.id, customer);
@@ -126,13 +133,10 @@ export function CreateMandate(request: Request): StandInResponse {
   const customerId = request.params[0];
   CustomerOf(request.account, customerId);
   const { body } = request;
-  if (typeof body.consumerName !== "string") {
+  if (!IsJsonString(body.consumerName)) {
     throw Unprocessable("The consumer name is missing", "consumerName");
   }
-  if (
-    body.method !== "directdebit" ||
-    typeof body.consumerAccount !== "string"
-  ) {
+  if (body.method !== "directdebit" || !IsJsonString(body.consumerAccount)) {
     throw Unprocessable(
       "Only SEPA Direct Debit mandates with an IBAN are supported here",
       "method",

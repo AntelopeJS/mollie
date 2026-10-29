@@ -1,5 +1,6 @@
 import {
   InvalidSubscriptionRequestError,
+  SUBSCRIPTION_INTERVALS,
   type SubscriptionInterval,
 } from "@antelopejs/interface-subscriptions";
 
@@ -158,12 +159,18 @@ export function ToMollieInterval(period: Period): string {
   return `${amount} ${amount === 1 ? unit.singular : unit.plural}`;
 }
 
+export function IsSubscriptionInterval(
+  value: string | undefined,
+): value is SubscriptionInterval {
+  return SUBSCRIPTION_INTERVALS.some((interval) => interval === value);
+}
+
 export function FromMollieInterval(interval: string): Period {
   const match = MOLLIE_INTERVAL.exec(interval.trim());
-  if (!match) {
+  const unit = match?.[2].replace(/s$/, "");
+  if (!match || !IsSubscriptionInterval(unit)) {
     throw new RangeError(`Mollie interval "${interval}" is not understood`);
   }
   const count = Number.parseInt(match[1], BASE);
-  const unit = match[2].replace(/s$/, "") as SubscriptionInterval;
   return { interval: unit, count };
 }

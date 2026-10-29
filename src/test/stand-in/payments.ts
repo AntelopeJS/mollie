@@ -1,7 +1,10 @@
-import { DefinedFields } from "../../mollie/fields";
+import { DefinedFields, Lookup } from "../../mollie/fields";
 import { NotFound, Unprocessable } from "./responses";
-import { type Account, IsoIn, NewId, NowIso, Text } from "./state";
+import { IsJsonObject, IsJsonString } from "../../mollie/metadata";
+import { type Account, IsoIn, NewId, NowIso, Text, TextOf } from "./state";
 import type {
+  JsonObject,
+  JsonValue,
   MollieAmount,
   MollieMandate,
   MolliePayment,
@@ -13,7 +16,7 @@ export interface PaymentHooks {
   notify(account: Account, payment: MolliePayment): void;
 }
 
-export type Body = Record<string, unknown>;
+export type Body = JsonObject;
 
 const CHECKOUT_LIFETIME_MS = 15 * 60 * 1000;
 const AUTHORIZATION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
@@ -28,6 +31,11 @@ const MANUAL_CAPTURE = new Set([
   "vipps",
 ]);
 const ZERO_DECIMALS = new Set(["ISK", "JPY"]);
+const SEQUENCE_TYPES: MolliePayment["sequenceType"][] = [
+  "oneoff",
+  "first",
+  "recurring",
+];
 const LOCAL_HOSTS = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/;
 const TEST_CARD = {
   cardHolder: "T. TEST",
@@ -36,7 +44,7 @@ const TEST_CARD = {
   cardFingerprint: "fp_conformance",
   cardExpiryDate: "2030-12-31",
 };
-const MAGIC_FAILURES: Record<string, string> = {
+const MAGIC_FAILURES = {
   "1001.00": "invalid_card_number",
   "1002.00": "invalid_cvv",
   "1003.00": "invalid_card_holder_name",
@@ -48,29 +56,31 @@ const MAGIC_FAILURES: Record<string, string> = {
   "1009.00": "possible_fraud",
   "1010.00": "authentication_failed",
   "1011.00": "card_declined",
-};
+} satisfies Record<string, string>;
 
-export function ReadAmount(value: unknown, field: string): MollieAmount {
-  const amount = value as MollieAmount | undefined;
-  const decimals = ZERO_DECIMALS.has(amount?.currency ?? "") ? 0 : 2;
+export function ReadAmount(
+  value: JsonValue | undefined,
+  field: string,
+): MollieAmount {
+  const amount = IsJsonObject(value) ? value : undefined;
+  const currency = TextOf(amount?.currency);
+  const units = TextOf(amount?.value);
+  const decimals = ZERO_DECIMALS.has(currency ?? "") ? 0 : 2;
   const pattern = decimals === 0 ? /^\d+$/ : /^\d+\.\d{2}$/;
-  if (
-    typeof amount?.currency !== "string" ||
-    !pattern.test(amount.value ?? "")
-  ) {
+  if (currency === undefined || units === undefined || !pattern.test(units)) {
     throw Unprocessable(
-      `The amount contains an invalid value or the wrong number of decimals for ${String(amount?.currency)}`,
+      `The amount contains an invalid value or the wrong number of decimals for ${currency ?? "undefined"}`,
       field,
     );
   }
-  return { currency: amount.currency, value: amount.value };
+  return { currency, value: units };
 }
 
 function link(href: string, type = "application/hal+json") {
   return { href, type };
 }
 
-export function AssertWebhookUrl(value: unknown): void {
+export function AssertWebhookUrl(value: JsonValue | undefined): void {
   if (value === undefined || value === null) return;
   const host = URL.canParse(Text(value)) ? new URL(Text(value)).hostname : "";
   if (!host || LOCAL_HOSTS.test(host)) {
@@ -108,10 +118,10 @@ function chargeableMandate(account: Account, body: Body): MollieMandate {
   return mandate;
 }
 
-function assertCaptureMode(body: Body, method: unknown): void {
+function assertCaptureMode(body: Body, method: JsonValue | undefined): void {
   if (body.captureMode !== "manual") return;
   const methods = Array.isArray(method) ? method : [method];
-  if (method && !methods.every((entry) => MANUAL_CAPTURE.has(String(entry)))) {
+  if (method && !methods.every((entry) => MANUAL_CAPTURE.has(Text(entry)))) {
     throw Unprocessable(
       "This payment method does not support manual capture",
       "captureMode",
@@ -119,8 +129,12 @@ function assertCaptureMode(body: Body, method: unknown): void {
   }
 }
 
-function checkoutLinks(hooks: PaymentHooks, token: string, method: unknown) {
-  const preset = typeof method === "string" ? method : undefined;
+function checkoutLinks(
+  hooks: PaymentHooks,
+  token: string,
+  method: JsonValue | undefined,
+) {
+  const preset = TextOf(method);
   return {
     checkout: link(
       preset
@@ -144,7 +158,7 @@ export function PaymentLinks(
   hooks: PaymentHooks,
   payment: MolliePayment,
   token: string,
-  method: unknown,
+  method: JsonValue | undefined,
 ) {
   const self = link(`${hooks.baseUrl}/v2/payments/${payment.id}`);
   const flow =
@@ -159,21 +173,30 @@ interface Draft {
   mandate?: MollieMandate;
 }
 
+function isSequenceType(
+  value: JsonValue,
+): value is MolliePayment["sequenceType"] {
+  return SEQUENCE_TYPES.some((sequenceType) => sequenceType === value);
+}
+
 function draftOf(account: Account, body: Body): Draft {
-  const sequenceType = (body.sequenceType ?? "oneoff") as Draft["sequenceType"];
+  const sequenceType = body.sequenceType ?? "oneoff";
+  if (!isSequenceType(sequenceType)) {
+    throw Unprocessable("The sequence type is invalid", "sequenceType");
+  }
   if (sequenceType === "recurring") {
     return { sequenceType, mandate: chargeableMandate(account, body) };
   }
   if (
     sequenceType === "first" &&
-    !account.customers.has(String(body.customerId))
+    !account.customers.has(Text(body.customerId))
   ) {
     throw Unprocessable(
       "A first payment needs an existing customer",
       "customerId",
     );
   }
-  if (typeof body.redirectUrl !== "string") {
+  if (!IsJsonString(body.redirectUrl)) {
     throw Unprocessable("The redirect URL is missing", "redirectUrl");
   }
   if (
@@ -191,7 +214,7 @@ export function CreatePaymentRecord(
   body: Body,
 ): MolliePayment {
   const amount = ReadAmount(body.amount, "amount");
-  if (typeof body.description !== "string") {
+  if (!IsJsonString(body.description)) {
     throw Unprocessable("The description is missing", "description");
   }
   AssertWebhookUrl(body.webhookUrl);
@@ -207,15 +230,12 @@ export function CreatePaymentRecord(
     amount,
     status: "open",
     sequenceType: draft.sequenceType,
-    method: typeof method === "string" ? method : null,
-    metadata: (body.metadata as MolliePayment["metadata"]) ?? null,
-    customerId:
-      draft.mandate?.customerId ??
-      (body.customerId as string | undefined) ??
-      null,
+    method: TextOf(method) ?? null,
+    metadata: body.metadata ?? null,
+    customerId: draft.mandate?.customerId ?? TextOf(body.customerId) ?? null,
     mandateId: draft.mandate?.id ?? null,
-    redirectUrl: (body.redirectUrl as string | undefined) ?? null,
-    webhookUrl: (body.webhookUrl as string | undefined) ?? null,
+    redirectUrl: TextOf(body.redirectUrl) ?? null,
+    webhookUrl: TextOf(body.webhookUrl) ?? null,
     createdAt: NowIso(),
     isCancelable: true,
     _links: {},
@@ -299,7 +319,7 @@ const TRANSITIONS: Partial<Record<MolliePaymentStatus, Transition>> = {
     payment.failedAt = NowIso();
     const reason =
       payment.method === "creditcard"
-        ? MAGIC_FAILURES[payment.amount.value]
+        ? Lookup(MAGIC_FAILURES, payment.amount.value)
         : undefined;
     if (reason)
       payment.details = {

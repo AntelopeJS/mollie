@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { GetPayment, type Payment } from "@antelopejs/interface-payment";
@@ -76,6 +77,22 @@ export async function Eventually(
     await delay(SETTLE_POLL_MS);
   }
   if (!check()) throw new Error(`Timed out waiting for ${label}`);
+}
+
+export async function Rejected<E>(
+  work: Promise<unknown>,
+  type: abstract new (...args: never[]) => E,
+): Promise<E> {
+  try {
+    await work;
+  } catch (error) {
+    assert.ok(
+      error instanceof type,
+      `expected ${type.name}, got ${String(error)}`,
+    );
+    return error;
+  }
+  assert.fail(`expected ${type.name}, got a fulfilment`);
 }
 
 export function WebhookBody(

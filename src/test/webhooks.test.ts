@@ -15,6 +15,7 @@ import {
   PrimaryAccount,
   Reference,
   RequireStandIn,
+  Rejected,
   ReturnUrl,
   StandIn,
   TEST_TIMEOUT,
@@ -165,14 +166,7 @@ describe("[mollie] classic webhooks", function () {
     settle(id, "paid");
     StandIn().outage = 503;
     try {
-      const error = await deliver(id).then(
-        () => undefined,
-        (reason: unknown) => reason,
-      );
-      assert.ok(
-        error instanceof PaymentError,
-        `expected a PaymentError, got ${String(error)}`,
-      );
+      const error = await Rejected(deliver(id), PaymentError);
       assert.ok(
         !(error instanceof WebhookVerificationError),
         "an outage must not answer 403",
