@@ -1,6 +1,10 @@
 {
+  "pack": "0.2.17",
   "rules": {
-    "anti-slop/require-safety-comment-for-type-assertion": 6
+    "antelopejs/no-presence-only-type-guard": 1,
+    "anti-slop/require-safety-comment-for-type-assertion": 6,
+    "typescript/no-unsafe-assignment": 2,
+    "typescript/no-unsafe-return": 1
   },
   "oversizeFiles": {}
 }
