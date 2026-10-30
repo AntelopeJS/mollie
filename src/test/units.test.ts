@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { FromMollieAmount, ToMollieAmount } from "../mollie/amounts";
+import { Lookup } from "../mollie/fields";
 import { IsJsonValue, ParseJson } from "../mollie/json";
 import {
   IsJsonObject,
@@ -142,6 +143,22 @@ describe("[mollie] metadata", () => {
   it("merges into its own data without touching anything else", () => {
     const merged = MergeOwn({ crm: "c-1", antelope: { a: 1 } }, { b: 2 });
     assert.deepEqual(merged, { crm: "c-1", antelope: { a: 1, b: 2 } });
+  });
+});
+
+describe("[mollie] lookups", () => {
+  it("answers the keys a table has and nothing for the ones it only inherits", () => {
+    const table = { ideal: 1, creditcard: 2 };
+    assert.equal(Lookup(table, "creditcard"), 2);
+    assert.equal(Lookup(table, "paypal"), undefined);
+    for (const inherited of [
+      "constructor",
+      "toString",
+      "hasOwnProperty",
+      "__proto__",
+    ]) {
+      assert.equal(Lookup(table, inherited), undefined, inherited);
+    }
   });
 });
 
