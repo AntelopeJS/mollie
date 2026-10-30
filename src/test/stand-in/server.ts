@@ -14,8 +14,9 @@ import { StandInError } from "./responses";
 import * as customers from "./customers-api";
 import { DefinedFields, Lookup } from "../../mollie/fields";
 import * as subscriptions from "./subscriptions-api";
+import { ParseJson } from "../../mollie/json";
 import { IsJsonObject } from "../../mollie/metadata";
-import type { JsonValue, MolliePayment } from "../../mollie/types";
+import type { MolliePayment } from "../../mollie/types";
 import { type PaymentHooks, Transition } from "./payments";
 import {
   type Account,
@@ -126,7 +127,7 @@ function isSingleHeader(value: string | string[] | undefined): value is string {
 
 function parseRequestBody(raw: string): payments.Request["body"] {
   if (!raw) return {};
-  const parsed: JsonValue = JSON.parse(raw);
+  const parsed = ParseJson(raw);
   return IsJsonObject(parsed) ? parsed : {};
 }
 

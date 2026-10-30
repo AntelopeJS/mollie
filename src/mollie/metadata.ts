@@ -1,3 +1,4 @@
+import { ParseJson } from "./json";
 import type { JsonObject, JsonValue, MollieMetadata } from "./types";
 
 const OWN_KEY = "antelope";
@@ -25,7 +26,7 @@ function parse(metadata: MollieMetadata | undefined): JsonObject {
     return {};
   }
   try {
-    const parsed: JsonValue = JSON.parse(metadata);
+    const parsed = ParseJson(metadata);
     return IsJsonObject(parsed) ? parsed : {};
   } catch {
     return {};
