@@ -1,5 +1,6 @@
 import { MollieApiError, type MollieErrorBody } from "./errors";
 import { DefinedFields } from "./fields";
+import { ParseJson } from "./json";
 import type { JsonValue } from "./types";
 
 const LIVE_API_URL = "https://api.mollie.com";
@@ -116,7 +117,7 @@ function parseBody(text: string): JsonValue {
     return {};
   }
   try {
-    return JSON.parse(text);
+    return ParseJson(text);
   } catch {
     return { detail: text };
   }

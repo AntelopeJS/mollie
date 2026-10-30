@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 
 import { FromMollieAmount, ToMollieAmount } from "../mollie/amounts";
+import { IsJsonValue, ParseJson } from "../mollie/json";
 import {
+  IsJsonObject,
   MergeOwn,
   ReadCallerMetadata,
   ReadOwn,
@@ -140,6 +142,36 @@ describe("[mollie] metadata", () => {
   it("merges into its own data without touching anything else", () => {
     const merged = MergeOwn({ crm: "c-1", antelope: { a: 1 } }, { b: 2 });
     assert.deepEqual(merged, { crm: "c-1", antelope: { a: 1, b: 2 } });
+  });
+});
+
+describe("[mollie] JSON", () => {
+  it("parses text to the data JSON.parse returns, an own __proto__ key included", () => {
+    assert.deepEqual(ParseJson('{"a":[1,"b",null,true],"c":{"d":1.5}}'), {
+      a: [1, "b", null, true],
+      c: { d: 1.5 },
+    });
+    assert.equal(ParseJson("null"), null);
+    const parsed = ParseJson('{"__proto__":{"x":1}}');
+    assert.ok(IsJsonObject(parsed));
+    assert.deepEqual(Object.keys(parsed), ["__proto__"]);
+    assert.throws(() => ParseJson("{nope"), SyntaxError);
+  });
+
+  it("accepts only JSON data, all the way down", () => {
+    assert.equal(IsJsonValue({ a: [1, { b: null }], c: "d", e: false }), true);
+    assert.equal(IsJsonValue(Object.create(null)), true);
+    for (const foreign of [
+      undefined,
+      () => 1,
+      Symbol("s"),
+      new Date(0),
+      new Map(),
+      { nested: [new Date(0)] },
+      { nested: { deep: undefined } },
+    ]) {
+      assert.equal(IsJsonValue(foreign), false);
+    }
   });
 });
 
