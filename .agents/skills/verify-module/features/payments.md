@@ -30,7 +30,7 @@ An application module charges with `CreatePayment` and reads the payment back wi
 ## Sub-features
 
 - `pay-redirect`: a payment with no method becomes one open Mollie payment with the amount as a decimal string, the reference and the webhook, and reads back `requires_action` with Mollie's checkout link.
-- `pay-settles`: once the payer pays, the payment reads `succeeded` with the amount captured; a payment Mollie declines reads `failed` with a normalised reason and Mollie's own.
+- `pay-settles`: once the payer pays, the payment reads `succeeded` with the amount captured; a payment Mollie declines reads `failed` with a normalised reason and Mollie's own; a payment that expires reads `canceled`.
 - `pay-amounts`: amounts reach Mollie with the currency's decimals: two for euros and forints, none for yen.
 - `pay-idempotent`: the same key returns the first payment and leaves one at Mollie; a new key is a new payment.
 - `pay-not-found`: an unknown id and a malformed one are both `PaymentNotFoundError`, the second without a request.

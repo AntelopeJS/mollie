@@ -15,7 +15,7 @@ An application route passes Mollie's classic deliveries to `VerifyWebhook` and a
 
 ## Sub-features
 
-- `webhook-reads-back`: a delivery that names a payment becomes the event of the status Mollie holds, whatever else the body claims; every delivery of one state has one event id.
+- `webhook-reads-back`: a delivery that names a payment becomes the event of the status Mollie holds, whatever else the body claims; every delivery of one state has one event id; an expired payment is `payment.canceled`.
 - `webhook-refused`: a delivery that names no payment, an unknown payment, or another account's payment is refused as unverifiable.
 
 ## How to get to it (user POV)

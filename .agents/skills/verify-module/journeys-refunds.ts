@@ -3,7 +3,7 @@ import type { Journey } from "@antelopejs/tooling-configs/verify";
 import { answered, call, callsTo, fresh, paidPayment, paymentAtProvider, pick, same, text, thrown, withSession } from "./session.ts";
 
 const refundFlow: Journey = {
-  title: "a partial refund, then a refund with no amount that takes what is left, are recorded at Mollie and read back; a third refund is refused",
+  title: "a partial refund, then a refund with no amount that takes what is left, are recorded at Mollie and read back; a refund of one cent more than remains is refused, and so is a third",
   entryPoint: "`RefundPayment`, `GetRefund` and `GetPayment` through core on a paid payment",
   async run(context) {
     await withSession(context, async (session) => {
@@ -14,6 +14,11 @@ const refundFlow: Journey = {
         same("the refund is for 5.00 on the payment", [pick(partial.value, "amount", "value"), pick(partial.value, "payment")], [500, id]),
         same("Mollie received a refund of 5.00", pick(callsTo(session, "POST", `/v2/payments/${id}/refunds`)[0]?.body, "amount", "value"), "5.00"),
       ], { critical: true });
+      const over = await call(session, "RefundPayment one cent over what is left", "RefundPayment", [{ payment: id, amount: { value: 2001, currency: "EUR" } }, fresh("refund"), null]);
+      context.expect(over.folder, [
+        same("more than remains is an InvalidPaymentStateError", pick(thrown(over), 0), "InvalidPaymentStateError"),
+        same("no second refund request went out", callsTo(session, "POST", `/v2/payments/${id}/refunds`).length, 1),
+      ]);
       const rest = await call(session, "RefundPayment of what is left", "RefundPayment", [{ payment: id, reason: "fraudulent", metadata: { ticket: "42" } }, fresh("refund"), null]);
       context.expect(rest.folder, [
         answered(rest),

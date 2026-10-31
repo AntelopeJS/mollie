@@ -7,7 +7,7 @@ function classic(body: string) {
 }
 
 const webhookReadsBack: Journey = {
-  title: "a delivery that names a payment becomes the event of the payment's status as Mollie holds it, whatever else the body claims",
+  title: "a delivery that names a payment becomes the event of the payment's status as Mollie holds it, whatever else the body claims, and an expired payment is payment.canceled",
   entryPoint: "`VerifyWebhook` through core with classic `id=tr_…` deliveries, and the stand-in's own webhook calls",
   async run(context) {
     await withSession(context, async (session) => {
@@ -30,6 +30,14 @@ const webhookReadsBack: Journey = {
       settle(session, failingId, "failed");
       const failed = await call(session, "VerifyWebhook of a failed payment", "VerifyWebhook", [classic(`id=${failingId}`), null]);
       context.expect(failed.folder, [same("a failed payment is payment.failed", pick(failed.value, "type"), "payment.failed")]);
+      const lapsing = await call(session, "CreatePayment to expire", "CreatePayment", [{ amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
+      const lapsingId = text(pick(lapsing.value, "id"));
+      settle(session, lapsingId, "expired");
+      const lapsed = await call(session, "VerifyWebhook of an expired payment", "VerifyWebhook", [classic(`id=${lapsingId}`), null]);
+      context.expect(lapsed.folder, [
+        same("an expired payment is payment.canceled, about the payment's Mollie status", [pick(lapsed.value, "type"), pick(lapsed.value, "id")], ["payment.canceled", `${lapsingId}:expired`]),
+        same("the payment in the event reads canceled", pick(lapsed.value, "payment", "status"), "canceled"),
+      ]);
     });
   },
 };

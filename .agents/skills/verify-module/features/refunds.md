@@ -15,7 +15,7 @@ An application module refunds all or part of a paid payment with `RefundPayment`
 
 ## Sub-features
 
-- `refund-flow`: a partial refund, then a refund with no amount that takes what is left, are recorded at Mollie and read back; a third is refused.
+- `refund-flow`: a partial refund, then a refund with no amount that takes what is left, are recorded at Mollie and read back; one cent more than remains is refused, and so is a third.
 - `refund-replay`: replaying a refund with its key returns the original and refunds once.
 
 ## How to get to it (user POV)

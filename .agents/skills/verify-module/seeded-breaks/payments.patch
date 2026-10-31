@@ -11,3 +11,16 @@ index 1838669..85239c5 100644
    MXN: 2,
    MYR: 2,
    NOK: 2,
+diff --git a/src/implementations/payment/mapping.ts b/src/implementations/payment/mapping.ts
+index 3c15b36..8a2a94f 100644
+--- a/src/implementations/payment/mapping.ts
++++ b/src/implementations/payment/mapping.ts
+@@ -43,7 +43,7 @@ const OFF_SESSION_SCOPE = "customer-not-present";
+ const STATUS_BY_MOLLIE: Record<MolliePaymentStatus, PaymentStatus> = {
+   authorized: "authorized",
+   canceled: "canceled",
+-  expired: "canceled",
++  expired: "failed",
+   failed: "failed",
+   open: "pending",
+   paid: "succeeded",

@@ -31,8 +31,8 @@ const payRedirect: Journey = {
 };
 
 const paySettles: Journey = {
-  title: "once the payer pays Mollie the payment reads succeeded with the amount captured, and a card Mollie declines reads failed with the reason it gives",
-  entryPoint: "`GetPayment` through core after Mollie settles the payment as paid, and as failed for Mollie's insufficient-funds test amount",
+  title: "once the payer pays Mollie the payment reads succeeded with the amount captured, a card Mollie declines reads failed with the reason it gives, and a payment that expires reads canceled",
+  entryPoint: "`GetPayment` through core after Mollie settles the payment as paid, as failed for Mollie's insufficient-funds test amount, and as expired",
   async run(context) {
     await withSession(context, async (session) => {
       const paid = await call(session, "CreatePayment to pay", "CreatePayment", [{ amount: EUR, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
@@ -55,6 +55,14 @@ const paySettles: Journey = {
       context.expect(failed.folder, [
         same("the payment is failed, not a thrown error", pick(failed.value, "status"), "failed"),
         same("the reason is normalised and Mollie's own is kept", [pick(failed.value, "failure", "code"), pick(failed.value, "failure", "providerCode")], ["insufficient_funds", "insufficient_funds"]),
+      ]);
+      const lapsed = await call(session, "CreatePayment to expire", "CreatePayment", [{ amount: EUR, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
+      const lapsedId = text(pick(lapsed.value, "id"));
+      settle(session, lapsedId, "expired");
+      const expired = await call(session, "GetPayment of the expired payment", "GetPayment", [lapsedId, null]);
+      context.expect(expired.folder, [
+        answered(expired),
+        same("a payment Mollie expired reads canceled", pick(expired.value, "status"), "canceled"),
       ]);
     });
   },
