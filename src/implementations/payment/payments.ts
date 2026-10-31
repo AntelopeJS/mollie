@@ -206,7 +206,7 @@ type Cancellation = (
 
 const CANCELLATIONS: Partial<Record<MolliePayment["status"], Cancellation>> = {
   authorized: (account, payment, idempotencyKey) =>
-    account.client.request({
+    account.client.execute({
       method: "POST",
       path: `/payments/${payment.id}/release-authorization`,
       body: {},
@@ -223,7 +223,7 @@ async function cancelOpen(
   payment: MolliePayment,
 ): Promise<void> {
   if (!payment.isCancelable) refuse(payment, "canceled any more");
-  return account.client.request({
+  return account.client.execute({
     method: "DELETE",
     path: `/payments/${payment.id}`,
   });

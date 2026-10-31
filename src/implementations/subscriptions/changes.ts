@@ -105,7 +105,7 @@ async function cancelAtMollie(
     path,
     body: { metadata: MergeOwn(mollie.metadata, { cancel: mark }) },
   });
-  await account.client.request({ method: "DELETE", path });
+  await account.client.execute({ method: "DELETE", path });
   return ToSubscription(await LoadRecord(account, record.id));
 }
 
