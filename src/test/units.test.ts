@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { FromMollieAmount, ToMollieAmount } from "../mollie/amounts";
 import { Lookup } from "../mollie/fields";
+import { IsText } from "../mollie/guards";
 import { IsJsonValue, ParseJson } from "../mollie/json";
 import {
   IsJsonObject,
@@ -171,7 +172,9 @@ describe("[mollie] metadata", () => {
     assert.deepEqual(ReadCallerMetadata(written), {
       reference: "caller's own",
     });
-    assert.deepEqual(ReadOwn(written), { reference: "r-1" });
+    assert.deepEqual(ReadOwn(written, { reference: IsText }), {
+      reference: "r-1",
+    });
   });
 
   it("reads metadata it merged into but did not write", () => {
@@ -186,7 +189,7 @@ describe("[mollie] metadata", () => {
       order_id: "12345",
     });
     assert.deepEqual(ReadCallerMetadata("not json"), {});
-    assert.equal(ReadOwn("null"), undefined);
+    assert.equal(ReadOwn("null", { reference: IsText }), undefined);
   });
 
   it("merges into its own data without touching anything else", () => {

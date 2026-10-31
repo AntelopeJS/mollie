@@ -13,7 +13,8 @@ import { ParseRefundId } from "../../mollie/ids";
 import { NotFound, Translating } from "./errors";
 import { DefinedFields } from "../../mollie/fields";
 import { ToPaymentStatus, ToRefund } from "./mapping";
-import { ReadOwn, WriteMetadata } from "../../mollie/metadata";
+import { IsText } from "../../mollie/guards";
+import { type OwnFields, ReadOwn, WriteMetadata } from "../../mollie/metadata";
 import type { MolliePayment, MollieRefund } from "../../mollie/types";
 import { FromMollieAmount, ToMollieAmount } from "../../mollie/amounts";
 
@@ -23,6 +24,8 @@ const REFUND_PAGE = "?limit=250";
 interface OwnRefund {
   key: string;
 }
+
+const OWN_REFUND: OwnFields<OwnRefund> = { key: IsText };
 
 function refusal(payment: MolliePayment, reason: string): Error {
   return new InvalidPaymentStateError(
@@ -62,7 +65,7 @@ async function earlierRefund(
     IsMollieRefund,
   );
   return refunds.find(
-    (refund) => ReadOwn<OwnRefund>(refund.metadata)?.key === idempotencyKey,
+    (refund) => ReadOwn(refund.metadata, OWN_REFUND)?.key === idempotencyKey,
   );
 }
 

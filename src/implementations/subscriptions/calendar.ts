@@ -159,7 +159,7 @@ export function ToMollieInterval(period: Period): string {
   return `${amount} ${amount === 1 ? unit.singular : unit.plural}`;
 }
 
-export function IsSubscriptionInterval(
+function isSubscriptionInterval(
   value: string | undefined,
 ): value is SubscriptionInterval {
   return SUBSCRIPTION_INTERVALS.some((interval) => interval === value);
@@ -168,7 +168,7 @@ export function IsSubscriptionInterval(
 export function FromMollieInterval(interval: string): Period {
   const match = MOLLIE_INTERVAL.exec(interval.trim());
   const unit = match?.[2].replace(/s$/, "");
-  if (!match || !IsSubscriptionInterval(unit)) {
+  if (!match || !isSubscriptionInterval(unit)) {
     throw new RangeError(`Mollie interval "${interval}" is not understood`);
   }
   const count = Number.parseInt(match[1], BASE);

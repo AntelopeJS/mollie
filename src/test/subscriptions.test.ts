@@ -18,6 +18,7 @@ import {
   type SubscriptionRequest,
 } from "@antelopejs/interface-subscriptions";
 
+import { IsText } from "../mollie/guards";
 import { IsJsonObject, ReadOwn } from "../mollie/metadata";
 import { CurrentHarness } from "./support/harness";
 import { NewPayer, type Payer } from "./support/payers";
@@ -249,7 +250,7 @@ describe("[mollie] subscription creation", function () {
     assert.equal(replay.latestPayment, first.latestPayment);
     const charges = [...PrimaryAccount().payments.values()].filter(
       (payment) =>
-        ReadOwn<{ subscription: string }>(payment.metadata)?.subscription ===
+        ReadOwn(payment.metadata, { subscription: IsText })?.subscription ===
         first.id,
     );
     assert.equal(charges.length, 1);

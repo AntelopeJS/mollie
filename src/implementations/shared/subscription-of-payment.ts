@@ -1,6 +1,7 @@
 import { IsMollieSubscription } from "../../mollie/resources";
 import type { Account } from "../../accounts";
-import { ReadOwn } from "../../mollie/metadata";
+import { IsText } from "../../mollie/guards";
+import { type OwnFields, ReadOwn } from "../../mollie/metadata";
 import { MollieApiError } from "../../mollie/errors";
 import { SubscriptionId } from "../../mollie/ids";
 import type { MolliePayment, MollieSubscription } from "../../mollie/types";
@@ -12,6 +13,9 @@ interface OwnSubscriptionData {
 interface OwnChargeData {
   subscription: string;
 }
+
+const OWN_SUBSCRIPTION: OwnFields<OwnSubscriptionData> = { reference: IsText };
+const OWN_CHARGE: OwnFields<OwnChargeData> = { subscription: IsText };
 
 function isOwnSubscriptionData(
   own: Partial<OwnSubscriptionData> | undefined,
@@ -27,7 +31,7 @@ function isOwnChargeData(
 
 function IsOwnSubscription(subscription: MollieSubscription): boolean {
   return isOwnSubscriptionData(
-    ReadOwn<OwnSubscriptionData>(subscription.metadata),
+    ReadOwn(subscription.metadata, OWN_SUBSCRIPTION),
   );
 }
 
@@ -54,7 +58,7 @@ export async function SubscriptionOfPayment(
   account: Account,
   payment: MolliePayment,
 ): Promise<string | undefined> {
-  const charged = ReadOwn<OwnChargeData>(payment.metadata);
+  const charged = ReadOwn(payment.metadata, OWN_CHARGE);
   if (isOwnChargeData(charged)) return charged.subscription;
   if (!payment.subscriptionId || !payment.customerId) return undefined;
   const subscription = await spawnedBy(

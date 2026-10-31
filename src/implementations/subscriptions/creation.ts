@@ -21,7 +21,13 @@ import { ToMollieAmount } from "../../mollie/amounts";
 import { IsChargeableOffSession, ToPayment } from "../payment/mapping";
 import { ParsePaymentMethodId, SubscriptionId } from "../../mollie/ids";
 import { SubscriptionAccount, TranslatingSubscription } from "./errors";
-import { MergeOwn, ReadOwn, WriteMetadata } from "../../mollie/metadata";
+import { IsText } from "../../mollie/guards";
+import {
+  MergeOwn,
+  type OwnFields,
+  ReadOwn,
+  WriteMetadata,
+} from "../../mollie/metadata";
 import type { MolliePayment, MollieSubscription } from "../../mollie/types";
 import {
   AddPeriods,
@@ -49,6 +55,8 @@ interface Schedule {
 interface FirstCharge {
   subscription: string;
 }
+
+const FIRST_CHARGE: OwnFields<FirstCharge> = { subscription: IsText };
 
 interface Creation {
   request: SubscriptionRequest;
@@ -222,7 +230,7 @@ async function earlierCharge(
     IsMolliePaymentPage,
   );
   return page._embedded?.payments?.find(
-    (payment) => ReadOwn<FirstCharge>(payment.metadata)?.subscription === id,
+    (payment) => ReadOwn(payment.metadata, FIRST_CHARGE)?.subscription === id,
   );
 }
 

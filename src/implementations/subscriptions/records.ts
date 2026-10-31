@@ -6,7 +6,9 @@ import {
 } from "../../mollie/resources";
 import { createHash } from "node:crypto";
 import {
+  CANCELLATION_TIMINGS,
   type CancellationTiming,
+  SUBSCRIPTION_INTERVALS,
   type SubscriptionInterval,
   SubscriptionNotFoundError,
 } from "@antelopejs/interface-subscriptions";
@@ -14,15 +16,18 @@ import {
 import type { Account } from "../../accounts";
 import { MollieApiError } from "../../mollie/errors";
 import { TranslatingSubscription } from "./errors";
-import { IsSubscriptionInterval } from "./calendar";
 import { DefinedFields } from "../../mollie/fields";
 import { ParseSubscriptionId } from "../../mollie/ids";
 import {
-  IsJsonNumber,
-  IsJsonString,
-  MergeOwn,
-  ReadOwn,
-} from "../../mollie/metadata";
+  type Guard,
+  IsCount,
+  IsText,
+  ObjectWith,
+  OneOf,
+  Optional,
+  RecordOf,
+} from "../../mollie/guards";
+import { MergeOwn, type OwnFields, ReadOwn } from "../../mollie/metadata";
 import type {
   MollieCustomer,
   MolliePayment,
@@ -59,6 +64,35 @@ interface OwnCustomer {
   endedEarly: Record<string, StoredEarlyEnd>;
 }
 
+const START_KIND_VALUES: readonly StartKind[] = ["anchor", "charged", "trial"];
+
+const OWN_SUBSCRIPTION: OwnFields<OwnSubscription> = {
+  reference: IsText,
+  createKey: IsText,
+  interval: OneOf(SUBSCRIPTION_INTERVALS),
+  intervalCount: IsCount,
+  start: OneOf(START_KIND_VALUES),
+  firstPayment: IsText,
+  refused: IsText,
+  cancel: ObjectWith<CancelMark>({
+    timing: OneOf(CANCELLATION_TIMINGS),
+    key: IsText,
+    endsAt: Optional(IsCount),
+  }),
+};
+
+const isStoredEarlyEnd: Guard<StoredEarlyEnd> = (
+  value,
+): value is StoredEarlyEnd =>
+  Array.isArray(value) &&
+  value.length === 2 &&
+  IsCount(value[0]) &&
+  IsText(value[1]);
+
+const OWN_CUSTOMER: OwnFields<OwnCustomer> = {
+  endedEarly: RecordOf(isStoredEarlyEnd),
+};
+
 const KEY_HASH_LENGTH = 8;
 
 export function KeyHash(idempotencyKey: string): string {
@@ -76,19 +110,17 @@ export interface SubscriptionRecord {
   earlyEnd?: EarlyEnd;
 }
 
-const START_KINDS = new Set<string>(["anchor", "charged", "trial"]);
 const LATEST_PAYMENT_PAGE = { limit: "1" };
 
 export function ReadOwnSubscription(
   mollie: MollieSubscription,
 ): OwnSubscription | undefined {
-  const own = ReadOwn<OwnSubscription>(mollie.metadata);
+  const own = ReadOwn(mollie.metadata, OWN_SUBSCRIPTION);
   if (
-    !IsJsonString(own?.reference) ||
-    !IsSubscriptionInterval(own.interval) ||
-    !IsJsonNumber(own.intervalCount) ||
-    own.start === undefined ||
-    !START_KINDS.has(own.start)
+    own?.reference === undefined ||
+    own.interval === undefined ||
+    own.intervalCount === undefined ||
+    own.start === undefined
   )
     return undefined;
   return {
@@ -165,7 +197,7 @@ async function readCustomer(
 }
 
 function endedEarly(customer: MollieCustomer): Record<string, StoredEarlyEnd> {
-  return ReadOwn<OwnCustomer>(customer.metadata)?.endedEarly ?? {};
+  return ReadOwn(customer.metadata, OWN_CUSTOMER)?.endedEarly ?? {};
 }
 
 function toEarlyEnd(stored: StoredEarlyEnd | undefined): EarlyEnd | undefined {
