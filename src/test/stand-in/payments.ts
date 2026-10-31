@@ -274,15 +274,23 @@ export function PaymentOf(account: Account, id: string): MolliePayment {
   return payment;
 }
 
+function mandateMethodOf(paymentMethod: string): MollieMandate["method"] {
+  if (paymentMethod === "creditcard" || paymentMethod === "paypal") {
+    return paymentMethod;
+  }
+  return "directdebit";
+}
+
 function createMandate(
   account: Account,
   payment: MolliePayment,
-  method: string,
+  paymentMethod: string,
 ): void {
+  const method = mandateMethodOf(paymentMethod);
   const mandate: MollieMandate = {
     resource: "mandate",
     id: NewId("mdt"),
-    method: method as MollieMandate["method"],
+    method,
     status: "valid",
     scopes: ["customer-not-present", "customer-present"],
     details:
