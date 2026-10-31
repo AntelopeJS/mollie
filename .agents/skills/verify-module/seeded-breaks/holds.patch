@@ -1,13 +1,13 @@
-diff --git a/src/implementations/payment/instruments.ts b/src/implementations/payment/instruments.ts
-index 5e678c3..485e132 100644
---- a/src/implementations/payment/instruments.ts
-+++ b/src/implementations/payment/instruments.ts
-@@ -177,7 +177,7 @@ export async function AssertCapturable(
-   }
-   if (
-     instrument.method &&
--    !MANUAL_CAPTURE_METHODS.includes(instrument.method)
-+    MANUAL_CAPTURE_METHODS.includes(instrument.method)
-   ) {
-     refuseManualCapture(instrument.method);
-   }
+diff --git a/src/implementations/payment/payments.ts b/src/implementations/payment/payments.ts
+index 75a939b..7cbb4b2 100644
+--- a/src/implementations/payment/payments.ts
++++ b/src/implementations/payment/payments.ts
+@@ -57,7 +57,7 @@ function PaymentBody(
+           : undefined,
+       customerId: isRecurring ? undefined : request.customer,
+       redirectUrl: isRecurring ? undefined : request.returnUrl,
+-      captureMode: request.authorizeOnly ? MANUAL : undefined,
++      captureMode: undefined,
+       webhookUrl: account.webhookUrl,
+     }),
+   };
