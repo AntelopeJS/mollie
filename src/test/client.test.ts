@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 
 import { MollieClient } from "../mollie/client";
 import { MollieApiError } from "../mollie/errors";
-import type { MollieMandate, MolliePayment } from "../mollie/types";
+import { IsMollieMandate, IsMolliePayment } from "../mollie/resources";
 import { Rejected } from "./support/helpers";
 import { IsTcpAddress } from "./stand-in/server";
 
@@ -45,7 +45,7 @@ describe("[mollie] client, on answers Mollie does not document", () => {
 
   function refusal(answer: Answer): Promise<MollieApiError> {
     next = answer;
-    return Rejected(client.request(READ), MollieApiError);
+    return Rejected(client.request(READ, IsMolliePayment), MollieApiError);
   }
 
   it("reports a JSON null error body as Mollie's error status", async () => {
@@ -113,7 +113,7 @@ describe("[mollie] client, on answers Mollie does not document", () => {
       body: '{"resource":"payment","id":"tr_abcdefghij","status":"paid"}',
     };
     const error = await Rejected(
-      client.request<MolliePayment>(READ),
+      client.request(READ, IsMolliePayment),
       MollieApiError,
     );
     assert.equal(error.status, 200);
@@ -125,9 +125,10 @@ describe("[mollie] client, on answers Mollie does not document", () => {
       body: '{"_embedded":{"mandates":[{"resource":"mandate","id":"mdt_abcdefghij"}]}}',
     };
     const error = await Rejected(
-      client.list<MollieMandate>(
+      client.list(
         "/customers/cst_abcdefghij/mandates",
         "mandates",
+        IsMollieMandate,
       ),
       MollieApiError,
     );

@@ -1,3 +1,4 @@
+import { IsMollieSubscription } from "../mollie/resources";
 import assert from "node:assert/strict";
 import {
   DetachPaymentMethod,
@@ -179,7 +180,7 @@ describe("[mollie] subscription schedule", function () {
 
   it("keeps metadata written outside the module visible on a customer after an early end", async () => {
     const payer = await NewPayer();
-    await CurrentHarness().client.request({
+    await CurrentHarness().client.execute({
       method: "PATCH",
       path: `/customers/${payer.customer}`,
       body: { metadata: { crm: "c-9" } },
@@ -378,16 +379,19 @@ describe("[mollie] subscriptions made elsewhere on the account", function () {
     const { child } = ParsePaymentMethodId(payer.paymentMethod) ?? {
       child: "",
     };
-    const foreign = await CurrentHarness().client.request<MollieSubscription>({
-      method: "POST",
-      path: `/customers/${payer.customer}/subscriptions`,
-      body: {
-        amount: { currency: "EUR", value: "5.00" },
-        interval: "1 month",
-        description: "Made in the dashboard",
-        mandateId: child,
+    const foreign = await CurrentHarness().client.request(
+      {
+        method: "POST",
+        path: `/customers/${payer.customer}/subscriptions`,
+        body: {
+          amount: { currency: "EUR", value: "5.00" },
+          interval: "1 month",
+          description: "Made in the dashboard",
+          mandateId: child,
+        },
       },
-    });
+      IsMollieSubscription,
+    );
     assert.deepEqual(await ListSubscriptions(payer.customer), []);
     await assert.rejects(
       () => GetSubscription(`${payer.customer}:${foreign.id}`),

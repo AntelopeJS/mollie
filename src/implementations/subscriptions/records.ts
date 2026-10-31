@@ -1,3 +1,9 @@
+import {
+  IsMollieCustomer,
+  IsMolliePayment,
+  IsMolliePaymentPage,
+  IsMollieSubscription,
+} from "../../mollie/resources";
 import { createHash } from "node:crypto";
 import {
   type CancellationTiming,
@@ -70,14 +76,6 @@ export interface SubscriptionRecord {
   earlyEnd?: EarlyEnd;
 }
 
-interface PaymentList {
-  payments?: MolliePayment[];
-}
-
-interface PaymentPage {
-  _embedded?: PaymentList;
-}
-
 const START_KINDS = new Set<string>(["anchor", "charged", "trial"]);
 const LATEST_PAYMENT_PAGE = { limit: "1" };
 
@@ -112,10 +110,13 @@ async function FetchSubscription(
   subscriptionId: string,
 ): Promise<MollieSubscription> {
   return TranslatingSubscription(`${customerId}:${subscriptionId}`, () =>
-    account.client.request<MollieSubscription>({
-      method: "GET",
-      path: SubscriptionPath(customerId, subscriptionId),
-    }),
+    account.client.request(
+      {
+        method: "GET",
+        path: SubscriptionPath(customerId, subscriptionId),
+      },
+      IsMollieSubscription,
+    ),
   );
 }
 
@@ -123,10 +124,13 @@ async function readPayment(
   account: Account,
   id: string,
 ): Promise<MolliePayment> {
-  return account.client.request<MolliePayment>({
-    method: "GET",
-    path: `/payments/${id}`,
-  });
+  return account.client.request(
+    {
+      method: "GET",
+      path: `/payments/${id}`,
+    },
+    IsMolliePayment,
+  );
 }
 
 async function latestPayment(
@@ -134,11 +138,14 @@ async function latestPayment(
   mollie: MollieSubscription,
   own: OwnSubscription,
 ): Promise<MolliePayment | undefined> {
-  const spawned = await account.client.request<PaymentPage>({
-    method: "GET",
-    path: `${SubscriptionPath(mollie.customerId, mollie.id)}/payments`,
-    query: LATEST_PAYMENT_PAGE,
-  });
+  const spawned = await account.client.request(
+    {
+      method: "GET",
+      path: `${SubscriptionPath(mollie.customerId, mollie.id)}/payments`,
+      query: LATEST_PAYMENT_PAGE,
+    },
+    IsMolliePaymentPage,
+  );
   const newest = spawned._embedded?.payments?.[0];
   if (newest) return newest;
   return own.firstPayment ? readPayment(account, own.firstPayment) : undefined;
@@ -148,10 +155,13 @@ async function readCustomer(
   account: Account,
   customerId: string,
 ): Promise<MollieCustomer> {
-  return account.client.request<MollieCustomer>({
-    method: "GET",
-    path: `/customers/${customerId}`,
-  });
+  return account.client.request(
+    {
+      method: "GET",
+      path: `/customers/${customerId}`,
+    },
+    IsMollieCustomer,
+  );
 }
 
 function endedEarly(customer: MollieCustomer): Record<string, StoredEarlyEnd> {
@@ -192,7 +202,7 @@ export async function RecordEarlyEnd(
     ...endedEarly(customer),
     [record.mollie.id]: [earlyEnd.endedAt, earlyEnd.keyHash],
   };
-  await account.client.request({
+  await account.client.execute({
     method: "PATCH",
     path: `/customers/${customer.id}`,
     body: { metadata: MergeOwn(customer.metadata, { endedEarly: merged }) },

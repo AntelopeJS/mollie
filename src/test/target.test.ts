@@ -55,7 +55,7 @@ describe("[mollie] switching between the stand-in and live Mollie", function () 
     const statusOf = async (client: MollieClient) =>
       (
         await Rejected(
-          client.request({ method: "GET", path: "/payments/tr_abcdefghij" }),
+          client.execute({ method: "GET", path: "/payments/tr_abcdefghij" }),
           MollieApiError,
         )
       ).status;
@@ -76,7 +76,7 @@ describe("[mollie] switching between the stand-in and live Mollie", function () 
   it("reaches the real Mollie API and reads a refused key as an error, not a missing record", async function () {
     const client = new MollieClient({ apiKey: BOGUS_TEST_KEY });
     const error = await Rejected(
-      client.request({ method: "GET", path: "/payments/tr_antelopeprobe" }),
+      client.execute({ method: "GET", path: "/payments/tr_antelopeprobe" }),
       MollieApiError,
     );
     if (error.status === 0) this.skip();

@@ -1,3 +1,4 @@
+import { IsMollieMandate } from "../../mollie/resources";
 import {
   PaymentError,
   type PaymentRequest,
@@ -6,7 +7,6 @@ import {
 import type { Account } from "../../accounts";
 import { NotFound, Translating } from "./errors";
 import { ParsePaymentMethodId } from "../../mollie/ids";
-import type { MollieMandate } from "../../mollie/types";
 
 const MOLLIE_METHODS = new Set([
   "alma",
@@ -148,10 +148,13 @@ async function mandateMethod(
   paymentMethod: string,
 ): Promise<string> {
   const mandate = await Translating(paymentMethod, "payment method", () =>
-    account.client.request<MollieMandate>({
-      method: "GET",
-      path: `/customers/${instrument.customerId}/mandates/${instrument.mandateId}`,
-    }),
+    account.client.request(
+      {
+        method: "GET",
+        path: `/customers/${instrument.customerId}/mandates/${instrument.mandateId}`,
+      },
+      IsMollieMandate,
+    ),
   );
   return mandate.method;
 }

@@ -1,3 +1,8 @@
+import {
+  IsMollieCustomer,
+  IsMollieMandate,
+  IsMolliePayment,
+} from "../../mollie/resources";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { MollieClient } from "../../mollie/client";
@@ -7,11 +12,7 @@ import type { AccountConfig } from "../../accounts";
 import { DefinedFields } from "../../mollie/fields";
 import { type PayerPolicy, TestPayer } from "./payer";
 import { SelectTarget, type TestTarget } from "./target";
-import type {
-  MollieCustomer,
-  MollieMandate,
-  MolliePayment,
-} from "../../mollie/types";
+import type { MolliePayment } from "../../mollie/types";
 
 export interface Harness {
   target: TestTarget;
@@ -51,16 +52,22 @@ async function waitForStatus(
   id: string,
 ): Promise<MolliePayment> {
   const deadline = Date.now() + SETTLE_TIMEOUT_MS;
-  let payment = await client.request<MolliePayment>({
-    method: "GET",
-    path: `/payments/${id}`,
-  });
-  while (payment.status === "open" && Date.now() < deadline) {
-    await delay(SETTLE_POLL_MS);
-    payment = await client.request<MolliePayment>({
+  let payment = await client.request(
+    {
       method: "GET",
       path: `/payments/${id}`,
-    });
+    },
+    IsMolliePayment,
+  );
+  while (payment.status === "open" && Date.now() < deadline) {
+    await delay(SETTLE_POLL_MS);
+    payment = await client.request(
+      {
+        method: "GET",
+        path: `/payments/${id}`,
+      },
+      IsMolliePayment,
+    );
   }
   return payment;
 }
@@ -69,32 +76,42 @@ async function ProvisionCardMandate(
   client: MollieClient,
   label: string,
 ): Promise<string> {
-  const customer = await client.request<MollieCustomer>({
-    method: "POST",
-    path: "/customers",
-    body: { name: `Conformance ${label}`, email: `${label}@merchant.invalid` },
-  });
-  const first = await client.request<MolliePayment>({
-    method: "POST",
-    path: "/payments",
-    body: {
-      amount: PROVISIONING_AMOUNT,
-      description: `Saves the ${label} test card`,
-      sequenceType: "first",
-      method: "creditcard",
-      customerId: customer.id,
-      redirectUrl: RETURN_URL,
+  const customer = await client.request(
+    {
+      method: "POST",
+      path: "/customers",
+      body: {
+        name: `Conformance ${label}`,
+        email: `${label}@merchant.invalid`,
+      },
     },
-  });
+    IsMollieCustomer,
+  );
+  const first = await client.request(
+    {
+      method: "POST",
+      path: "/payments",
+      body: {
+        amount: PROVISIONING_AMOUNT,
+        description: `Saves the ${label} test card`,
+        sequenceType: "first",
+        method: "creditcard",
+        customerId: customer.id,
+        redirectUrl: RETURN_URL,
+      },
+    },
+    IsMolliePayment,
+  );
   const settled = await waitForStatus(client, first.id);
   if (settled.status !== "paid") {
     throw new Error(
       `Provisioning the ${label} card: first payment ${first.id} is ${settled.status}`,
     );
   }
-  const mandates = await client.list<MollieMandate>(
+  const mandates = await client.list(
     `/customers/${customer.id}/mandates`,
     "mandates",
+    IsMollieMandate,
   );
   const mandate = mandates.find((candidate) => candidate.status === "valid");
   if (!mandate)
