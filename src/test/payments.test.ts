@@ -3,6 +3,7 @@ import {
   CancelPayment,
   CapturePayment,
   CreateCheckoutSession,
+  CreateCustomer,
   CreatePayment,
   CustomerNotFoundError,
   GetPayment,
@@ -358,6 +359,28 @@ describe("[mollie] payments edge cases", function () {
     const sent = PrimaryAccount().payments.get(created.id)?.metadata;
     assert.equal(ReadOwn<{ reference: string }>(sent)?.reference, reference);
     assert.deepEqual(created.metadata, { a: "b" });
+  });
+
+  it("saves a bank account, not an iDEAL method, from an iDEAL first payment", async function () {
+    RequireStandIn(this);
+    const customer = await CreateCustomer({ name: "iDEAL payer" }, Key());
+    const payment = await CreatePayment(
+      {
+        amount: EUR(100),
+        reference: Reference(),
+        customer: customer.id,
+        paymentMethod: "ideal",
+        savePaymentMethod: true,
+        returnUrl: ReturnUrl(),
+      },
+      Key(),
+    );
+    assert.equal((await SettledPayment(payment.id)).status, "succeeded");
+    const saved = await ListPaymentMethods(customer.id);
+    assert.deepEqual(
+      saved.map((method) => method.type),
+      ["bank_account"],
+    );
   });
 });
 
