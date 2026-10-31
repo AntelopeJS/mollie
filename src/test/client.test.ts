@@ -71,4 +71,38 @@ describe("[mollie] client, on answers Mollie does not document", () => {
     assert.equal((await refusal({ status: 200, body: "" })).status, 200);
     assert.equal((await refusal({ status: 204, body: "" })).status, 204);
   });
+
+  it("carries out a call whose answer has no use: a 204, a 202 or a 200 that echoes what it changed", async () => {
+    next = { status: 204, body: "" };
+    assert.equal(
+      await client.execute({
+        method: "DELETE",
+        path: "/customers/cst_abcdefghij",
+      }),
+      undefined,
+    );
+    next = { status: 202, body: "" };
+    assert.equal(
+      await client.execute({
+        method: "POST",
+        path: "/payments/tr_abcdefghij/release-authorization",
+        body: {},
+      }),
+      undefined,
+    );
+    next = { status: 200, body: '{"resource":"payment"}' };
+    assert.equal(
+      await client.execute({
+        method: "DELETE",
+        path: "/payments/tr_abcdefghij",
+      }),
+      undefined,
+    );
+    next = { status: 404, body: '{"title":"Not Found"}' };
+    const error = await Rejected(
+      client.execute({ method: "DELETE", path: "/payments/tr_abcdefghij" }),
+      MollieApiError,
+    );
+    assert.equal(error.isNotFound, true);
+  });
 });

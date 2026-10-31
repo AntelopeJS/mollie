@@ -1,13 +1,13 @@
-import { MollieApiError, type MollieErrorBody } from "./errors";
+import { MollieApiError } from "./errors";
 import { DefinedFields } from "./fields";
 import { ParseJson } from "./json";
+import { IsJsonObject, IsJsonString } from "./metadata";
 import type { JsonValue } from "./types";
 
 const LIVE_API_URL = "https://api.mollie.com";
 
 const API_VERSION_PATH = "/v2";
 const REQUEST_TIMEOUT_MS = 30_000;
-const NO_CONTENT = 204;
 const USER_AGENT = "antelopejs-mollie";
 const IDEMPOTENT_METHODS = new Set(["POST"]);
 
@@ -50,15 +50,25 @@ export class MollieClient {
 
   async request<T>(request: MollieRequest): Promise<T> {
     const response = await this.send(request);
-    if (response.status === NO_CONTENT) {
-      return undefined as T;
-    }
     const text = await response.text();
-    const body = parseBody(text);
     if (!response.ok) {
-      throw new MollieApiError(response.status, body as MollieErrorBody);
+      throw errorOf(response.status, text);
+    }
+    const body = parsedJson(text);
+    if (body === undefined) {
+      throw new MollieApiError(response.status, {
+        detail: `Mollie answered ${response.status} without a JSON body`,
+      });
     }
     return body as T;
+  }
+
+  async execute(request: MollieRequest): Promise<void> {
+    const response = await this.send(request);
+    const text = await response.text();
+    if (!response.ok) {
+      throw errorOf(response.status, text);
+    }
   }
 
   async list<T>(path: string, resource: string): Promise<T[]> {
@@ -112,15 +122,44 @@ export class MollieClient {
   }
 }
 
-function parseBody(text: string): JsonValue {
+function parsedJson(text: string): JsonValue | undefined {
   if (!text) {
-    return {};
+    return undefined;
   }
   try {
     return ParseJson(text);
   } catch {
-    return { detail: text };
+    return undefined;
   }
+}
+
+function textField(
+  body: JsonValue,
+  key: "detail" | "field" | "title",
+): string | undefined {
+  if (!IsJsonObject(body)) {
+    return undefined;
+  }
+  const value = body[key];
+  return IsJsonString(value) ? value : undefined;
+}
+
+function errorOf(status: number, text: string): MollieApiError {
+  const body = parsedJson(text);
+  if (body === undefined) {
+    return new MollieApiError(
+      status,
+      DefinedFields({ detail: text || undefined }),
+    );
+  }
+  return new MollieApiError(
+    status,
+    DefinedFields({
+      title: textField(body, "title"),
+      detail: textField(body, "detail"),
+      field: textField(body, "field"),
+    }),
+  );
 }
 
 function relativeLink(href: string | undefined): string | undefined {

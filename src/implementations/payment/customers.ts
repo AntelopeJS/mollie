@@ -77,7 +77,7 @@ export async function DeleteCustomer(
   assertCustomerId(id);
   const account = GetAccount(provider);
   await Translating(id, CUSTOMER_ENTITY, () =>
-    account.client.request({ method: "DELETE", path: `/customers/${id}` }),
+    account.client.execute({ method: "DELETE", path: `/customers/${id}` }),
   );
 }
 
@@ -108,7 +108,7 @@ export async function DetachPaymentMethod(
   if (!parsed) throw NotFound(id, METHOD_ENTITY);
   const account = GetAccount(provider);
   await Translating(id, METHOD_ENTITY, () =>
-    account.client.request({
+    account.client.execute({
       method: "DELETE",
       path: `/customers/${parsed.parent}/mandates/${parsed.child}`,
     }),

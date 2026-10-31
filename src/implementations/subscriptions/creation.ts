@@ -249,7 +249,7 @@ async function refuse(
   payment: MolliePayment,
 ): Promise<never> {
   await updateOwn(account, mollie, { refused: payment.id });
-  await account.client.request({
+  await account.client.execute({
     method: "DELETE",
     path: SubscriptionPath(mollie.customerId, mollie.id),
   });
