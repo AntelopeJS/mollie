@@ -1,5 +1,5 @@
 diff --git a/src/implementations/payment/mapping.ts b/src/implementations/payment/mapping.ts
-index 3c15b36..ec01224 100644
+index 3c15b36..cfd3935 100644
 --- a/src/implementations/payment/mapping.ts
 +++ b/src/implementations/payment/mapping.ts
 @@ -46,7 +46,7 @@ const STATUS_BY_MOLLIE: Record<MolliePaymentStatus, PaymentStatus> = {
@@ -7,7 +7,7 @@ index 3c15b36..ec01224 100644
    failed: "failed",
    open: "pending",
 -  paid: "succeeded",
-+  paid: "processing",
++  paid: "pending",
    pending: "pending",
  };
  
