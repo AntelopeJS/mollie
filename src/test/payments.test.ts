@@ -4,6 +4,7 @@ import {
   CancelPayment,
   CapturePayment,
   CreateCheckoutSession,
+  CreateCustomer,
   CreatePayment,
   CustomerNotFoundError,
   GetPayment,
@@ -11,6 +12,7 @@ import {
   InvalidPaymentStateError,
   ListPaymentMethods,
   PaymentError,
+  type PaymentLocale,
   type PaymentRequest,
   RefundPayment,
 } from "@antelopejs/interface-payment";
@@ -164,6 +166,40 @@ describe("[mollie] authorize and capture, settled the way Mollie settles", funct
         ),
       (error) => error instanceof PaymentError && /ideal/.test(error.message),
     );
+  });
+});
+
+describe("[mollie] the hosted page language", function () {
+  this.timeout(TEST_TIMEOUT);
+
+  async function sentLocale(locale: PaymentLocale) {
+    await CreateCheckoutSession(
+      {
+        amount: EUR(2500),
+        reference: Reference(),
+        successUrl: ReturnUrl(),
+        cancelUrl: ReturnUrl(),
+        locale,
+      },
+      Key(),
+    );
+    return PrimaryAccount()
+      .requests.filter((request) => request.path === "/v2/payments")
+      .at(-1)?.body?.locale;
+  }
+
+  it("presets the language a payer asked for, in the region Mollie offers it in", async function () {
+    RequireStandIn(this);
+    assert.equal(await sentLocale("fr"), "fr_FR");
+    assert.equal(await sentLocale("en"), "en_US");
+    assert.equal(await sentLocale("en-GB"), "en_GB");
+    assert.equal(await sentLocale("pt-BR"), "pt_PT");
+  });
+
+  it("lets Mollie pick from the browser for a language it does not offer", async function () {
+    RequireStandIn(this);
+    assert.equal(await sentLocale("ja"), undefined);
+    assert.equal(await sentLocale("auto"), undefined);
   });
 });
 
@@ -327,6 +363,28 @@ describe("[mollie] payments edge cases", function () {
     const sent = PrimaryAccount().payments.get(created.id)?.metadata;
     assert.equal(ReadOwn<{ reference: string }>(sent)?.reference, reference);
     assert.deepEqual(created.metadata, { a: "b" });
+  });
+
+  it("saves a bank account, not an iDEAL method, from an iDEAL first payment", async function () {
+    RequireStandIn(this);
+    const customer = await CreateCustomer({ name: "iDEAL payer" }, Key());
+    const payment = await CreatePayment(
+      {
+        amount: EUR(100),
+        reference: Reference(),
+        customer: customer.id,
+        paymentMethod: "ideal",
+        savePaymentMethod: true,
+        returnUrl: ReturnUrl(),
+      },
+      Key(),
+    );
+    assert.equal((await SettledPayment(payment.id)).status, "succeeded");
+    const saved = await ListPaymentMethods(customer.id);
+    assert.deepEqual(
+      saved.map((method) => method.type),
+      ["bank_account"],
+    );
   });
 });
 
