@@ -1,5 +1,14 @@
 import { MollieApiError } from "./errors";
 import { DefinedFields } from "./fields";
+import {
+  type Guard,
+  IsText,
+  ListOf,
+  Nullable,
+  ObjectWith,
+  Optional,
+  RecordOf,
+} from "./guards";
 import { ParseJson } from "./json";
 import { IsJsonObject, IsJsonString } from "./metadata";
 import type { JsonValue } from "./types";
@@ -30,6 +39,8 @@ interface HalLink {
   href: string;
 }
 
+const IsHalLink = ObjectWith<HalLink>({ href: IsText });
+
 interface ListLinks {
   next?: HalLink | null;
 }
@@ -48,7 +59,7 @@ export class MollieClient {
     this.apiUrl = (options.apiUrl ?? LIVE_API_URL).replace(/\/+$/, "");
   }
 
-  async request<T>(request: MollieRequest): Promise<T> {
+  async request<T>(request: MollieRequest, isAnswer: Guard<T>): Promise<T> {
     const response = await this.send(request);
     const text = await response.text();
     if (!response.ok) {
@@ -60,7 +71,12 @@ export class MollieClient {
         detail: `Mollie answered ${response.status} without a JSON body`,
       });
     }
-    return body as T;
+    if (!isAnswer(body)) {
+      throw new MollieApiError(response.status, {
+        detail: `Mollie answered ${response.status} with JSON that is not the resource asked for`,
+      });
+    }
+    return body;
   }
 
   async execute(request: MollieRequest): Promise<void> {
@@ -71,14 +87,19 @@ export class MollieClient {
     }
   }
 
-  async list<T>(path: string, resource: string): Promise<T[]> {
+  async list<T>(
+    path: string,
+    resource: string,
+    isItem: Guard<T>,
+  ): Promise<T[]> {
+    const isPage = ObjectWith<ListPage<T>>({
+      _embedded: Optional(RecordOf(ListOf(isItem))),
+      _links: Optional(ObjectWith<ListLinks>({ next: Nullable(IsHalLink) })),
+    });
     const items: T[] = [];
     let next: string | undefined = `${API_VERSION_PATH}${path}`;
     while (next) {
-      const page: ListPage<T> = await this.request<ListPage<T>>({
-        method: "GET",
-        path: next,
-      });
+      const page = await this.request({ method: "GET", path: next }, isPage);
       items.push(...(page._embedded?.[resource] ?? []));
       next = relativeLink(page._links?.next?.href);
     }

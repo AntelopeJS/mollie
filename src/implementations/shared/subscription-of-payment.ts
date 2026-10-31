@@ -1,3 +1,4 @@
+import { IsMollieSubscription } from "../../mollie/resources";
 import type { Account } from "../../accounts";
 import { ReadOwn } from "../../mollie/metadata";
 import { MollieApiError } from "../../mollie/errors";
@@ -36,10 +37,13 @@ async function spawnedBy(
   subscriptionId: string,
 ): Promise<MollieSubscription | undefined> {
   try {
-    return await account.client.request<MollieSubscription>({
-      method: "GET",
-      path: `/customers/${customerId}/subscriptions/${subscriptionId}`,
-    });
+    return await account.client.request(
+      {
+        method: "GET",
+        path: `/customers/${customerId}/subscriptions/${subscriptionId}`,
+      },
+      IsMollieSubscription,
+    );
   } catch (error) {
     if (error instanceof MollieApiError && error.isNotFound) return undefined;
     throw error;

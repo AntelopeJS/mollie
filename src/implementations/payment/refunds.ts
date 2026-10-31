@@ -1,3 +1,4 @@
+import { IsMollieRefund } from "../../mollie/resources";
 import {
   type Amount,
   InvalidPaymentStateError,
@@ -55,9 +56,10 @@ async function earlierRefund(
   payment: MolliePayment,
   idempotencyKey: string,
 ): Promise<MollieRefund | undefined> {
-  const refunds = await account.client.list<MollieRefund>(
+  const refunds = await account.client.list(
     `/payments/${payment.id}/refunds${REFUND_PAGE}`,
     "refunds",
+    IsMollieRefund,
   );
   return refunds.find(
     (refund) => ReadOwn<OwnRefund>(refund.metadata)?.key === idempotencyKey,
@@ -78,24 +80,27 @@ export async function RefundPayment(
   const amount = refundableAmount(payment, request.amount);
   return Translating(request.payment, "payment", async () =>
     ToRefund(
-      await account.client.request<MollieRefund>({
-        method: "POST",
-        path: `/payments/${payment.id}/refunds`,
-        body: {
-          amount: ToMollieAmount(amount),
-          description: request.reason
-            ? `Refund (${request.reason}) for ${payment.description}`
-            : `Refund for ${payment.description}`,
-          metadata: WriteMetadata(
-            {
-              key: idempotencyKey,
-              ...DefinedFields({ reason: request.reason }),
-            },
-            request.metadata,
-          ),
+      await account.client.request(
+        {
+          method: "POST",
+          path: `/payments/${payment.id}/refunds`,
+          body: {
+            amount: ToMollieAmount(amount),
+            description: request.reason
+              ? `Refund (${request.reason}) for ${payment.description}`
+              : `Refund for ${payment.description}`,
+            metadata: WriteMetadata(
+              {
+                key: idempotencyKey,
+                ...DefinedFields({ reason: request.reason }),
+              },
+              request.metadata,
+            ),
+          },
+          idempotencyKey,
         },
-        idempotencyKey,
-      }),
+        IsMollieRefund,
+      ),
     ),
   );
 }
@@ -109,10 +114,13 @@ export async function GetRefund(
   const account = GetAccount(provider);
   return Translating(id, REFUND_ENTITY, async () =>
     ToRefund(
-      await account.client.request<MollieRefund>({
-        method: "GET",
-        path: `/payments/${parsed.parent}/refunds/${parsed.child}`,
-      }),
+      await account.client.request(
+        {
+          method: "GET",
+          path: `/payments/${parsed.parent}/refunds/${parsed.child}`,
+        },
+        IsMollieRefund,
+      ),
     ),
   );
 }

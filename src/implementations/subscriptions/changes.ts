@@ -1,3 +1,4 @@
+import { IsMollieSubscription } from "../../mollie/resources";
 import {
   CANCELLATION_TIMINGS,
   type CancellationTiming,
@@ -41,9 +42,10 @@ async function listed(
   customer: string,
 ): Promise<MollieSubscription[]> {
   try {
-    return await account.client.list<MollieSubscription>(
+    return await account.client.list(
       `/customers/${customer}/subscriptions${SUBSCRIPTION_PAGE}`,
       "subscriptions",
+      IsMollieSubscription,
     );
   } catch (error) {
     if (error instanceof MollieApiError && error.isNotFound) return [];
@@ -100,7 +102,7 @@ async function cancelAtMollie(
 ): Promise<Subscription> {
   const { mollie } = record;
   const path = SubscriptionPath(mollie.customerId, mollie.id);
-  await account.client.request({
+  await account.client.execute({
     method: "PATCH",
     path,
     body: { metadata: MergeOwn(mollie.metadata, { cancel: mark }) },
@@ -197,7 +199,7 @@ export async function UpdateSubscriptionPaymentMethod(
     paymentMethod,
   );
   return TranslatingSubscription(id, async () => {
-    await account.client.request({
+    await account.client.execute({
       method: "PATCH",
       path: SubscriptionPath(mollie.customerId, mollie.id),
       body: { mandateId },

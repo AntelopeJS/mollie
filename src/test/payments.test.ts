@@ -1,3 +1,4 @@
+import { IsMollieMandate } from "../mollie/resources";
 import assert from "node:assert/strict";
 import {
   CancelPayment,
@@ -96,15 +97,18 @@ describe("[mollie] authorize and capture, settled the way Mollie settles", funct
     const { parent } = ParsePaymentMethodId(CurrentHarness().chargeable) ?? {
       parent: "",
     };
-    const mandate = await CurrentHarness().client.request<{ id: string }>({
-      method: "POST",
-      path: `/customers/${parent}/mandates`,
-      body: {
-        method: "directdebit",
-        consumerName: "T. Test",
-        consumerAccount: "NL55INGB0000000000",
+    const mandate = await CurrentHarness().client.request(
+      {
+        method: "POST",
+        path: `/customers/${parent}/mandates`,
+        body: {
+          method: "directdebit",
+          consumerName: "T. Test",
+          consumerAccount: "NL55INGB0000000000",
+        },
       },
-    });
+      IsMollieMandate,
+    );
     const before = PrimaryAccount().payments.size;
     await assert.rejects(
       () => offSession(`${parent}:${mandate.id}`, { authorizeOnly: true }),

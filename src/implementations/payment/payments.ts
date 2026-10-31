@@ -1,3 +1,6 @@
+import { ObjectWith, Optional } from "../../mollie/guards";
+import { IsJsonValue } from "../../mollie/json";
+import { IsMolliePayment } from "../../mollie/resources";
 import { SUBSCRIPTION_METADATA_KEY } from "@antelopejs/interface-subscriptions";
 import {
   type Amount,
@@ -83,10 +86,13 @@ export async function ReadPayment(
 ): Promise<MolliePayment> {
   if (!IsMollieId("payment", id)) throw NotFound(id, entity);
   return Translating(id, entity, () =>
-    account.client.request<MolliePayment>({
-      method: "GET",
-      path: `/payments/${id}`,
-    }),
+    account.client.request(
+      {
+        method: "GET",
+        path: `/payments/${id}`,
+      },
+      IsMolliePayment,
+    ),
   );
 }
 
@@ -103,12 +109,15 @@ export async function CreatePayment(
   }
   return Translating(request.paymentMethod ?? "", PAYMENT_ENTITY, async () =>
     ToPayment(
-      await account.client.request<MolliePayment>({
-        method: "POST",
-        path: "/payments",
-        body: PaymentBody(request, instrument, account),
-        idempotencyKey,
-      }),
+      await account.client.request(
+        {
+          method: "POST",
+          path: "/payments",
+          body: PaymentBody(request, instrument, account),
+          idempotencyKey,
+        },
+        IsMolliePayment,
+      ),
     ),
   );
 }
@@ -147,6 +156,8 @@ interface Capture {
   metadata?: MolliePayment["metadata"];
 }
 
+const IsCapture = ObjectWith<Capture>({ metadata: Optional(IsJsonValue) });
+
 interface OwnCapture {
   key: string;
 }
@@ -156,9 +167,10 @@ async function hasCaptured(
   id: string,
   idempotencyKey: string,
 ): Promise<boolean> {
-  const captures = await account.client.list<Capture>(
+  const captures = await account.client.list(
     `/payments/${id}/captures${CAPTURE_PAGE}`,
     "captures",
+    IsCapture,
   );
   return captures.some(
     (capture) => ReadOwn<OwnCapture>(capture.metadata)?.key === idempotencyKey,
@@ -183,7 +195,7 @@ export async function CapturePayment(
   if (payment.status !== "authorized") refuse(payment, "captured");
   assertCapturableAmount(payment, amount);
   return Translating(id, PAYMENT_ENTITY, async () => {
-    await account.client.request({
+    await account.client.execute({
       method: "POST",
       path: `/payments/${id}/captures`,
       body: {

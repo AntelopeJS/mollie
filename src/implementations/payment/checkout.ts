@@ -1,3 +1,4 @@
+import { IsMolliePayment } from "../../mollie/resources";
 import {
   type CheckoutSession,
   type CheckoutSessionRequest,
@@ -127,12 +128,18 @@ export async function CreateCheckoutSession(
   const body = sessionBody(request);
   return Translating("", SESSION_ENTITY, async () =>
     toSession(
-      await account.client.request<MolliePayment>({
-        method: "POST",
-        path: "/payments",
-        body: { ...body, ...DefinedFields({ webhookUrl: account.webhookUrl }) },
-        idempotencyKey,
-      }),
+      await account.client.request(
+        {
+          method: "POST",
+          path: "/payments",
+          body: {
+            ...body,
+            ...DefinedFields({ webhookUrl: account.webhookUrl }),
+          },
+          idempotencyKey,
+        },
+        IsMolliePayment,
+      ),
     ),
   );
 }
