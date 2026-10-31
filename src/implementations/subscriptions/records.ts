@@ -15,6 +15,7 @@ import {
 
 import type { Account } from "../../accounts";
 import { MollieApiError } from "../../mollie/errors";
+import { IsJsonValue } from "../../mollie/json";
 import { TranslatingSubscription } from "./errors";
 import { DefinedFields } from "../../mollie/fields";
 import { ParseSubscriptionId } from "../../mollie/ids";
@@ -29,6 +30,7 @@ import {
 } from "../../mollie/guards";
 import { MergeOwn, type OwnFields, ReadOwn } from "../../mollie/metadata";
 import type {
+  JsonValue,
   MollieCustomer,
   MolliePayment,
   MollieSubscription,
@@ -61,7 +63,7 @@ export interface EarlyEnd {
 type StoredEarlyEnd = [number, string];
 
 interface OwnCustomer {
-  endedEarly: Record<string, StoredEarlyEnd>;
+  endedEarly: Record<string, JsonValue>;
 }
 
 const START_KIND_VALUES: readonly StartKind[] = ["anchor", "charged", "trial"];
@@ -90,7 +92,7 @@ const isStoredEarlyEnd: Guard<StoredEarlyEnd> = (
   IsText(value[1]);
 
 const OWN_CUSTOMER: OwnFields<OwnCustomer> = {
-  endedEarly: RecordOf(isStoredEarlyEnd),
+  endedEarly: RecordOf(IsJsonValue),
 };
 
 const KEY_HASH_LENGTH = 8;
@@ -196,12 +198,12 @@ async function readCustomer(
   );
 }
 
-function endedEarly(customer: MollieCustomer): Record<string, StoredEarlyEnd> {
+function endedEarly(customer: MollieCustomer): Record<string, JsonValue> {
   return ReadOwn(customer.metadata, OWN_CUSTOMER)?.endedEarly ?? {};
 }
 
-function toEarlyEnd(stored: StoredEarlyEnd | undefined): EarlyEnd | undefined {
-  if (!Array.isArray(stored)) return undefined;
+function toEarlyEnd(stored: JsonValue | undefined): EarlyEnd | undefined {
+  if (!isStoredEarlyEnd(stored)) return undefined;
   const [endedAt, keyHash] = stored;
   return { endedAt, keyHash };
 }
