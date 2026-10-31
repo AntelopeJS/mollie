@@ -1,0 +1,13 @@
+diff --git a/src/implementations/payment/customers.ts b/src/implementations/payment/customers.ts
+index ff085b0..4565744 100644
+--- a/src/implementations/payment/customers.ts
++++ b/src/implementations/payment/customers.ts
+@@ -84,7 +84,7 @@ export async function DeleteCustomer(
+   assertCustomerId(id);
+   const account = GetAccount(provider);
+   await Translating(id, CUSTOMER_ENTITY, () =>
+-    account.client.execute({ method: "DELETE", path: `/customers/${id}` }),
++    account.client.execute({ method: "GET", path: `/customers/${id}` }),
+   );
+ }
+ 

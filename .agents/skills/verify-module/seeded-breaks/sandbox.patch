@@ -1,0 +1,13 @@
+diff --git a/src/mollie/client.ts b/src/mollie/client.ts
+index 0dbea13..03658fe 100644
+--- a/src/mollie/client.ts
++++ b/src/mollie/client.ts
+@@ -130,7 +130,7 @@ export class MollieClient {
+   private headers(request: MollieRequest) {
+     return {
+       Accept: "application/hal+json",
+-      Authorization: `Bearer ${this.apiKey}`,
++      Authorization: `Token ${this.apiKey}`,
+       "User-Agent": USER_AGENT,
+       ...DefinedFields({
+         "Content-Type": request.body ? "application/json" : undefined,
