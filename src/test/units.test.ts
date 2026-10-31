@@ -26,6 +26,8 @@ import {
   StartOf,
   ToMollieInterval,
 } from "../implementations/subscriptions/calendar";
+import { ToSubscription } from "../implementations/subscriptions/mapping";
+import type { SubscriptionRecord } from "../implementations/subscriptions/records";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -246,5 +248,40 @@ describe("[mollie] calendar", () => {
       interval: "month",
       count: 1,
     });
+  });
+});
+
+describe("[mollie] subscription periods", () => {
+  it("starts a first charged period on the day the subscription was created, when the next month lacks that day", () => {
+    const created = StartOf(ParseDate("2026-10-31")) + 10 * HOUR_MS;
+    const record: SubscriptionRecord = {
+      id: "sub_month_end",
+      mollie: {
+        resource: "subscription",
+        id: "sub_month_end",
+        status: "active",
+        amount: { currency: "EUR", value: "10.00" },
+        interval: "1 month",
+        startDate: "2026-11-30",
+        description: "Subscription (month-end)",
+        customerId: "cst_month_end",
+        createdAt: new Date(created).toISOString(),
+      },
+      own: {
+        reference: "month-end",
+        interval: "month",
+        intervalCount: 1,
+        start: "charged",
+      },
+    };
+    const subscription = ToSubscription(record, created + HOUR_MS);
+    assert.equal(
+      subscription.currentPeriodStart,
+      StartOf(ParseDate("2026-10-31")),
+    );
+    assert.equal(
+      subscription.currentPeriodEnd,
+      StartOf(ParseDate("2026-11-30")),
+    );
   });
 });

@@ -11,7 +11,6 @@ import { ReadCallerMetadata } from "../../mollie/metadata";
 import type { MolliePaymentStatus } from "../../mollie/types";
 import {
   AddPeriods,
-  type CalendarDate,
   DateOf,
   ParseDate,
   type Period,
@@ -37,14 +36,11 @@ function periodOf(record: SubscriptionRecord): Period {
   return { interval: record.own.interval, count: record.own.intervalCount };
 }
 
-function firstPeriodStart(
-  record: SubscriptionRecord,
-  start: CalendarDate,
-): number {
-  if (record.own.start !== "charged") {
-    return Date.parse(record.mollie.createdAt);
-  }
-  return StartOf(AddPeriods(start, periodOf(record), -1));
+function firstPeriodStart(record: SubscriptionRecord): number {
+  const createdAt = Date.parse(record.mollie.createdAt);
+  return record.own.start === "charged"
+    ? StartOf(DateOf(createdAt))
+    : createdAt;
 }
 
 function steppedBounds(record: SubscriptionRecord, instant: number): Bounds {
@@ -66,7 +62,7 @@ function steppedBounds(record: SubscriptionRecord, instant: number): Bounds {
 function endingBefore(record: SubscriptionRecord, end: number): Bounds {
   const anchor = ParseDate(record.mollie.startDate);
   if (end <= StartOf(anchor)) {
-    return { start: firstPeriodStart(record, anchor), end };
+    return { start: firstPeriodStart(record), end };
   }
   return {
     start: StartOf(AddPeriods(DateOf(end), periodOf(record), -1)),
@@ -85,7 +81,7 @@ function boundsAt(
     return endingBefore(record, record.own.cancel.endsAt);
   }
   if (instant < firstEnd) {
-    return { start: firstPeriodStart(record, anchor), end: firstEnd };
+    return { start: firstPeriodStart(record), end: firstEnd };
   }
   const next = record.mollie.nextPaymentDate;
   if (!ending.hasEnded && next) {
