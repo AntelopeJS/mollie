@@ -13,7 +13,12 @@ import type {
 import { PaymentMethodId, RefundId } from "../../mollie/ids";
 import { DefinedFields, Lookup, NonEmpty } from "../../mollie/fields";
 import { FromMollieAmount, ZeroAmount } from "../../mollie/amounts";
-import { ReadCallerMetadata, ReadOwn } from "../../mollie/metadata";
+import { IsText } from "../../mollie/guards";
+import {
+  type OwnFields,
+  ReadCallerMetadata,
+  ReadOwn,
+} from "../../mollie/metadata";
 import type {
   MollieMandate,
   MolliePayment,
@@ -26,6 +31,11 @@ interface OwnPaymentData {
   reference: string;
   subscription: string;
 }
+
+const OWN_PAYMENT: OwnFields<OwnPaymentData> = {
+  reference: IsText,
+  subscription: IsText,
+};
 
 const CHECKOUT_LINK = "checkout";
 const OFF_SESSION_SCOPE = "customer-not-present";
@@ -146,7 +156,7 @@ export function ToPayment(payment: MolliePayment): Payment {
       ? FromMollieAmount(payment.amountRefunded)
       : ZeroAmount(payment.amount.currency),
     status,
-    reference: ReadOwn<OwnPaymentData>(payment.metadata)?.reference ?? "",
+    reference: ReadOwn(payment.metadata, OWN_PAYMENT)?.reference ?? "",
     createdAt: ToEpochMillis(payment.createdAt),
     ...DefinedFields({
       customer: payment.customerId ?? undefined,

@@ -1,4 +1,4 @@
-import { ObjectWith, Optional } from "../../mollie/guards";
+import { IsText, ObjectWith, Optional } from "../../mollie/guards";
 import { IsJsonValue } from "../../mollie/json";
 import { IsMolliePayment } from "../../mollie/resources";
 import { SUBSCRIPTION_METADATA_KEY } from "@antelopejs/interface-subscriptions";
@@ -14,7 +14,7 @@ import { DefinedFields } from "../../mollie/fields";
 import { ToPayment, ToPaymentStatus } from "./mapping";
 import { type Account, GetAccount } from "../../accounts";
 import { type Entity, NotFound, Translating } from "./errors";
-import { ReadOwn, WriteMetadata } from "../../mollie/metadata";
+import { type OwnFields, ReadOwn, WriteMetadata } from "../../mollie/metadata";
 import { FromMollieAmount, ToMollieAmount } from "../../mollie/amounts";
 import { SubscriptionOfPayment } from "../shared/subscription-of-payment";
 import type { MolliePayment, MollieSequenceType } from "../../mollie/types";
@@ -162,6 +162,8 @@ interface OwnCapture {
   key: string;
 }
 
+const OWN_CAPTURE: OwnFields<OwnCapture> = { key: IsText };
+
 async function hasCaptured(
   account: Account,
   id: string,
@@ -173,7 +175,7 @@ async function hasCaptured(
     IsCapture,
   );
   return captures.some(
-    (capture) => ReadOwn<OwnCapture>(capture.metadata)?.key === idempotencyKey,
+    (capture) => ReadOwn(capture.metadata, OWN_CAPTURE)?.key === idempotencyKey,
   );
 }
 

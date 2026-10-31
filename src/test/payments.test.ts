@@ -17,6 +17,7 @@ import {
   RefundPayment,
 } from "@antelopejs/interface-payment";
 
+import { IsText } from "../mollie/guards";
 import { ReadOwn } from "../mollie/metadata";
 import { ParsePaymentMethodId } from "../mollie/ids";
 import { CurrentHarness, SECOND_ACCOUNT } from "./support/harness";
@@ -361,7 +362,7 @@ describe("[mollie] payments edge cases", function () {
       Key(),
     );
     const sent = PrimaryAccount().payments.get(created.id)?.metadata;
-    assert.equal(ReadOwn<{ reference: string }>(sent)?.reference, reference);
+    assert.equal(ReadOwn(sent, { reference: IsText })?.reference, reference);
     assert.deepEqual(created.metadata, { a: "b" });
   });
 

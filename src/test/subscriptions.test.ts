@@ -18,6 +18,7 @@ import {
   type SubscriptionRequest,
 } from "@antelopejs/interface-subscriptions";
 
+import { IsText } from "../mollie/guards";
 import { IsJsonObject, ReadOwn } from "../mollie/metadata";
 import { CurrentHarness } from "./support/harness";
 import { NewPayer, type Payer } from "./support/payers";
@@ -208,6 +209,37 @@ describe("[mollie] subscription schedule", function () {
   });
 });
 
+describe("[mollie] early ends under the module's metadata key", function () {
+  this.timeout(TEST_TIMEOUT);
+
+  before(function () {
+    RequireStandIn(this);
+  });
+
+  it("keeps an early end another writer stored under the module's key when it records one", async () => {
+    const payer = await NewPayer();
+    await CurrentHarness().client.execute({
+      method: "PATCH",
+      path: `/customers/${payer.customer}`,
+      body: { metadata: { antelope: { endedEarly: { sub_other: "x" } } } },
+    });
+    const subscription = await CreateSubscription(request(payer), Key());
+    await CancelSubscription(subscription.id, Key(), "period_end");
+    await CancelSubscription(subscription.id, Key(), "now");
+
+    const stored = PrimaryAccount().customers.get(payer.customer)?.metadata;
+    const own = IsJsonObject(stored) ? stored.antelope : undefined;
+    const ended = IsJsonObject(own) ? own.endedEarly : undefined;
+    assert.ok(IsJsonObject(ended), "the early ends stay a map");
+    assert.equal(ended.sub_other, "x");
+    assert.equal(
+      Object.keys(ended).length,
+      2,
+      "the new early end is added beside it",
+    );
+  });
+});
+
 describe("[mollie] subscription creation", function () {
   this.timeout(TEST_TIMEOUT);
 
@@ -249,7 +281,7 @@ describe("[mollie] subscription creation", function () {
     assert.equal(replay.latestPayment, first.latestPayment);
     const charges = [...PrimaryAccount().payments.values()].filter(
       (payment) =>
-        ReadOwn<{ subscription: string }>(payment.metadata)?.subscription ===
+        ReadOwn(payment.metadata, { subscription: IsText })?.subscription ===
         first.id,
     );
     assert.equal(charges.length, 1);
