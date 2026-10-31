@@ -45,7 +45,7 @@ Mollie Connect and OAuth are not supported: API keys only.
 
 Mollie's classic webhooks, which are what Mollie recommends for payments, post `id=tr_…` and nothing else, unsigned. `VerifyWebhook` reads that payment back from Mollie, and every field of the event comes from that read: a delivery that names no payment, or one Mollie does not have on the account, is rejected with `WebhookVerificationError`. Mollie being unreachable is a plain `PaymentError`, so your route answers with an error and Mollie delivers again.
 
-```ts
+```ts fragment
 // in the route at webhookUrl, with the unparsed body
 const event = await VerifyWebhook({ body: rawBody, headers: request.headers });
 if (event) await handle(event); // undefined: a genuine delivery with nothing to report
