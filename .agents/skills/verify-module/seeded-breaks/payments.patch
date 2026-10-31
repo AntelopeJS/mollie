@@ -1,0 +1,13 @@
+diff --git a/src/mollie/amounts.ts b/src/mollie/amounts.ts
+index 1838669..85239c5 100644
+--- a/src/mollie/amounts.ts
++++ b/src/mollie/amounts.ts
+@@ -17,7 +17,7 @@ const DECIMALS_BY_CURRENCY = {
+   HUF: 2,
+   ILS: 2,
+   ISK: 0,
+-  JPY: 0,
++  JPY: 2,
+   MXN: 2,
+   MYR: 2,
+   NOK: 2,

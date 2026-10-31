@@ -1,0 +1,13 @@
+diff --git a/src/mollie/metadata.ts b/src/mollie/metadata.ts
+index 8543e21..b9225ca 100644
+--- a/src/mollie/metadata.ts
++++ b/src/mollie/metadata.ts
+@@ -2,7 +2,7 @@ import type { Guard } from "./guards";
+ import { ParseJson } from "./json";
+ import type { JsonObject, JsonValue, MollieMetadata } from "./types";
+ 
+-const OWN_KEY = "antelope";
++const OWN_KEY = "antelopejs";
+ const CALLER_KEY = "metadata";
+ 
+ export function IsJsonObject(

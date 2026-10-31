@@ -1,0 +1,13 @@
+diff --git a/src/mollie/client.ts b/src/mollie/client.ts
+index 0dbea13..553cdec 100644
+--- a/src/mollie/client.ts
++++ b/src/mollie/client.ts
+@@ -13,7 +13,7 @@ import { ParseJson } from "./json";
+ import { IsJsonObject, IsJsonString } from "./metadata";
+ import type { JsonValue } from "./types";
+ 
+-const LIVE_API_URL = "https://api.mollie.com";
++const LIVE_API_URL = "https://api.mollie.org";
+ 
+ const API_VERSION_PATH = "/v2";
+ const REQUEST_TIMEOUT_MS = 30_000;

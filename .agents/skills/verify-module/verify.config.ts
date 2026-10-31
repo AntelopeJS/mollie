@@ -13,12 +13,32 @@ import { webhookJourneys } from "./journeys-webhooks.ts";
 
 const config: VerifyConfig = {
   doors: {
-    data: null,
+    data: {
+      globs: ["src/mollie/metadata.ts", "src/implementations/subscriptions/records.ts"],
+      funnels: ["src/mollie/metadata.ts"],
+      containments: ["payments/pay-redirect"],
+      why: "everything the module keeps lives in the merchant's Mollie account, in the metadata of its payments, refunds, captures, customers and subscriptions under one key; renaming the key or changing a stored field orphans every record already written",
+    },
     format: null,
-    contract: null,
-    outbound: null,
+    contract: {
+      globs: ["package.json", "src/index.ts", "src/accounts.ts"],
+      funnels: [],
+      containments: [],
+      why: "the config keys (`apiKey`, `webhookUrl`, `accounts`, `apiUrl`) and the payment and subscriptions interface ranges `antelopeJs.implements` and `dependencies` declare",
+    },
+    outbound: {
+      globs: ["src/mollie/client.ts"],
+      funnels: ["src/mollie/client.ts"],
+      containments: [],
+      why: "every call to Mollie leaves through this one client with the merchant's API key as a bearer token: its host, version path, headers and idempotency key decide whose account a payment is created on",
+    },
     exposure: null,
-    publish: null,
+    publish: {
+      globs: ["package.json", ".release-it.json", "changelogen.config.json", ".github/workflows/release.yml"],
+      funnels: [],
+      containments: [],
+      why: "the package name and release workflow claim @antelopejs/mollie on npm",
+    },
   },
   moduleConfig() {
     return { apiKey: PRIMARY_KEY };

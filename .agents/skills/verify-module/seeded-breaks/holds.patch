@@ -1,0 +1,12 @@
+diff --git a/src/implementations/payment/instruments.ts b/src/implementations/payment/instruments.ts
+index 5e678c3..d1201e0 100644
+--- a/src/implementations/payment/instruments.ts
++++ b/src/implementations/payment/instruments.ts
+@@ -60,6 +60,7 @@ export const MANUAL_CAPTURE_METHODS = [
+   "mobilepay",
+   "paypal",
+   "billink",
++  "ideal",
+ ];
+ 
+ const MANUAL_CAPTURE_MANDATES = new Set(["creditcard", "paypal"]);
