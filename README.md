@@ -46,10 +46,36 @@ Mollie Connect and OAuth are not supported: API keys only.
 Mollie's classic webhooks, which are what Mollie recommends for payments, post `id=tr_…` and nothing else, unsigned. `VerifyWebhook` reads that payment back from Mollie, and every field of the event comes from that read: a delivery that names no payment, or one Mollie does not have on the account, is rejected with `WebhookVerificationError`. Mollie being unreachable is a plain `PaymentError`, so your route answers with an error and Mollie delivers again.
 
 ```ts
-// in the route at webhookUrl, with the unparsed body
-const event = await VerifyWebhook({ body: rawBody, headers: request.headers });
-if (event) await handle(event); // undefined: a genuine delivery with nothing to report
+import { createServer } from "node:http";
+import { buffer } from "node:stream/consumers";
+import {
+  type PaymentEvent,
+  VerifyWebhook,
+  WebhookVerificationError,
+} from "@antelopejs/interface-payment";
+
+async function handle(event: PaymentEvent): Promise<void> {
+  console.log(`${event.type} ${event.id}`);
+}
+
+// Serve this at `webhookUrl`.
+createServer(async (request, response) => {
+  try {
+    const event = await VerifyWebhook({
+      body: await buffer(request),
+      headers: request.headers,
+    });
+    if (event) await handle(event); // undefined: a genuine delivery with nothing to report
+    response.writeHead(200).end();
+  } catch (error) {
+    response
+      .writeHead(error instanceof WebhookVerificationError ? 403 : 500)
+      .end();
+  }
+}).listen(8080);
 ```
+
+`VerifyWebhook` takes the unparsed body, so the route reads it raw. It answers 403 only for a delivery it could not establish as genuine. Any other failure answers 500, and Mollie delivers again.
 
 Only `payment.*` events are raised. A classic delivery names a payment, never the refund or chargeback that caused it, so **`refund.succeeded`, `refund.failed` and `dispute.opened` are never raised on Mollie**: read refunds back with `GetRefund`, and a payment's refunded total with `GetPayment`. [Webhooks](./docs/3.webhooks.md) explains why.
 
