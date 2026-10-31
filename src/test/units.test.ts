@@ -26,8 +26,12 @@ import {
   StartOf,
   ToMollieInterval,
 } from "../implementations/subscriptions/calendar";
+import { ToPayment } from "../implementations/payment/mapping";
 import { ToSubscription } from "../implementations/subscriptions/mapping";
-import type { SubscriptionRecord } from "../implementations/subscriptions/records";
+import {
+  ReadOwnSubscription,
+  type SubscriptionRecord,
+} from "../implementations/subscriptions/records";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -112,6 +116,49 @@ describe("[mollie] identifiers", () => {
     assert.ok(ParseRefundId("tr_abc:re_def"));
     assert.equal(ParseRefundId("re_def"), undefined);
     assert.ok(ParseSubscriptionId("cst_abc:sub_def"));
+  });
+});
+
+describe("[mollie] own metadata another API key holder wrote", () => {
+  it("reads no reference that is not text", () => {
+    const payment = ToPayment({
+      resource: "payment",
+      id: "tr_foreign",
+      mode: "test",
+      description: "Foreign metadata",
+      amount: { currency: "EUR", value: "10.00" },
+      status: "paid",
+      sequenceType: "oneoff",
+      metadata: { antelope: { reference: 5 }, metadata: {} },
+      createdAt: "2026-10-31T09:00:00+00:00",
+      _links: {},
+    });
+    assert.equal(payment.reference, "");
+  });
+
+  it("drops a cancel mark whose fields are not the module's", () => {
+    const own = ReadOwnSubscription({
+      resource: "subscription",
+      id: "sub_foreign",
+      status: "canceled",
+      amount: { currency: "EUR", value: "10.00" },
+      interval: "1 month",
+      startDate: "2026-10-31",
+      description: "Foreign cancel mark",
+      customerId: "cst_foreign",
+      createdAt: "2026-10-31T09:00:00+00:00",
+      metadata: {
+        antelope: {
+          reference: "plan-1",
+          interval: "month",
+          intervalCount: 1,
+          start: "charged",
+          cancel: { timing: "later", key: 7 },
+        },
+      },
+    });
+    assert.equal(own?.reference, "plan-1");
+    assert.equal(own.cancel, undefined);
   });
 });
 
