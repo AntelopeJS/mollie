@@ -115,7 +115,7 @@ function isTextBody(body: StandInBody | undefined): body is string {
   return typeof body === "string";
 }
 
-function isTcpAddress(
+export function IsTcpAddress(
   address: string | AddressInfo | null,
 ): address is AddressInfo {
   return typeof address === "object" && address !== null;
@@ -175,7 +175,7 @@ export class MollieStandIn {
       this.server?.listen(0, "127.0.0.1", resolve),
     );
     const address = this.server.address();
-    if (!isTcpAddress(address))
+    if (!IsTcpAddress(address))
       throw new Error("The stand-in is not listening on a TCP port");
     const { port } = address;
     this.baseUrl = `http://127.0.0.1:${port}`;
