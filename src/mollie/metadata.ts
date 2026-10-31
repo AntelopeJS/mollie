@@ -1,3 +1,4 @@
+import type { Guard } from "./guards";
 import { ParseJson } from "./json";
 import type { JsonObject, JsonValue, MollieMetadata } from "./types";
 
@@ -44,11 +45,34 @@ function strings(value: JsonValue | undefined): Record<string, string> {
   );
 }
 
+/** A guard for each field a caller keeps under the module's own key. */
+export type OwnFields<T> = {
+  [K in keyof T]-?: Guard<Exclude<T[K], undefined>>;
+};
+
+/**
+ * The fields the module keeps under its own key that pass their guard.
+ * Anything holding the API key can write Mollie metadata, so a field of
+ * another type is dropped.
+ */
 export function ReadOwn<T extends object>(
   metadata: MollieMetadata | undefined,
+  fields: OwnFields<T>,
 ): Partial<T> | undefined {
   const own = parse(metadata)[OWN_KEY];
-  return IsJsonObject(own) ? (own as Partial<T>) : undefined;
+  if (!IsJsonObject(own)) {
+    return undefined;
+  }
+  const read: Partial<T> = {};
+  for (const key in fields) {
+    const value = Object.prototype.hasOwnProperty.call(own, key)
+      ? own[key]
+      : undefined;
+    if (fields[key](value)) {
+      read[key] = value;
+    }
+  }
+  return read;
 }
 
 export function ReadCallerMetadata(

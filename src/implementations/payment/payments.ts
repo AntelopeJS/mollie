@@ -1,3 +1,6 @@
+import { IsText, ObjectWith, Optional } from "../../mollie/guards";
+import { IsJsonValue } from "../../mollie/json";
+import { IsMolliePayment } from "../../mollie/resources";
 import { SUBSCRIPTION_METADATA_KEY } from "@antelopejs/interface-subscriptions";
 import {
   type Amount,
@@ -11,7 +14,7 @@ import { DefinedFields } from "../../mollie/fields";
 import { ToPayment, ToPaymentStatus } from "./mapping";
 import { type Account, GetAccount } from "../../accounts";
 import { type Entity, NotFound, Translating } from "./errors";
-import { ReadOwn, WriteMetadata } from "../../mollie/metadata";
+import { type OwnFields, ReadOwn, WriteMetadata } from "../../mollie/metadata";
 import { FromMollieAmount, ToMollieAmount } from "../../mollie/amounts";
 import { SubscriptionOfPayment } from "../shared/subscription-of-payment";
 import type { MolliePayment, MollieSequenceType } from "../../mollie/types";
@@ -83,10 +86,13 @@ export async function ReadPayment(
 ): Promise<MolliePayment> {
   if (!IsMollieId("payment", id)) throw NotFound(id, entity);
   return Translating(id, entity, () =>
-    account.client.request<MolliePayment>({
-      method: "GET",
-      path: `/payments/${id}`,
-    }),
+    account.client.request(
+      {
+        method: "GET",
+        path: `/payments/${id}`,
+      },
+      IsMolliePayment,
+    ),
   );
 }
 
@@ -103,12 +109,15 @@ export async function CreatePayment(
   }
   return Translating(request.paymentMethod ?? "", PAYMENT_ENTITY, async () =>
     ToPayment(
-      await account.client.request<MolliePayment>({
-        method: "POST",
-        path: "/payments",
-        body: PaymentBody(request, instrument, account),
-        idempotencyKey,
-      }),
+      await account.client.request(
+        {
+          method: "POST",
+          path: "/payments",
+          body: PaymentBody(request, instrument, account),
+          idempotencyKey,
+        },
+        IsMolliePayment,
+      ),
     ),
   );
 }
@@ -147,21 +156,26 @@ interface Capture {
   metadata?: MolliePayment["metadata"];
 }
 
+const IsCapture = ObjectWith<Capture>({ metadata: Optional(IsJsonValue) });
+
 interface OwnCapture {
   key: string;
 }
+
+const OWN_CAPTURE: OwnFields<OwnCapture> = { key: IsText };
 
 async function hasCaptured(
   account: Account,
   id: string,
   idempotencyKey: string,
 ): Promise<boolean> {
-  const captures = await account.client.list<Capture>(
+  const captures = await account.client.list(
     `/payments/${id}/captures${CAPTURE_PAGE}`,
     "captures",
+    IsCapture,
   );
   return captures.some(
-    (capture) => ReadOwn<OwnCapture>(capture.metadata)?.key === idempotencyKey,
+    (capture) => ReadOwn(capture.metadata, OWN_CAPTURE)?.key === idempotencyKey,
   );
 }
 
@@ -183,7 +197,7 @@ export async function CapturePayment(
   if (payment.status !== "authorized") refuse(payment, "captured");
   assertCapturableAmount(payment, amount);
   return Translating(id, PAYMENT_ENTITY, async () => {
-    await account.client.request({
+    await account.client.execute({
       method: "POST",
       path: `/payments/${id}/captures`,
       body: {
@@ -206,7 +220,7 @@ type Cancellation = (
 
 const CANCELLATIONS: Partial<Record<MolliePayment["status"], Cancellation>> = {
   authorized: (account, payment, idempotencyKey) =>
-    account.client.request({
+    account.client.execute({
       method: "POST",
       path: `/payments/${payment.id}/release-authorization`,
       body: {},
@@ -223,7 +237,7 @@ async function cancelOpen(
   payment: MolliePayment,
 ): Promise<void> {
   if (!payment.isCancelable) refuse(payment, "canceled any more");
-  return account.client.request({
+  return account.client.execute({
     method: "DELETE",
     path: `/payments/${payment.id}`,
   });

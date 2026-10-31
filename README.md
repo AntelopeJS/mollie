@@ -86,10 +86,10 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 <!-- antelopejs-docs-compat:start -->
 
-| Package                               | Supported        | Tested with |
-| ------------------------------------- | ---------------- | ----------- |
-| `@antelopejs/interface-core`          | `>=0.0.5 <1.0.0` | `0.1.1`     |
-| `@antelopejs/interface-payment`       | `>=0.1.0 <0.2.0` | `0.1.0`     |
-| `@antelopejs/interface-subscriptions` | `>=0.1.0 <0.2.0` | `0.1.0`     |
+| Package                               | Supported                                                     | Tested with                                                   |
+| ------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
+| `@antelopejs/interface-core`          | `>=0.0.5 <1.0.0`                                              | `0.2.6`                                                       |
+| `@antelopejs/interface-payment`       | `file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz` | `file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz` |
+| `@antelopejs/interface-subscriptions` | `>=0.1.0 <0.2.0`                                              | `0.1.0`                                                       |
 
 <!-- antelopejs-docs-compat:end -->

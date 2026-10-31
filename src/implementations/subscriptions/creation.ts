@@ -1,4 +1,10 @@
 import {
+  IsMollieMandate,
+  IsMolliePayment,
+  IsMolliePaymentPage,
+  IsMollieSubscription,
+} from "../../mollie/resources";
+import {
   InvalidSubscriptionRequestError,
   type Subscription,
   SubscriptionPaymentError,
@@ -15,12 +21,14 @@ import { ToMollieAmount } from "../../mollie/amounts";
 import { IsChargeableOffSession, ToPayment } from "../payment/mapping";
 import { ParsePaymentMethodId, SubscriptionId } from "../../mollie/ids";
 import { SubscriptionAccount, TranslatingSubscription } from "./errors";
-import { MergeOwn, ReadOwn, WriteMetadata } from "../../mollie/metadata";
-import type {
-  MollieMandate,
-  MolliePayment,
-  MollieSubscription,
-} from "../../mollie/types";
+import { IsText } from "../../mollie/guards";
+import {
+  MergeOwn,
+  type OwnFields,
+  ReadOwn,
+  WriteMetadata,
+} from "../../mollie/metadata";
+import type { MolliePayment, MollieSubscription } from "../../mollie/types";
 import {
   AddPeriods,
   type CalendarDate,
@@ -48,13 +56,7 @@ interface FirstCharge {
   subscription: string;
 }
 
-interface CustomerPaymentList {
-  payments?: MolliePayment[];
-}
-
-interface CustomerPaymentPage {
-  _embedded?: CustomerPaymentList;
-}
+const FIRST_CHARGE: OwnFields<FirstCharge> = { subscription: IsText };
 
 interface Creation {
   request: SubscriptionRequest;
@@ -99,10 +101,13 @@ export async function ChargeableMandate(
   }
   const mandate = await TranslatingSubscription(paymentMethod, async () => {
     try {
-      return await account.client.request<MollieMandate>({
-        method: "GET",
-        path: `/customers/${customer}/mandates/${parsed.child}`,
-      });
+      return await account.client.request(
+        {
+          method: "GET",
+          path: `/customers/${customer}/mandates/${parsed.child}`,
+        },
+        IsMollieMandate,
+      );
     } catch (error) {
       if (error instanceof MollieApiError && error.isNotFound)
         throw invalid(`No such payment method: ${paymentMethod}`);
@@ -121,9 +126,10 @@ async function existingFor(
   account: Account,
   creation: Creation,
 ): Promise<MollieSubscription | undefined> {
-  const listed = await account.client.list<MollieSubscription>(
+  const listed = await account.client.list(
     `/customers/${creation.request.customer}/subscriptions${SUBSCRIPTION_PAGE}`,
     "subscriptions",
+    IsMollieSubscription,
   );
   return listed.find(
     (subscription) =>
@@ -162,12 +168,15 @@ async function createAtMollie(
   const existing = await existingFor(account, creation);
   if (existing) return existing;
   const schedule = scheduleOf(creation.request, creation.period);
-  return account.client.request<MollieSubscription>({
-    method: "POST",
-    path: `/customers/${creation.request.customer}/subscriptions`,
-    body: subscriptionBody(account, creation, schedule),
-    idempotencyKey: creation.idempotencyKey,
-  });
+  return account.client.request(
+    {
+      method: "POST",
+      path: `/customers/${creation.request.customer}/subscriptions`,
+      body: subscriptionBody(account, creation, schedule),
+      idempotencyKey: creation.idempotencyKey,
+    },
+    IsMollieSubscription,
+  );
 }
 
 async function updateOwn(
@@ -175,21 +184,27 @@ async function updateOwn(
   mollie: MollieSubscription,
   changes: Partial<OwnSubscription>,
 ): Promise<MollieSubscription> {
-  return account.client.request<MollieSubscription>({
-    method: "PATCH",
-    path: SubscriptionPath(mollie.customerId, mollie.id),
-    body: { metadata: MergeOwn(mollie.metadata, changes) },
-  });
+  return account.client.request(
+    {
+      method: "PATCH",
+      path: SubscriptionPath(mollie.customerId, mollie.id),
+      body: { metadata: MergeOwn(mollie.metadata, changes) },
+    },
+    IsMollieSubscription,
+  );
 }
 
 async function readPayment(
   account: Account,
   id: string,
 ): Promise<MolliePayment> {
-  return account.client.request<MolliePayment>({
-    method: "GET",
-    path: `/payments/${id}`,
-  });
+  return account.client.request(
+    {
+      method: "GET",
+      path: `/payments/${id}`,
+    },
+    IsMolliePayment,
+  );
 }
 
 function refusal(payment: MolliePayment): SubscriptionPaymentError {
@@ -206,13 +221,16 @@ async function earlierCharge(
   id: string,
   mollie: MollieSubscription,
 ): Promise<MolliePayment | undefined> {
-  const page = await account.client.request<CustomerPaymentPage>({
-    method: "GET",
-    path: `/customers/${mollie.customerId}/payments`,
-    query: RECENT_PAYMENTS,
-  });
+  const page = await account.client.request(
+    {
+      method: "GET",
+      path: `/customers/${mollie.customerId}/payments`,
+      query: RECENT_PAYMENTS,
+    },
+    IsMolliePaymentPage,
+  );
   return page._embedded?.payments?.find(
-    (payment) => ReadOwn<FirstCharge>(payment.metadata)?.subscription === id,
+    (payment) => ReadOwn(payment.metadata, FIRST_CHARGE)?.subscription === id,
   );
 }
 
@@ -224,23 +242,26 @@ async function chargeFirstPeriod(
 ): Promise<MolliePayment> {
   const earlier = await earlierCharge(account, id, mollie);
   if (earlier) return earlier;
-  return account.client.request<MolliePayment>({
-    method: "POST",
-    path: "/payments",
-    body: {
-      amount: mollie.amount,
-      description: mollie.description,
-      sequenceType: "recurring",
-      customerId: mollie.customerId,
-      mandateId: creation.mandateId,
-      metadata: WriteMetadata({
-        reference: creation.request.reference,
-        subscription: id,
-      }),
-      ...DefinedFields({ webhookUrl: account.webhookUrl }),
+  return account.client.request(
+    {
+      method: "POST",
+      path: "/payments",
+      body: {
+        amount: mollie.amount,
+        description: mollie.description,
+        sequenceType: "recurring",
+        customerId: mollie.customerId,
+        mandateId: creation.mandateId,
+        metadata: WriteMetadata({
+          reference: creation.request.reference,
+          subscription: id,
+        }),
+        ...DefinedFields({ webhookUrl: account.webhookUrl }),
+      },
+      idempotencyKey: `${creation.idempotencyKey}${FIRST_PERIOD_KEY_SUFFIX}`,
     },
-    idempotencyKey: `${creation.idempotencyKey}${FIRST_PERIOD_KEY_SUFFIX}`,
-  });
+    IsMolliePayment,
+  );
 }
 
 async function refuse(
@@ -249,7 +270,7 @@ async function refuse(
   payment: MolliePayment,
 ): Promise<never> {
   await updateOwn(account, mollie, { refused: payment.id });
-  await account.client.request({
+  await account.client.execute({
     method: "DELETE",
     path: SubscriptionPath(mollie.customerId, mollie.id),
   });
@@ -290,10 +311,13 @@ async function create(
 ): Promise<Subscription> {
   const posted = await createAtMollie(account, creation);
   const id = SubscriptionId(creation.request.customer, posted.id);
-  const current = await account.client.request<MollieSubscription>({
-    method: "GET",
-    path: SubscriptionPath(posted.customerId, posted.id),
-  });
+  const current = await account.client.request(
+    {
+      method: "GET",
+      path: SubscriptionPath(posted.customerId, posted.id),
+    },
+    IsMollieSubscription,
+  );
   return ToSubscription(
     await settleFirstPeriod(account, id, current, creation),
   );
