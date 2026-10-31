@@ -13,13 +13,13 @@ importers:
     dependencies:
       '@antelopejs/interface-core':
         specifier: '>=0.0.5 <1.0.0'
-        version: 0.1.1
+        version: 0.2.6
       '@antelopejs/interface-payment':
         specifier: file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz
-        version: file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz(@antelopejs/interface-core@0.1.1)
+        version: file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz(@antelopejs/interface-core@0.2.6)
       '@antelopejs/interface-subscriptions':
         specifier: '>=0.1.0 <0.2.0'
-        version: 0.1.0(@antelopejs/interface-core@0.1.1)(@antelopejs/interface-payment@file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz(@antelopejs/interface-core@0.1.1))
+        version: 0.1.0(@antelopejs/interface-core@0.2.6)(@antelopejs/interface-payment@file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz(@antelopejs/interface-core@0.2.6))
     devDependencies:
       '@antelopejs/core':
         specifier: ^1.17.1
@@ -70,9 +70,6 @@ packages:
     resolution: {integrity: sha512-gul38oMJuiaLl5MEwinRbM6d08uPI2wqCmDDrI5V+VilcxJA025VF1l1CqNta3xQfszvRr/jt4RzOgUlhKJi/g==}
     engines: {node: '>=20.19'}
     hasBin: true
-
-  '@antelopejs/interface-core@0.1.1':
-    resolution: {integrity: sha512-nGxElt51KGWIwGsUcFdGT7ikQEqDB+mLj4NQ/eFL/DI1+j65GJqq9PdkVT4x3/YKchNA48iMbzXyW7bKUsQ8Iw==}
 
   '@antelopejs/interface-core@0.2.6':
     resolution: {integrity: sha512-PJp58D1snKLVEmpfn9Yj2htuohZhUxHqyyec3xtkPPy61mtACs0YznnhcgbYQNhIy/q8J+lSwDICPZIsKjhAIA==}
@@ -2514,22 +2511,18 @@ snapshots:
       semver: 7.8.5
       typescript: 5.9.3
 
-  '@antelopejs/interface-core@0.1.1':
-    dependencies:
-      reflect-metadata: 0.2.2
-
   '@antelopejs/interface-core@0.2.6':
     dependencies:
       reflect-metadata: 0.2.2
 
-  '@antelopejs/interface-payment@file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz(@antelopejs/interface-core@0.1.1)':
+  '@antelopejs/interface-payment@file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz(@antelopejs/interface-core@0.2.6)':
     dependencies:
-      '@antelopejs/interface-core': 0.1.1
+      '@antelopejs/interface-core': 0.2.6
 
-  '@antelopejs/interface-subscriptions@0.1.0(@antelopejs/interface-core@0.1.1)(@antelopejs/interface-payment@file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz(@antelopejs/interface-core@0.1.1))':
+  '@antelopejs/interface-subscriptions@0.1.0(@antelopejs/interface-core@0.2.6)(@antelopejs/interface-payment@file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz(@antelopejs/interface-core@0.2.6))':
     dependencies:
-      '@antelopejs/interface-core': 0.1.1
-      '@antelopejs/interface-payment': file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz(@antelopejs/interface-core@0.1.1)
+      '@antelopejs/interface-core': 0.2.6
+      '@antelopejs/interface-payment': file:.campaign/tgz/antelopejs-interface-payment-0f2509a.tgz(@antelopejs/interface-core@0.2.6)
 
   '@antelopejs/tooling-configs@0.2.17(eslint-plugin-perfectionist@5.12.1(eslint@10.11.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.39.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2003))':
     dependencies:
