@@ -1,12 +1,12 @@
-# @antelopejs/mollie
+# `@antelopejs/mollie`
 
 <div align="center">
-<a href="https://www.npmjs.com/package/@antelopejs/mollie"><img alt="NPM version" src="https://img.shields.io/npm/v/@antelopejs/mollie.svg?style=for-the-badge&labelColor=000000"></a>
-<a href="./LICENSE"><img alt="License" src="https://img.shields.io/npm/l/@antelopejs/mollie.svg?style=for-the-badge&labelColor=000000"></a>
-<a href="https://discord.gg/sjK28QHrA7"><img src="https://img.shields.io/badge/Discord-18181B?logo=discord&style=for-the-badge&color=000000" alt="Discord"></a>
+<a href="https://www.npmjs.com/package/@antelopejs/mollie"><img data-illustration alt="NPM version" src="https://img.shields.io/npm/v/@antelopejs/mollie.svg?style=for-the-badge&labelColor=000000"></a>
+<a href="./LICENSE"><img data-illustration alt="License" src="https://img.shields.io/npm/l/@antelopejs/mollie.svg?style=for-the-badge&labelColor=000000"></a>
+<a href="https://discord.gg/sjK28QHrA7"><img data-illustration src="https://img.shields.io/badge/Discord-18181B?logo=discord&style=for-the-badge&color=000000" alt="Discord"></a>
 </div>
 
-A Mollie payment module for AntelopeJS. It implements the generic payment interface, and the subscriptions interface on Mollie's own subscriptions.
+A Mollie payment module for AntelopeJS. It implements the payment interface, and it implements the subscriptions interface on Mollie's own subscriptions.
 
 ## Installation
 
@@ -16,14 +16,14 @@ ajs project modules add @antelopejs/mollie
 
 ## Interfaces
 
-This module implements two interfaces. Each is installed separately to maintain modularity and minimize dependencies.
+This module implements two interfaces. You import each one separately, so a module that takes payments does not depend on subscriptions.
 
 | Name          | Install command                        |                                                                        |
 | ------------- | -------------------------------------- | ---------------------------------------------------------------------- |
 | Payment       | `ajs module imports add payment`       | [Documentation](https://github.com/AntelopeJS/interface-payment)       |
 | Subscriptions | `ajs module imports add subscriptions` | [Documentation](https://github.com/AntelopeJS/interface-subscriptions) |
 
-It needs no other module: no Redis, no database, no API module.
+It needs no other module. It uses no Redis, no database and no API module.
 
 ## Configuration
 
@@ -34,16 +34,16 @@ It needs no other module: no Redis, no database, no API module.
 }
 ```
 
-- `apiKey` (required): a Mollie API key. `test_…` keys work against Mollie's test mode.
-- `webhookUrl`: the public URL of your route that passes Mollie's deliveries to `VerifyWebhook`. It is sent with every payment and subscription this module creates. Without it Mollie calls nothing, no payment event is ever raised, and no subscription renewal is ever reported. Mollie refuses `localhost`.
-- `accounts`: further Mollie accounts, keyed by the name callers pass as the interfaces' trailing `provider` selector, each with its own `apiKey` and `webhookUrl`. The top-level account is the default.
-- `apiUrl`: where the Mollie API lives. Defaults to `https://api.mollie.com`; the test suite points it at a local stand-in.
+- `apiKey` (required) is a Mollie API key. A `test_…` key works against Mollie's test mode.
+- `webhookUrl` is the public URL of your route that passes Mollie's deliveries to `VerifyWebhook`. The module sends it with every payment and subscription it creates. Without it, Mollie calls nothing, so the module raises no payment event and reports no subscription renewal. Mollie refuses a `localhost` URL.
+- `accounts` holds further Mollie accounts, each with its own `apiKey` and `webhookUrl`. The key of each entry is the name that callers pass as the trailing `provider` argument of an interface function. The top-level account is the default.
+- `apiUrl` is the base URL of the Mollie API. It defaults to `https://api.mollie.com`. The test suite points it at a local stand-in.
 
-Mollie Connect and OAuth are not supported: API keys only.
+The module uses API keys only. It does not support Mollie Connect or OAuth.
 
 ## Webhooks
 
-Mollie's classic webhooks, which are what Mollie recommends for payments, post `id=tr_…` and nothing else, unsigned. `VerifyWebhook` reads that payment back from Mollie, and every field of the event comes from that read: a delivery that names no payment, or one Mollie does not have on the account, is rejected with `WebhookVerificationError`. Mollie being unreachable is a plain `PaymentError`, so your route answers with an error and Mollie delivers again.
+For payments, Mollie recommends its classic webhooks. A classic delivery posts `id=tr_…` and nothing else, and Mollie does not sign it. `VerifyWebhook` reads that payment back from Mollie, and every field of the event comes from that read. A delivery that names no payment, or names a payment that Mollie does not have on the account, rejects with `WebhookVerificationError`. When Mollie cannot be reached, `VerifyWebhook` rejects with a plain `PaymentError`, so your route answers with an error and Mollie delivers again.
 
 ```ts
 import { createServer } from "node:http";
@@ -75,38 +75,38 @@ createServer(async (request, response) => {
 }).listen(8080);
 ```
 
-`VerifyWebhook` takes the unparsed body, so the route reads it raw. It answers 403 only for a delivery it could not establish as genuine. Any other failure answers 500, and Mollie delivers again.
+`VerifyWebhook` takes the unparsed body, so the route reads it raw. The route answers 403 only for a delivery that `VerifyWebhook` could not establish as genuine. Any other failure answers 500, and Mollie delivers again.
 
-Only `payment.*` events are raised. A classic delivery names a payment, never the refund or chargeback that caused it, so **`refund.succeeded`, `refund.failed` and `dispute.opened` are never raised on Mollie**: read refunds back with `GetRefund`, and a payment's refunded total with `GetPayment`. [Webhooks](./docs/3.webhooks.md) explains why.
+The module raises only `payment.*` events. A classic delivery names a payment, never the refund or chargeback that caused it, so **the module never raises `refund.succeeded`, `refund.failed` or `dispute.opened`**. Read a refund back with `GetRefund`, and a payment's refunded total with `GetPayment`. [Webhooks](./docs/3.webhooks.md) explains why.
 
 ## What differs from other providers
 
 - **Every payer-present payment is a redirect.** `CreatePayment` and `CreateCheckoutSession` return `requires_action` with Mollie's checkout URL. A checkout session and its payment share one identifier.
-- **Saved methods are Mollie mandates**, created by a payment with `savePaymentMethod` (Mollie's `first` payment). A saved method belongs to one customer. Detaching it revokes the mandate, and Mollie then cancels every subscription that charges it.
-- **Off-session charges settle later.** A charge against a saved method comes back `pending`; Mollie reports `succeeded`, `authorized` or `failed` afterwards, through the webhook. A decline is a `failed` payment then, not the result of the creating call.
-- **Holding funds** (`authorizeOnly`) works only for methods Mollie can capture by hand: cards, Klarna, Billie, Riverty, Vipps, MobilePay, PayPal and Billink. The module refuses any other, rather than let Mollie capture at once, and offers only those on a hosted page.
-- **Idempotency keys last one hour at Mollie.** `RefundPayment`, `CapturePayment` and `CreateSubscription` find their earlier result by key at any time. For other calls, a replay within the hour returns the original result; after it, the same key is a new request.
-- **`refund.*` and `dispute.opened` events are not raised.** See above.
+- **Saved methods are Mollie mandates.** A payment with `savePaymentMethod` creates one, as Mollie's `first` payment. A saved method belongs to one customer. Detaching it revokes the mandate, and Mollie then cancels every subscription that charges it.
+- **Off-session charges settle later.** A charge against a saved method comes back `pending`. Mollie reports `succeeded`, `authorized` or `failed` afterwards, through the webhook. A decline is then a `failed` payment, not the result of the creating call.
+- **Holding funds works only for some methods.** `authorizeOnly` needs a method that Mollie can capture by hand: cards, Klarna, Billie, Riverty, Vipps, MobilePay, PayPal and Billink. The module refuses any other method instead of letting Mollie capture at once, and a hosted page offers only those methods.
+- **Idempotency keys last one hour at Mollie.** `RefundPayment`, `CapturePayment` and `CreateSubscription` find their earlier result by key at any time. For other calls, a replay within the hour returns the original result. After the hour, Mollie treats the same key as a new request.
+- **No `refund.*` or `dispute.opened` events.** See [Webhooks](#webhooks).
 
 ## Subscriptions
 
-Subscriptions are Mollie's own: Mollie holds the schedule and creates every renewal payment. [Subscriptions](./docs/4.subscriptions.md) has the full mapping. In short:
+Subscriptions are Mollie's own. Mollie holds the schedule and creates every renewal payment. [Subscriptions](./docs/4.subscriptions.md) has the full mapping. In short:
 
-- **The first period is charged by `CreateSubscription`** as a payment carrying `antelopeSubscription`, and Mollie's own schedule starts one period later. Mollie reports a declined charge after the call returns, so the subscription is created `active` and goes `past_due` if that charge fails. That first charge is not retried.
-- **Mollie schedules by calendar date.** A trial end or billing anchor is rounded up to the start of the next day in Europe/Amsterdam, and reported as that time. Periods run from one such midnight to the next.
-- **Retries are Mollie's**: a failed renewal is retried up to five times, then Mollie cancels the subscription, reported as `canceled` with `endReason: "payment_failed"`.
-- **Cancelling at period end** stops Mollie at once, and the subscription is reported as running until the period it paid for ends. Mollie raises nothing when that period ends, so neither does this module.
-- **Events.** `subscription.created` and `subscription.canceled` are raised by the call that caused them; a handler that throws makes that call reject, and replaying its idempotency key raises the event again. `subscription.payment_succeeded` and `subscription.payment_failed` are raised from the payment webhook.
-- **Only this module's subscriptions.** Subscriptions made in the dashboard or by other code on the account are not listed, read, changed or raised as events, and their charges are not marked.
-- **A creation that fails must be replayed** with its idempotency key. The subscription may already exist at Mollie, and Mollie will charge it from the next period.
+- **`CreateSubscription` charges the first period.** It charges a payment that carries `antelopeSubscription`, and Mollie's own schedule starts one period later. Mollie reports a declined charge after the call returns, so the subscription is created `active` and goes `past_due` if that charge fails. Nothing retries that first charge.
+- **Mollie schedules by calendar date.** The module rounds a trial end or a billing anchor up to the start of the next day in Europe/Amsterdam, and reports that time. A period runs from one such midnight to the next.
+- **Mollie owns the retries.** Mollie retries a failed renewal up to five times, then cancels the subscription. The module reports it `canceled` with `endReason: "payment_failed"`.
+- **Cancelling at period end stops Mollie at once.** The module reports the subscription as running until the end of the period it paid for. Mollie raises nothing when that period ends, so neither does this module.
+- **Events.** The call that causes `subscription.created` or `subscription.canceled` raises it. A handler that throws makes that call reject, and replaying the call's idempotency key raises the event again. The payment webhook raises `subscription.payment_succeeded` and `subscription.payment_failed`.
+- **Only this module's subscriptions.** The module does not list, read, change or raise events for subscriptions made in the dashboard or by other code on the account, and it does not mark their charges.
+- **Replay a failed creation with its idempotency key.** The subscription may already exist at Mollie, and Mollie will charge it from the next period.
 
 ## Prefer the generic fallback?
 
-Wire `@antelopejs/payment-subscriptions` and add `disabledExports: ["@antelopejs/interface-subscriptions"]` to this module's entry.
+Wire `@antelopejs/payment-subscriptions`, and add `disabledExports: ["@antelopejs/interface-subscriptions"]` to this module's entry.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
 
 ## Compatibility
 
