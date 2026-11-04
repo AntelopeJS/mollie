@@ -1,0 +1,13 @@
+diff --git a/src/implementations/payment/webhooks.ts b/src/implementations/payment/webhooks.ts
+index 56ecc33..f7dbdaf 100644
+--- a/src/implementations/payment/webhooks.ts
++++ b/src/implementations/payment/webhooks.ts
+@@ -22,7 +22,7 @@ const EVENT_BY_STATUS: Partial<Record<MolliePaymentStatus, PaymentEventType>> =
+     canceled: "payment.canceled",
+     expired: "payment.canceled",
+     failed: "payment.failed",
+-    paid: "payment.succeeded",
++    paid: "payment.pending",
+     pending: "payment.pending",
+   };
+ 

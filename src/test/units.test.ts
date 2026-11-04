@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 
 import { FromMollieAmount, ToMollieAmount } from "../mollie/amounts";
+import { Lookup } from "../mollie/fields";
+import { IsText } from "../mollie/guards";
+import { IsJsonValue, ParseJson } from "../mollie/json";
 import {
+  IsJsonObject,
   MergeOwn,
   ReadCallerMetadata,
   ReadOwn,
@@ -23,6 +27,12 @@ import {
   StartOf,
   ToMollieInterval,
 } from "../implementations/subscriptions/calendar";
+import { ToPayment } from "../implementations/payment/mapping";
+import { ToSubscription } from "../implementations/subscriptions/mapping";
+import {
+  ReadOwnSubscription,
+  type SubscriptionRecord,
+} from "../implementations/subscriptions/records";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -110,6 +120,49 @@ describe("[mollie] identifiers", () => {
   });
 });
 
+describe("[mollie] own metadata another API key holder wrote", () => {
+  it("reads no reference that is not text", () => {
+    const payment = ToPayment({
+      resource: "payment",
+      id: "tr_foreign",
+      mode: "test",
+      description: "Foreign metadata",
+      amount: { currency: "EUR", value: "10.00" },
+      status: "paid",
+      sequenceType: "oneoff",
+      metadata: { antelope: { reference: 5 }, metadata: {} },
+      createdAt: "2026-10-31T09:00:00+00:00",
+      _links: {},
+    });
+    assert.equal(payment.reference, "");
+  });
+
+  it("drops a cancel mark whose fields are not the module's", () => {
+    const own = ReadOwnSubscription({
+      resource: "subscription",
+      id: "sub_foreign",
+      status: "canceled",
+      amount: { currency: "EUR", value: "10.00" },
+      interval: "1 month",
+      startDate: "2026-10-31",
+      description: "Foreign cancel mark",
+      customerId: "cst_foreign",
+      createdAt: "2026-10-31T09:00:00+00:00",
+      metadata: {
+        antelope: {
+          reference: "plan-1",
+          interval: "month",
+          intervalCount: 1,
+          start: "charged",
+          cancel: { timing: "later", key: 7 },
+        },
+      },
+    });
+    assert.equal(own?.reference, "plan-1");
+    assert.equal(own.cancel, undefined);
+  });
+});
+
 describe("[mollie] metadata", () => {
   it("keeps its own data apart from the caller's", () => {
     const written = WriteMetadata(
@@ -119,7 +172,9 @@ describe("[mollie] metadata", () => {
     assert.deepEqual(ReadCallerMetadata(written), {
       reference: "caller's own",
     });
-    assert.deepEqual(ReadOwn(written), { reference: "r-1" });
+    assert.deepEqual(ReadOwn(written, { reference: IsText }), {
+      reference: "r-1",
+    });
   });
 
   it("reads metadata it merged into but did not write", () => {
@@ -134,12 +189,58 @@ describe("[mollie] metadata", () => {
       order_id: "12345",
     });
     assert.deepEqual(ReadCallerMetadata("not json"), {});
-    assert.equal(ReadOwn("null"), undefined);
+    assert.equal(ReadOwn("null", { reference: IsText }), undefined);
   });
 
   it("merges into its own data without touching anything else", () => {
     const merged = MergeOwn({ crm: "c-1", antelope: { a: 1 } }, { b: 2 });
     assert.deepEqual(merged, { crm: "c-1", antelope: { a: 1, b: 2 } });
+  });
+});
+
+describe("[mollie] lookups", () => {
+  it("answers the keys a table has and nothing for the ones it only inherits", () => {
+    const table = { ideal: 1, creditcard: 2 };
+    assert.equal(Lookup(table, "creditcard"), 2);
+    assert.equal(Lookup(table, "paypal"), undefined);
+    for (const inherited of [
+      "constructor",
+      "toString",
+      "hasOwnProperty",
+      "__proto__",
+    ]) {
+      assert.equal(Lookup(table, inherited), undefined, inherited);
+    }
+  });
+});
+
+describe("[mollie] JSON", () => {
+  it("parses text to the data JSON.parse returns, an own __proto__ key included", () => {
+    assert.deepEqual(ParseJson('{"a":[1,"b",null,true],"c":{"d":1.5}}'), {
+      a: [1, "b", null, true],
+      c: { d: 1.5 },
+    });
+    assert.equal(ParseJson("null"), null);
+    const parsed = ParseJson('{"__proto__":{"x":1}}');
+    assert.ok(IsJsonObject(parsed));
+    assert.deepEqual(Object.keys(parsed), ["__proto__"]);
+    assert.throws(() => ParseJson("{nope"), SyntaxError);
+  });
+
+  it("accepts only JSON data, all the way down", () => {
+    assert.equal(IsJsonValue({ a: [1, { b: null }], c: "d", e: false }), true);
+    assert.equal(IsJsonValue(Object.create(null)), true);
+    for (const foreign of [
+      undefined,
+      () => 1,
+      Symbol("s"),
+      new Date(0),
+      new Map(),
+      { nested: [new Date(0)] },
+      { nested: { deep: undefined } },
+    ]) {
+      assert.equal(IsJsonValue(foreign), false);
+    }
   });
 });
 
@@ -197,5 +298,40 @@ describe("[mollie] calendar", () => {
       interval: "month",
       count: 1,
     });
+  });
+});
+
+describe("[mollie] subscription periods", () => {
+  it("starts a first charged period on the day the subscription was created, when the next month lacks that day", () => {
+    const created = StartOf(ParseDate("2026-10-31")) + 10 * HOUR_MS;
+    const record: SubscriptionRecord = {
+      id: "sub_month_end",
+      mollie: {
+        resource: "subscription",
+        id: "sub_month_end",
+        status: "active",
+        amount: { currency: "EUR", value: "10.00" },
+        interval: "1 month",
+        startDate: "2026-11-30",
+        description: "Subscription (month-end)",
+        customerId: "cst_month_end",
+        createdAt: new Date(created).toISOString(),
+      },
+      own: {
+        reference: "month-end",
+        interval: "month",
+        intervalCount: 1,
+        start: "charged",
+      },
+    };
+    const subscription = ToSubscription(record, created + HOUR_MS);
+    assert.equal(
+      subscription.currentPeriodStart,
+      StartOf(ParseDate("2026-10-31")),
+    );
+    assert.equal(
+      subscription.currentPeriodEnd,
+      StartOf(ParseDate("2026-11-30")),
+    );
   });
 });

@@ -1,3 +1,4 @@
+import { IsMollieCustomer, IsMollieMandate } from "../../mollie/resources";
 import type {
   Customer,
   CustomerRequest,
@@ -9,7 +10,7 @@ import { NotFound, Translating } from "./errors";
 import { DefinedFields, NonEmpty } from "../../mollie/fields";
 import { IsMollieId, ParsePaymentMethodId } from "../../mollie/ids";
 import { IsChargeableOffSession, ToPaymentMethod } from "./mapping";
-import type { MollieCustomer, MollieMandate } from "../../mollie/types";
+import type { MollieCustomer } from "../../mollie/types";
 import { ReadCallerMetadata, WriteMetadata } from "../../mollie/metadata";
 
 const CUSTOMER_ENTITY = "customer";
@@ -40,15 +41,18 @@ export async function CreateCustomer(
   const account = GetAccount(provider);
   return Translating("", CUSTOMER_ENTITY, async () =>
     toCustomer(
-      await account.client.request<MollieCustomer>({
-        method: "POST",
-        path: "/customers",
-        body: {
-          ...DefinedFields({ email: request.email, name: request.name }),
-          metadata: WriteMetadata({}, request.metadata),
+      await account.client.request(
+        {
+          method: "POST",
+          path: "/customers",
+          body: {
+            ...DefinedFields({ email: request.email, name: request.name }),
+            metadata: WriteMetadata({}, request.metadata),
+          },
+          idempotencyKey,
         },
-        idempotencyKey,
-      }),
+        IsMollieCustomer,
+      ),
     ),
   );
 }
@@ -61,10 +65,13 @@ export async function GetCustomer(
   const account = GetAccount(provider);
   return Translating(id, CUSTOMER_ENTITY, async () =>
     toCustomer(
-      await account.client.request<MollieCustomer>({
-        method: "GET",
-        path: `/customers/${id}`,
-      }),
+      await account.client.request(
+        {
+          method: "GET",
+          path: `/customers/${id}`,
+        },
+        IsMollieCustomer,
+      ),
     ),
   );
 }
@@ -77,7 +84,7 @@ export async function DeleteCustomer(
   assertCustomerId(id);
   const account = GetAccount(provider);
   await Translating(id, CUSTOMER_ENTITY, () =>
-    account.client.request({ method: "DELETE", path: `/customers/${id}` }),
+    account.client.execute({ method: "DELETE", path: `/customers/${id}` }),
   );
 }
 
@@ -88,9 +95,10 @@ export async function ListPaymentMethods(
   assertCustomerId(customer);
   const account = GetAccount(provider);
   return Translating(customer, CUSTOMER_ENTITY, async () => {
-    const mandates = await account.client.list<MollieMandate>(
+    const mandates = await account.client.list(
       `/customers/${customer}${MANDATE_PAGE}`,
       "mandates",
+      IsMollieMandate,
     );
     return mandates
       .filter(IsChargeableOffSession)
@@ -108,7 +116,7 @@ export async function DetachPaymentMethod(
   if (!parsed) throw NotFound(id, METHOD_ENTITY);
   const account = GetAccount(provider);
   await Translating(id, METHOD_ENTITY, () =>
-    account.client.request({
+    account.client.execute({
       method: "DELETE",
       path: `/customers/${parsed.parent}/mandates/${parsed.child}`,
     }),

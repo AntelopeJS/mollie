@@ -14,8 +14,9 @@ import { StandInError } from "./responses";
 import * as customers from "./customers-api";
 import { DefinedFields, Lookup } from "../../mollie/fields";
 import * as subscriptions from "./subscriptions-api";
+import { ParseJson } from "../../mollie/json";
 import { IsJsonObject } from "../../mollie/metadata";
-import type { JsonValue, MolliePayment } from "../../mollie/types";
+import type { MolliePayment } from "../../mollie/types";
 import { type PaymentHooks, Transition } from "./payments";
 import {
   type Account,
@@ -114,7 +115,7 @@ function isTextBody(body: StandInBody | undefined): body is string {
   return typeof body === "string";
 }
 
-function isTcpAddress(
+export function IsTcpAddress(
   address: string | AddressInfo | null,
 ): address is AddressInfo {
   return typeof address === "object" && address !== null;
@@ -126,7 +127,7 @@ function isSingleHeader(value: string | string[] | undefined): value is string {
 
 function parseRequestBody(raw: string): payments.Request["body"] {
   if (!raw) return {};
-  const parsed: JsonValue = JSON.parse(raw);
+  const parsed = ParseJson(raw);
   return IsJsonObject(parsed) ? parsed : {};
 }
 
@@ -174,7 +175,7 @@ export class MollieStandIn {
       this.server?.listen(0, "127.0.0.1", resolve),
     );
     const address = this.server.address();
-    if (!isTcpAddress(address))
+    if (!IsTcpAddress(address))
       throw new Error("The stand-in is not listening on a TCP port");
     const { port } = address;
     this.baseUrl = `http://127.0.0.1:${port}`;

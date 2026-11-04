@@ -1,3 +1,4 @@
+import { IsMollieSubscription } from "../mollie/resources";
 import assert from "node:assert/strict";
 import {
   DetachPaymentMethod,
@@ -17,6 +18,7 @@ import {
   type SubscriptionRequest,
 } from "@antelopejs/interface-subscriptions";
 
+import { IsText } from "../mollie/guards";
 import { IsJsonObject, ReadOwn } from "../mollie/metadata";
 import { CurrentHarness } from "./support/harness";
 import { NewPayer, type Payer } from "./support/payers";
@@ -179,7 +181,7 @@ describe("[mollie] subscription schedule", function () {
 
   it("keeps metadata written outside the module visible on a customer after an early end", async () => {
     const payer = await NewPayer();
-    await CurrentHarness().client.request({
+    await CurrentHarness().client.execute({
       method: "PATCH",
       path: `/customers/${payer.customer}`,
       body: { metadata: { crm: "c-9" } },
@@ -204,6 +206,37 @@ describe("[mollie] subscription schedule", function () {
     assert.deepEqual((await GetCustomer(payer.customer)).metadata, {
       crm: "c-77",
     });
+  });
+});
+
+describe("[mollie] early ends under the module's metadata key", function () {
+  this.timeout(TEST_TIMEOUT);
+
+  before(function () {
+    RequireStandIn(this);
+  });
+
+  it("keeps an early end another writer stored under the module's key when it records one", async () => {
+    const payer = await NewPayer();
+    await CurrentHarness().client.execute({
+      method: "PATCH",
+      path: `/customers/${payer.customer}`,
+      body: { metadata: { antelope: { endedEarly: { sub_other: "x" } } } },
+    });
+    const subscription = await CreateSubscription(request(payer), Key());
+    await CancelSubscription(subscription.id, Key(), "period_end");
+    await CancelSubscription(subscription.id, Key(), "now");
+
+    const stored = PrimaryAccount().customers.get(payer.customer)?.metadata;
+    const own = IsJsonObject(stored) ? stored.antelope : undefined;
+    const ended = IsJsonObject(own) ? own.endedEarly : undefined;
+    assert.ok(IsJsonObject(ended), "the early ends stay a map");
+    assert.equal(ended.sub_other, "x");
+    assert.equal(
+      Object.keys(ended).length,
+      2,
+      "the new early end is added beside it",
+    );
   });
 });
 
@@ -248,7 +281,7 @@ describe("[mollie] subscription creation", function () {
     assert.equal(replay.latestPayment, first.latestPayment);
     const charges = [...PrimaryAccount().payments.values()].filter(
       (payment) =>
-        ReadOwn<{ subscription: string }>(payment.metadata)?.subscription ===
+        ReadOwn(payment.metadata, { subscription: IsText })?.subscription ===
         first.id,
     );
     assert.equal(charges.length, 1);
@@ -378,16 +411,19 @@ describe("[mollie] subscriptions made elsewhere on the account", function () {
     const { child } = ParsePaymentMethodId(payer.paymentMethod) ?? {
       child: "",
     };
-    const foreign = await CurrentHarness().client.request<MollieSubscription>({
-      method: "POST",
-      path: `/customers/${payer.customer}/subscriptions`,
-      body: {
-        amount: { currency: "EUR", value: "5.00" },
-        interval: "1 month",
-        description: "Made in the dashboard",
-        mandateId: child,
+    const foreign = await CurrentHarness().client.request(
+      {
+        method: "POST",
+        path: `/customers/${payer.customer}/subscriptions`,
+        body: {
+          amount: { currency: "EUR", value: "5.00" },
+          interval: "1 month",
+          description: "Made in the dashboard",
+          mandateId: child,
+        },
       },
-    });
+      IsMollieSubscription,
+    );
     assert.deepEqual(await ListSubscriptions(payer.customer), []);
     await assert.rejects(
       () => GetSubscription(`${payer.customer}:${foreign.id}`),

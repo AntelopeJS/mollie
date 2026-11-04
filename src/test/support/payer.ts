@@ -1,3 +1,4 @@
+import { IsMolliePaymentPage } from "../../mollie/resources";
 import { DefinedFields } from "../../mollie/fields";
 import type { MollieClient } from "../../mollie/client";
 import type { MolliePayment, MolliePaymentStatus } from "../../mollie/types";
@@ -9,14 +10,6 @@ export interface PayerPolicy {
 interface Form {
   action: string;
   fields: URLSearchParams;
-}
-
-interface PaymentList {
-  payments?: MolliePayment[];
-}
-
-interface PaymentPage {
-  _embedded?: PaymentList;
 }
 
 interface Visit {
@@ -102,11 +95,14 @@ export class TestPayer {
 
   private async sweep(): Promise<void> {
     const listed = await this.client
-      .request<PaymentPage>({
-        method: "GET",
-        path: "/payments",
-        query: PAGE,
-      })
+      .request(
+        {
+          method: "GET",
+          path: "/payments",
+          query: PAGE,
+        },
+        IsMolliePaymentPage,
+      )
       .catch(() => undefined);
     for (const payment of listed?._embedded?.payments ?? []) {
       await this.consider(payment);
