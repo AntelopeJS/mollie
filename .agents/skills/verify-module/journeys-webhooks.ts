@@ -1,6 +1,6 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { RETURN_URL, SECOND_ACCOUNT, SECOND_KEY, answered, call, fresh, pause, pick, same, settle, text, thrown, withSession } from "./session.ts";
+import { RETURN_URL, SECOND_ACCOUNT, SECOND_KEY, answered, call, fresh, settleDelivered, pick, same, settle, text, thrown, withSession } from "./session.ts";
 
 function classic(body: string) {
   return { body: [...Buffer.from(body)], headers: { "content-type": "application/x-www-form-urlencoded" } };
@@ -15,11 +15,11 @@ const webhookReadsBack: Journey = {
       const id = text(pick(created.value, "id"));
       const open = await call(session, "VerifyWebhook of an open payment", "VerifyWebhook", [classic(`id=${id}`), null]);
       context.expect(open.folder, [answered(open), same("a payment that is still open raises nothing", open.value ?? null, null)]);
-      settle(session, id, "paid");
-      await pause(500);
+      const delivery = await settleDelivered(session, id, "paid");
       const lying = await call(session, "VerifyWebhook claiming failure", "VerifyWebhook", [classic(`id=${id}&status=failed`), null]);
       const again = await call(session, "VerifyWebhook again", "VerifyWebhook", [classic(`id=${id}`), null]);
       context.expect(again.folder, [
+        delivery,
         answered(lying),
         same("the status comes from Mollie, never from the body", [pick(lying.value, "type"), pick(lying.value, "payment", "status")], ["payment.succeeded", "succeeded"]),
         same("the event is about the payment and its status", pick(lying.value, "id"), `${id}:paid`),
@@ -55,11 +55,11 @@ const webhookRefused: Journey = {
       ]);
       const own = await call(session, "CreatePayment on the second account", "CreatePayment", [{ amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), SECOND_ACCOUNT]);
       const id = text(pick(own.value, "id"));
-      settle(session, id, "paid", SECOND_KEY);
-      await pause(500);
+      const delivery = await settleDelivered(session, id, "paid", SECOND_KEY);
       const wrongAccount = await call(session, "VerifyWebhook on the default account", "VerifyWebhook", [classic(`id=${id}`), null]);
       const rightAccount = await call(session, "VerifyWebhook on the second account", "VerifyWebhook", [classic(`id=${id}`), SECOND_ACCOUNT]);
       context.expect(rightAccount.folder, [
+        delivery,
         same("another account's payment is refused on the default account", pick(thrown(wrongAccount), 0), "WebhookVerificationError"),
         same("the account that owns it verifies it", pick(rightAccount.value, "type"), "payment.succeeded"),
       ]);

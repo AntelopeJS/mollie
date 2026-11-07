@@ -1,6 +1,6 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { isNumber, PRIMARY_KEY, answered, call, callsTo, fresh, pause, pick, same, savedMethod, settle, subscription, text, thrown, withSession, wire, type Json } from "./session.ts";
+import { isNumber, PRIMARY_KEY, answered, call, callsTo, fresh, settleDelivered, pick, same, savedMethod, subscription, text, thrown, withSession, wire, type Json } from "./session.ts";
 import { MONTHLY, requestOf, subscriptionAtProvider } from "./journeys-subscriptions-shared.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -27,11 +27,11 @@ const subscribeCharged: Journey = {
         same("it describes itself with the caller's description and reference", text(pick(held, "description")).startsWith("Pro plan ("), true),
         same("Mollie was asked to charge the first period as a recurring payment on that customer and mandate", [pick(first?.body, "sequenceType"), pick(first?.body, "customerId"), pick(first?.body, "amount")], ["recurring", saved.customer, { currency: "EUR", value: "19.00" }]),
       ]);
-      settle(session, text(pick(created.value, "latestPayment")), "paid");
-      await pause(500);
+      const delivery = await settleDelivered(session, text(pick(created.value, "latestPayment")), "paid");
       const read = await subscription(session, "GetSubscription", "GetSubscription", [id, null]);
       const listed = await subscription(session, "ListSubscriptions", "ListSubscriptions", [saved.customer, null]);
       context.expect(listed.folder, [
+        delivery,
         same("reading it back gives the same subscription, still active after the first charge was paid", [pick(read.value, "id"), pick(read.value, "status")], [id, "active"]),
         same("the customer has exactly this subscription", [Array.isArray(listed.value) ? listed.value.length : -1, pick(listed.value, 0, "id")], [1, id]),
       ]);
@@ -140,10 +140,10 @@ const subscribeDeclined: Journey = {
       const created = await subscription(session, "CreateSubscription", "CreateSubscription", [requestOf(saved), fresh("sub"), null]);
       const id = text(pick(created.value, "id"));
       const chargeId = text(pick(created.value, "latestPayment"));
-      settle(session, chargeId, "failed");
-      await pause(500);
+      const delivery = await settleDelivered(session, chargeId, "failed");
       const read = await subscription(session, "GetSubscription after the decline", "GetSubscription", [id, null]);
       context.expect(read.folder, [
+        delivery,
         answered(created),
         same("the subscription is past due", pick(read.value, "status"), "past_due"),
         same("it keeps the declined charge as its latest payment", pick(read.value, "latestPayment"), chargeId),
