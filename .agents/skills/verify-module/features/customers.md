@@ -1,6 +1,30 @@
 ---
 covers:
   - src/implementations/payment/customers.ts
+  - src/accounts.ts
+  - src/implementations/payment/errors.ts
+  - src/implementations/payment/index.ts
+  - src/implementations/payment/instruments.ts
+  - src/implementations/payment/mapping.ts
+  - src/implementations/payment/payments.ts
+  - src/implementations/payment/webhooks.ts
+  - src/implementations/shared/subscription-of-payment.ts
+  - src/implementations/subscriptions/calendar.ts
+  - src/implementations/subscriptions/errors.ts
+  - src/implementations/subscriptions/events.ts
+  - src/implementations/subscriptions/mapping.ts
+  - src/implementations/subscriptions/records.ts
+  - src/index.ts
+  - src/mollie/amounts.ts
+  - src/mollie/client.ts
+  - src/mollie/errors.ts
+  - src/mollie/fields.ts
+  - src/mollie/guards.ts
+  - src/mollie/ids.ts
+  - src/mollie/json.ts
+  - src/mollie/metadata.ts
+  - src/mollie/resources.ts
+  - src/mollie/types.ts
 docs:
   - README.md
   - docs/2.payments.md
