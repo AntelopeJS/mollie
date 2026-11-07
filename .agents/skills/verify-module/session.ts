@@ -19,6 +19,7 @@ export type ModuleConfig = NonNullable<NonNullable<Parameters<JourneyContext["fi
 export const PRIMARY_KEY = `test_${"verifyprimary".padEnd(30, "0")}`;
 export const SECOND_KEY = `test_${"verifysecond".padEnd(30, "0")}`;
 export const WEBHOOK_URL = "https://merchant.invalid/mollie/webhook";
+export const SECOND_WEBHOOK_URL = "https://merchant.invalid/mollie/webhook/second";
 export const RETURN_URL = "https://merchant.invalid/return";
 export const SECOND_ACCOUNT = "second";
 
@@ -68,12 +69,20 @@ function toCall(entry: Json): RecordedCall | null {
   return { method, path, idempotencyKey: isString(idempotencyKey) ? idempotencyKey : null, body: pick(entry, "body") ?? null };
 }
 
+/** One webhook delivery the session passed to `VerifyWebhook`: whether the module answered, and what it answered. */
+export interface Delivery {
+  ok: boolean;
+  detail: string;
+}
+
 export interface Session {
   context: JourneyContext;
   app: App;
   standIn: StandIn;
   base: string;
   calls: number;
+  /** The outcome of each finished webhook delivery, per payment id, oldest first. */
+  delivered: Map<string, Delivery[]>;
 }
 
 /** The module config for a session: the default account, a `second` one with its own key, both pointed at the stand-in. */
@@ -82,25 +91,34 @@ export function sessionConfig(base: string, overrides: ModuleConfig = {}): Modul
     apiKey: PRIMARY_KEY,
     apiUrl: base,
     webhookUrl: WEBHOOK_URL,
-    accounts: { [SECOND_ACCOUNT]: { apiKey: SECOND_KEY, webhookUrl: WEBHOOK_URL } },
+    accounts: { [SECOND_ACCOUNT]: { apiKey: SECOND_KEY, webhookUrl: SECOND_WEBHOOK_URL } },
     ...overrides,
   };
 }
 
-/** Starts the stand-in, loads the module in `ajs project dev` with its `apiUrl` and keys, forwards the stand-in's webhook deliveries to `VerifyWebhook` through core, and hands both to `run`. */
+/** Starts the stand-in, loads the module in `ajs project dev` with its `apiUrl` and keys, forwards the stand-in's webhook deliveries to `VerifyWebhook` through core for the account whose webhook URL they reach, and hands both to `run`. */
 export async function withSession(context: JourneyContext, run: (session: Session) => Promise<void>, overrides: ModuleConfig = {}): Promise<void> {
   const standIn = await loadStandIn(context.repo);
   const base = await standIn.start();
   try {
     const app = await context.dev("ajs-project-dev", context.fixture({ moduleConfig: sessionConfig(base, overrides) }));
-    const session: Session = { context, app, standIn, base, calls: 0 };
-    standIn.receiveWebhooks(async (_url, body) => {
+    const session: Session = { context, app, standIn, base, calls: 0, delivered: new Map() };
+    standIn.receiveWebhooks(async (url, body) => {
       session.calls += 1;
-      const delivered = await context.call(`webhook delivery ${session.calls}`, app, {
-        path: ["VerifyWebhook"],
-        args: [{ body: [...Buffer.from(body)], headers: { "content-type": "application/x-www-form-urlencoded" } }],
-      });
-      if (!delivered.ok) throw new Error(JSON.stringify(delivered.value));
+      const id = new URLSearchParams(body).get("id") ?? "";
+      const outcomes = session.delivered.get(id) ?? [];
+      session.delivered.set(id, outcomes);
+      let outcome: Delivery = { ok: false, detail: "the call through core did not return" };
+      try {
+        const delivered = await context.call(`webhook delivery ${session.calls}`, app, {
+          path: ["VerifyWebhook"],
+          args: [{ body: [...Buffer.from(body)], headers: { "content-type": "application/x-www-form-urlencoded" } }, url === SECOND_WEBHOOK_URL ? SECOND_ACCOUNT : null],
+        });
+        outcome = { ok: delivered.ok, detail: delivered.body };
+        if (!delivered.ok) throw new Error(JSON.stringify(delivered.value));
+      } finally {
+        outcomes.push(outcome);
+      }
     });
     await run(session);
   } finally {
@@ -174,8 +192,37 @@ export function settle(session: Session, id: string, status: MolliePayment["stat
   session.standIn.settle(key, payment, status);
 }
 
-/** A pause for the stand-in's asynchronous webhook delivery to reach the module. */
-export function pause(milliseconds: number): Promise<void> {
+const WAIT_TIMEOUT_MS = 2000;
+const POLL_MS = 5;
+const QUIET_MS = 100;
+
+function requestCount(session: Session): number {
+  return [PRIMARY_KEY, SECOND_KEY].reduce((total, key) => total + session.standIn.account(key).requests.length, 0);
+}
+
+/** `settle`, then waits until the module has handled the webhook delivery it causes and has sent Mollie nothing for 100 ms, so work the delivery started reaches the stand-in before the next read. The whole wait stops after two seconds; the check passes when the module answered that delivery without an error. */
+export async function settleDelivered(session: Session, id: string, status: MolliePayment["status"], key: string = PRIMARY_KEY): Promise<Check> {
+  const before = session.delivered.get(id)?.length ?? 0;
+  settle(session, id, status, key);
+  const deadline = Date.now() + WAIT_TIMEOUT_MS;
+  const delivery = () => session.delivered.get(id)?.[before];
+  while (delivery() === undefined && Date.now() < deadline) await pause(POLL_MS);
+  let seen = requestCount(session);
+  let quietSince = Date.now();
+  while (Date.now() - quietSince < QUIET_MS && Date.now() < deadline) {
+    await pause(POLL_MS);
+    const now = requestCount(session);
+    if (now !== seen) [seen, quietSince] = [now, Date.now()];
+  }
+  const handled = delivery();
+  return {
+    name: "the module handled the webhook delivery of the settled payment",
+    pass: handled?.ok === true,
+    detail: handled === undefined ? `no delivery for ${id} ${status} within ${WAIT_TIMEOUT_MS} ms` : `${id} ${status}: ${handled.detail.slice(0, 300)}`,
+  };
+}
+
+function pause(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
