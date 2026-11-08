@@ -50,7 +50,7 @@
   },
   "devDependencies": {
     "@antelopejs/core": "^1.21.0",
-    "@antelopejs/tooling-configs": "^0.3.4",
+    "@antelopejs/tooling-configs": "^0.4.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.19.15",
     "eslint-plugin-perfectionist": "^5.11.0",
