@@ -1,6 +1,6 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { isNumber, PRIMARY_KEY, answered, call, callsTo, fresh, settleDelivered, pick, same, savedMethod, subscription, text, thrown, withSession, wire, type Json } from "./session.ts";
+import { isNumber, answered, call, callsTo, fresh, settleDelivered, pick, same, savedMethod, subscription, text, thrown, withSession, wire, type Json } from "./session.ts";
 import { MONTHLY, amsterdamClock, monthAfter, requestOf, subscriptionAtProvider } from "./journeys-subscriptions-shared.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -59,7 +59,7 @@ const subscribeReplay: Journey = {
       const replay = await subscription(session, "CreateSubscription replayed", "CreateSubscription", [request, key, null]);
       const charges = callsTo(session, "POST", "/v2/payments").filter((entry) => pick(entry.body, "sequenceType") === "recurring");
       const [customerId] = text(pick(first.value, "id")).split(":");
-      const atMollie = await wire(session.base, "GET", `/v2/customers/${customerId}/subscriptions`, PRIMARY_KEY);
+      const atMollie = await wire(session, "GET", `/v2/customers/${customerId}/subscriptions`);
       context.expect(replay.folder, [
         answered(first),
         answered(replay),
@@ -150,21 +150,25 @@ const subscribeDeclined: Journey = {
   title: "a first charge that Mollie declines afterwards leaves the subscription past_due and is not retried",
   entryPoint: "`CreateSubscription`, then Mollie declining the first charge, then `GetSubscription` through core",
   async run(context) {
-    await withSession(context, async (session) => {
-      const saved = await savedMethod(session, "saved card");
-      const created = await subscription(session, "CreateSubscription", "CreateSubscription", [requestOf(saved), fresh("sub"), null]);
-      const id = text(pick(created.value, "id"));
-      const chargeId = text(pick(created.value, "latestPayment"));
-      const delivery = await settleDelivered(session, chargeId, "failed");
-      const read = await subscription(session, "GetSubscription after the decline", "GetSubscription", [id, null]);
-      context.expect(read.folder, [
-        delivery,
-        answered(created),
-        same("the subscription is past due", pick(read.value, "status"), "past_due"),
-        same("it keeps the declined charge as its latest payment", pick(read.value, "latestPayment"), chargeId),
-        same("the module charged the first period only once", callsTo(session, "POST", "/v2/payments").filter((entry) => pick(entry.body, "sequenceType") === "recurring").length, 1),
-      ]);
-    });
+    await withSession(
+      context,
+      async (session) => {
+        const saved = await savedMethod(session, "saved card");
+        const created = await subscription(session, "CreateSubscription", "CreateSubscription", [requestOf(saved), fresh("sub"), null]);
+        const id = text(pick(created.value, "id"));
+        const chargeId = text(pick(created.value, "latestPayment"));
+        const delivery = await settleDelivered(session, chargeId, "failed");
+        const read = await subscription(session, "GetSubscription after the decline", "GetSubscription", [id, null]);
+        context.expect(read.folder, [
+          delivery,
+          answered(created),
+          same("the subscription is past due", pick(read.value, "status"), "past_due"),
+          same("it keeps the declined charge as its latest payment", pick(read.value, "latestPayment"), chargeId),
+          same("the module charged the first period only once", callsTo(session, "POST", "/v2/payments").filter((entry) => pick(entry.body, "sequenceType") === "recurring").length, 1),
+        ]);
+      },
+      { standIn: "charge-paid-at-creation" },
+    );
   },
 };
 

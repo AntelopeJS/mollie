@@ -56,4 +56,6 @@ node_modules/.bin/antelopejs-verify journey <run> accounts
 
 ## Gotchas
 
-- The Mollie side is the module's own stand-in (`src/test/stand-in`, built to `dist/test/stand-in`), so a feature proves agreement with its reading of Mollie's documentation, not with the live service; see [sandbox](sandbox.md).
+- With `MOLLIE_API_KEY` set to a test key these journeys run against Mollie's test mode, as [A live run](README.md#a-live-run) describes; without it every journey is NOT VERIFIED.
+- `account-selection` needs two Mollie accounts: live only when `MOLLIE_SECOND_API_KEY` names a second test account, on the stand-in otherwise. With one key the proxy still records each account's calls apart, which `unknown-provider` reads.
+- In a live run `bad-key`'s key belongs to no account, so the proxy forwards it unchanged and the refusal is Mollie's own.

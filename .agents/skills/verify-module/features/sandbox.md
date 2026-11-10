@@ -34,12 +34,12 @@ journeys:
 
 # Sandbox
 
-What only the real Mollie can show: that the requests the client builds are accepted by Mollie's test mode.
+What only the real Mollie can show: that its test mode accepts the requests the client builds and settles the payment the module creates.
 
 ## Sub-features
 
-- `request-contract`: a payment request reaches the stand-in, which accepts the two session keys and records the request under the key it carried, and is accepted: the one leg of the contract a stand-in can check.
-- `sandbox-live`: always NOT VERIFIED. No journey reaches Mollie's test mode: it needs the merchant's `test_` API key. A verdict that requires this feature therefore reads NOT VERIFIED, never PASS. The smoke feature leaves it out so a diff that touches no client code is judged on the stand-in journeys.
+- `request-contract`: a payment request reaches Mollie at the configured API URL as one POST with the payment as its JSON body, under the account's key and the caller's idempotency key, and nothing goes out under the other account's key.
+- `sandbox-live`: a payment created through core reaches Mollie's test mode (`mode: test`) under the operator's key, sends the payer to Mollie's own checkout, and reads back `succeeded` once the browser payer pays it there. It runs only against Mollie's test mode, and is NOT VERIFIED on any other Mollie side.
 
 ## How to get to it (user POV)
 
@@ -51,6 +51,9 @@ What only the real Mollie can show: that the requests the client builds are acce
 node_modules/.bin/antelopejs-verify journey <run> sandbox
 ```
 
+Load `MOLLIE_API_KEY` before `new`, as [A live run](README.md#a-live-run) shows.
+
 ## Gotchas
 
-- The Mollie side is the module's own stand-in (`src/test/stand-in`, built to `dist/test/stand-in`), so a feature proves agreement with its reading of Mollie's documentation, not with the live service; see [sandbox](sandbox.md).
+- The `mollie-requests` step of `sandbox-live` lists the creating request as the proxy recorded it (method, path, idempotency key) next to Mollie's answer.
+- The browser payer needs `pnpm exec playwright install chromium-headless-shell` once per machine.

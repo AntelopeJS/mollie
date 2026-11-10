@@ -22,7 +22,7 @@ const hostedSession: Journey = {
         same("French is preset in the region Mollie offers it in", pick(callsTo(session, "POST", "/v2/payments")[0]?.body, "locale"), "fr_FR"),
       ], { critical: true });
       const open = await call(session, "GetCheckoutSession open", "GetCheckoutSession", [id, null]);
-      settle(session, id, "paid");
+      await settle(session, id, "paid");
       const paid = await call(session, "GetCheckoutSession paid", "GetCheckoutSession", [id, null]);
       context.expect(paid.folder, [same("the session follows its payment", [pick(open.value, "status"), pick(paid.value, "status")], ["requires_action", "succeeded"])]);
     });

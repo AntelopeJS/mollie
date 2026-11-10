@@ -1,6 +1,6 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { RETURN_URL, SECOND_ACCOUNT, SECOND_KEY, answered, call, callsTo, fresh, settleDelivered, pick, same, settle, text, thrown, withSession } from "./session.ts";
+import { RETURN_URL, SECOND_ACCOUNT, answered, call, callsTo, fresh, settleDelivered, pick, same, settle, text, thrown, withSession } from "./session.ts";
 
 function classic(body: string) {
   return { body: [...Buffer.from(body)], headers: { "content-type": "application/x-www-form-urlencoded" } };
@@ -8,7 +8,7 @@ function classic(body: string) {
 
 const webhookReadsBack: Journey = {
   title: "a delivery that names a payment becomes the event of the payment's status as Mollie holds it, whatever else the body claims, and an expired payment is payment.canceled",
-  entryPoint: "`VerifyWebhook` through core with classic `id=tr_…` deliveries, and the stand-in's own webhook calls",
+  entryPoint: "`VerifyWebhook` through core with classic `id=tr_…` deliveries, and the deliveries Mollie sends as the payments settle",
   async run(context) {
     await withSession(context, async (session) => {
       const created = await call(session, "CreatePayment", "CreatePayment", [{ amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
@@ -25,14 +25,14 @@ const webhookReadsBack: Journey = {
         same("the event is about the payment and its status", pick(lying.value, "id"), `${id}:paid`),
         same("every delivery of one state gets the same event id", pick(again.value, "id"), `${id}:paid`),
       ]);
-      const failing = await call(session, "CreatePayment to fail", "CreatePayment", [{ amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
+      const failing = await call(session, "CreatePayment by card to fail", "CreatePayment", [{ amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), paymentMethod: "creditcard", returnUrl: RETURN_URL }, fresh("key"), null]);
       const failingId = text(pick(failing.value, "id"));
-      settle(session, failingId, "failed");
+      await settle(session, failingId, "failed");
       const failed = await call(session, "VerifyWebhook of a failed payment", "VerifyWebhook", [classic(`id=${failingId}`), null]);
       context.expect(failed.folder, [same("a failed payment is payment.failed", pick(failed.value, "type"), "payment.failed")]);
-      const lapsing = await call(session, "CreatePayment to expire", "CreatePayment", [{ amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
+      const lapsing = await call(session, "CreatePayment by card to expire", "CreatePayment", [{ amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), paymentMethod: "creditcard", returnUrl: RETURN_URL }, fresh("key"), null]);
       const lapsingId = text(pick(lapsing.value, "id"));
-      settle(session, lapsingId, "expired");
+      await settle(session, lapsingId, "expired");
       const lapsed = await call(session, "VerifyWebhook of an expired payment", "VerifyWebhook", [classic(`id=${lapsingId}`), null]);
       context.expect(lapsed.folder, [
         same("an expired payment is payment.canceled, about the payment's Mollie status", [pick(lapsed.value, "type"), pick(lapsed.value, "id")], ["payment.canceled", `${lapsingId}:expired`]),
@@ -43,8 +43,8 @@ const webhookReadsBack: Journey = {
 };
 
 const webhookRefused: Journey = {
-  title: "a delivery that names no Mollie payment, a payment Mollie does not have, or a payment of another account is refused as unverifiable, and each account verifies its own",
-  entryPoint: "`VerifyWebhook` through core with forged and foreign deliveries",
+  title: "a delivery that names no Mollie payment, or a payment Mollie does not have, is refused as unverifiable",
+  entryPoint: "`VerifyWebhook` through core with forged deliveries",
   async run(context) {
     await withSession(context, async (session) => {
       const empty = await call(session, "VerifyWebhook without a payment", "VerifyWebhook", [classic("hello=world"), null]);
@@ -53,23 +53,37 @@ const webhookRefused: Journey = {
         same("a body that names no payment is refused", pick(thrown(empty), 0), "WebhookVerificationError"),
         same("a payment Mollie does not have is refused", pick(thrown(unknown), 0), "WebhookVerificationError"),
       ]);
-      const own = await call(session, "CreatePayment on the second account", "CreatePayment", [{ amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), SECOND_ACCOUNT]);
-      const id = text(pick(own.value, "id"));
-      const delivery = await settleDelivered(session, id, "paid", SECOND_KEY);
-      const wrongAccount = await call(session, "VerifyWebhook on the default account", "VerifyWebhook", [classic(`id=${id}`), null]);
-      const rightAccount = await call(session, "VerifyWebhook on the second account", "VerifyWebhook", [classic(`id=${id}`), SECOND_ACCOUNT]);
-      context.expect(rightAccount.folder, [
-        delivery,
-        same("another account's payment is refused on the default account", pick(thrown(wrongAccount), 0), "WebhookVerificationError"),
-        same("the account that owns it verifies it", pick(rightAccount.value, "type"), "payment.succeeded"),
-      ]);
     });
+  },
+};
+
+const webhookOtherAccount: Journey = {
+  title: "a delivery of another account's payment is refused as unverifiable, and the account that owns the payment verifies it",
+  entryPoint: "`VerifyWebhook` through core with a payment of the second account, on each account",
+  async run(context) {
+    await withSession(
+      context,
+      async (session) => {
+        const own = await call(session, "CreatePayment on the second account", "CreatePayment", [{ amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), SECOND_ACCOUNT]);
+        const id = text(pick(own.value, "id"));
+        const delivery = await settleDelivered(session, id, "paid", "second");
+        const wrongAccount = await call(session, "VerifyWebhook on the default account", "VerifyWebhook", [classic(`id=${id}`), null]);
+        const rightAccount = await call(session, "VerifyWebhook on the second account", "VerifyWebhook", [classic(`id=${id}`), SECOND_ACCOUNT]);
+        context.expect(rightAccount.folder, [
+          answered(own),
+          delivery,
+          same("another account's payment is refused on the default account", pick(thrown(wrongAccount), 0), "WebhookVerificationError"),
+          same("the account that owns it verifies it", pick(rightAccount.value, "type"), "payment.succeeded"),
+        ]);
+      },
+      { separateAccounts: true },
+    );
   },
 };
 
 const webhookOutage: Journey = {
   title: "while Mollie answers 503 a call fails with a PaymentError carrying Mollie's message and VerifyWebhook rejects with it, not as a forged delivery, so Mollie delivers again; once Mollie is back the same calls succeed",
-  entryPoint: "`CreatePayment` and `VerifyWebhook` through core while the stand-in for Mollie answers every request with 503",
+  entryPoint: "`CreatePayment` and `VerifyWebhook` through core while Mollie answers every request of the module with 503",
   async run(context) {
     await withSession(context, async (session) => {
       const request = { amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), returnUrl: RETURN_URL };
@@ -77,7 +91,7 @@ const webhookOutage: Journey = {
       const paidId = text(pick(paid.value, "id"));
       const delivery = await settleDelivered(session, paidId, "paid");
       const key = fresh("key");
-      session.standIn.outage = 503;
+      session.target.outage = 503;
       try {
         const create = await call(session, "CreatePayment during the outage", "CreatePayment", [request, key, null]);
         const verify = await call(session, "VerifyWebhook during the outage", "VerifyWebhook", [classic(`id=${paidId}`), null]);
@@ -87,7 +101,7 @@ const webhookOutage: Journey = {
           same("the delivery is rejected as a PaymentError with Mollie's message, which Mollie answers by delivering again, not as a WebhookVerificationError", [pick(thrown(verify), 0), text(pick(thrown(verify), 1)).includes("temporarily unavailable")], ["PaymentError", true]),
         ]);
       } finally {
-        session.standIn.outage = undefined;
+        session.target.outage = undefined;
       }
       const created = await call(session, "CreatePayment after the outage", "CreatePayment", [request, key, null]);
       const verified = await call(session, "VerifyWebhook after the outage", "VerifyWebhook", [classic(`id=${paidId}`), null]);
@@ -104,5 +118,6 @@ const webhookOutage: Journey = {
 export const webhookJourneys = {
   "webhook-reads-back": webhookReadsBack,
   "webhook-refused": webhookRefused,
+  "webhook-other-account": webhookOtherAccount,
   "webhook-outage": webhookOutage,
 };

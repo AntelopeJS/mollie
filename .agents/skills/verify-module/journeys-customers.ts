@@ -1,6 +1,11 @@
-import type { Journey } from "@antelopejs/tooling-configs/verify";
+import type { Check, Journey } from "@antelopejs/tooling-configs/verify";
 
-import { PRIMARY_KEY, RETURN_URL, answered, call, callsTo, fresh, pick, same, savedMethod, settle, text, thrown, withSession, wire } from "./session.ts";
+import { RETURN_URL, answered, call, callsTo, fresh, pick, same, savedMethod, settle, text, thrown, withSession, wire, type Session } from "./session.ts";
+
+/** Mollie answers a deleted customer with 410 Gone; the stand-in answers 404. */
+function goneAtMollie(answer: { status: number }): Check {
+  return { name: "Mollie no longer has it: 410 Gone, or 404", pass: answer.status === 410 || answer.status === 404, detail: `Mollie answered ${answer.status}` };
+}
 
 const customerLifecycle: Journey = {
   title: "a customer is created at Mollie with its email, name and metadata, reads back, and is gone after deletion",
@@ -9,7 +14,7 @@ const customerLifecycle: Journey = {
     await withSession(context, async (session) => {
       const created = await call(session, "CreateCustomer", "CreateCustomer", [{ email: "ada@merchant.invalid", name: "Ada", metadata: { plan: "pro" } }, fresh("key"), null]);
       const id = text(pick(created.value, "id"));
-      const held = await wire(session.base, "GET", `/v2/customers/${id}`, PRIMARY_KEY);
+      const held = await wire(session, "GET", `/v2/customers/${id}`);
       context.expect(created.folder, [
         answered(created),
         same("the answer carries the email, name and metadata", [pick(created.value, "email"), pick(created.value, "name"), pick(created.value, "metadata")], ["ada@merchant.invalid", "Ada", { plan: "pro" }]),
@@ -25,11 +30,15 @@ const customerLifecycle: Journey = {
       context.expect(gone.folder, [
         answered(deleted),
         same("a deleted customer is a CustomerNotFoundError", pick(thrown(gone), 0), "CustomerNotFoundError"),
-        same("Mollie no longer has it", (await wire(session.base, "GET", `/v2/customers/${id}`, PRIMARY_KEY)).status, 404),
+        goneAtMollie(await wire(session, "GET", `/v2/customers/${id}`)),
       ]);
     });
   },
 };
+
+function offSessionCharge(session: Session, method: string) {
+  return call(session, "off-session CreatePayment", "CreatePayment", [{ amount: { value: 2500, currency: "EUR" }, reference: fresh("renewal"), paymentMethod: method, offSession: true }, fresh("key"), null]);
+}
 
 const savedMethodCharge: Journey = {
   title: "a payment with savePaymentMethod leaves a mandate the customer can be charged on without the payer, and detaching it revokes the mandate",
@@ -42,21 +51,16 @@ const savedMethodCharge: Journey = {
         same("the customer has exactly one saved method, a card, named customer:mandate", [pick(methods.value, 0, "type"), pick(methods.value, 0, "customer"), text(pick(methods.value, 0, "id")).startsWith(`${saved.customer}:mdt_`)], ["card", saved.customer, true]),
       ], { critical: true });
       const mandate = text(saved.method.split(":")[1]);
-      const mandateAtProvider = await wire(session.base, "GET", `/v2/customers/${saved.customer}/mandates/${mandate}`, PRIMARY_KEY);
+      const mandateAtProvider = await wire(session, "GET", `/v2/customers/${saved.customer}/mandates/${mandate}`);
       context.expect(methods.folder, [same("Mollie holds that mandate as valid", pick(mandateAtProvider.json, "status"), "valid")]);
-      const charged = await call(session, "off-session CreatePayment", "CreatePayment", [
-        { amount: { value: 2500, currency: "EUR" }, reference: fresh("renewal"), paymentMethod: saved.method, offSession: true },
-        fresh("key"),
-        null,
-      ]);
+      const charged = await offSessionCharge(session, saved.method);
       const id = text(pick(charged.value, "id"));
       const sent = callsTo(session, "POST", "/v2/payments").at(-1);
       context.expect(charged.folder, [
         answered(charged),
-        same("a charge on a saved method is pending, not decided by the call", pick(charged.value, "status"), "pending"),
         same("Mollie got a recurring payment on that customer and mandate", [pick(sent?.body, "sequenceType"), pick(sent?.body, "customerId"), pick(sent?.body, "mandateId")], ["recurring", saved.customer, mandate]),
       ]);
-      settle(session, id, "paid");
+      await settle(session, id, "paid");
       const read = await call(session, "GetPayment", "GetPayment", [id, null]);
       context.expect(read.folder, [same("Mollie settles it and the payment reads succeeded", pick(read.value, "status"), "succeeded")]);
       const stranger = await call(session, "CreateCustomer for another payer", "CreateCustomer", [{ email: "other@merchant.invalid" }, fresh("key"), null]);
@@ -73,14 +77,35 @@ const savedMethodCharge: Journey = {
       context.expect(after.folder, [
         answered(detached),
         same("no saved method is left", pick(after.value, "length") ?? (Array.isArray(after.value) ? after.value.length : -1), 0),
-        same("Mollie no longer holds the mandate as valid", pick((await wire(session.base, "GET", `/v2/customers/${saved.customer}/mandates/${mandate}`, PRIMARY_KEY)).json, "status") === "valid", false),
+        same("Mollie no longer holds the mandate as valid", pick((await wire(session, "GET", `/v2/customers/${saved.customer}/mandates/${mandate}`)).json, "status") === "valid", false),
         same("the module asked Mollie to revoke the mandate", callsTo(session, "DELETE", `/v2/customers/${saved.customer}/mandates/${mandate}`).length, 1),
       ]);
     });
   },
 };
 
+const savedMethodPending: Journey = {
+  title: "a charge on a saved method is pending, not decided by the call, until Mollie settles it",
+  entryPoint: "an off-session `CreatePayment` on a saved card, then `GetPayment`, through core",
+  async run(context) {
+    await withSession(
+      context,
+      async (session) => {
+        const saved = await savedMethod(session, "saved card");
+        const charged = await offSessionCharge(session, saved.method);
+        const id = text(pick(charged.value, "id"));
+        context.expect(charged.folder, [answered(charged), same("a charge on a saved method is pending, not decided by the call", pick(charged.value, "status"), "pending")], { critical: true });
+        await settle(session, id, "paid");
+        const read = await call(session, "GetPayment", "GetPayment", [id, null]);
+        context.expect(read.folder, [same("Mollie settles it and the payment reads succeeded", pick(read.value, "status"), "succeeded")]);
+      },
+      { standIn: "charge-paid-at-creation" },
+    );
+  },
+};
+
 export const customerJourneys = {
   "customer-lifecycle": customerLifecycle,
   "saved-method-charge": savedMethodCharge,
+  "saved-method-pending": savedMethodPending,
 };
