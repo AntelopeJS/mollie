@@ -49,3 +49,18 @@ export async function Translating<T>(
     throw TranslateError(error, id, entity);
   }
 }
+
+/**
+ * Awaits two reads that run together. When both fail, or the second fails
+ * sooner, it rejects with the first read's error: the error the caller would
+ * have seen had the reads run in turn.
+ */
+export async function InTurnOrder<First, Second>(
+  first: Promise<First>,
+  second: Promise<Second>,
+): Promise<[First, Second]> {
+  const [firstResult, secondResult] = await Promise.allSettled([first, second]);
+  if (firstResult.status === "rejected") throw firstResult.reason;
+  if (secondResult.status === "rejected") throw secondResult.reason;
+  return [firstResult.value, secondResult.value];
+}

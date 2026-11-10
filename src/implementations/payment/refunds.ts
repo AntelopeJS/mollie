@@ -9,8 +9,8 @@ import {
 import { ReadPayment } from "./payments";
 import { GetAccount } from "../../accounts";
 import type { Account } from "../../accounts";
-import { ParseRefundId } from "../../mollie/ids";
-import { NotFound, Translating } from "./errors";
+import { IsMollieId, ParseRefundId } from "../../mollie/ids";
+import { InTurnOrder, NotFound, Translating } from "./errors";
 import { DefinedFields } from "../../mollie/fields";
 import { ToPaymentStatus, ToRefund } from "./mapping";
 import { IsText } from "../../mollie/guards";
@@ -56,11 +56,11 @@ function refundableAmount(payment: MolliePayment, requested?: Amount): Amount {
 
 async function earlierRefund(
   account: Account,
-  payment: MolliePayment,
+  paymentId: string,
   idempotencyKey: string,
 ): Promise<MollieRefund | undefined> {
   const refunds = await account.client.list(
-    `/payments/${payment.id}/refunds${REFUND_PAGE}`,
+    `/payments/${paymentId}/refunds${REFUND_PAGE}`,
     "refunds",
     IsMollieRefund,
   );
@@ -75,9 +75,14 @@ export async function RefundPayment(
   provider?: string,
 ): Promise<Refund> {
   const account = GetAccount(provider);
-  const payment = await ReadPayment(account, request.payment);
-  const earlier = await Translating(request.payment, "payment", () =>
-    earlierRefund(account, payment, idempotencyKey),
+  if (!IsMollieId("payment", request.payment)) {
+    throw NotFound(request.payment, "payment");
+  }
+  const [payment, earlier] = await InTurnOrder(
+    ReadPayment(account, request.payment),
+    Translating(request.payment, "payment", () =>
+      earlierRefund(account, request.payment, idempotencyKey),
+    ),
   );
   if (earlier) return ToRefund(earlier);
   const amount = refundableAmount(payment, request.amount);
