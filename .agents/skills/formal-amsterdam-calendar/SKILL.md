@@ -63,7 +63,7 @@ The equivalent mutant shows the limit of the oracle. `StartOf` reads the offset 
 
 ## Coverage record
 
-Last code synchronization is `FIXSHA`, the commit that makes `endingBefore` step from the anchor.
+Last code synchronization is `b355e9e`, the commit that makes `endingBefore` step from the anchor.
 
 | File | Covered functions and role |
 | --- | --- |
@@ -84,7 +84,7 @@ None recorded.
 
 ### Fixed: `periodBoundsFromClampedNextDate`
 
-Found on the first run, at `6747973`, and fixed at `FIXSHA`. `endingBefore` in `mapping.ts` computed a period's start as `AddPeriods(DateOf(end), period, -1)`, one period back from the `nextPaymentDate` Mollie reports. Counted from a clamped month end, that loses the anchor's day: a monthly subscription anchored 2027-01-31 with `nextPaymentDate` 2027-02-28 started its period on 2027-01-28, while the same record read without `nextPaymentDate` (`steppedBounds`) started on 2027-01-31. The shrunk counterexample at seed `20261112` was:
+Found on the first run, at `6747973`, and fixed at `b355e9e`. `endingBefore` in `mapping.ts` computed a period's start as `AddPeriods(DateOf(end), period, -1)`, one period back from the `nextPaymentDate` Mollie reports. Counted from a clamped month end, that loses the anchor's day: a monthly subscription anchored 2027-01-31 with `nextPaymentDate` 2027-02-28 started its period on 2027-01-28, while the same record read without `nextPaymentDate` (`steppedBounds`) started on 2027-01-31. The shrunk counterexample at seed `20261112` was:
 
 ```text
 [{"year":1996,"month":7,"day":31},{"interval":"month","count":1},11,0]
