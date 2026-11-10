@@ -13,6 +13,7 @@ const TEST_CARD = {
 const CARD_FRAME = 'iframe[src*="/components/card/"]';
 const FINAL_STATE = 'input[name="final_state"]';
 const SETTLED_ACTIONS = 'input[name="action"]';
+const COMPLETED = /\/completed$/;
 
 function expiry(now: Date): string {
   return `12/${String((now.getFullYear() + 5) % 100).padStart(2, "0")}`;
@@ -57,6 +58,7 @@ export class BrowserCheckout implements Checkout {
       const page = await context.newPage();
       await page.goto(start);
       for (let step = 0; step < MAX_STEPS; step += 1) {
+        if (COMPLETED.test(new URL(page.url()).pathname)) return;
         await page
           .locator(`${FINAL_STATE}, ${CARD_FRAME}, ${SETTLED_ACTIONS}`)
           .first()
