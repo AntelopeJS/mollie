@@ -334,4 +334,71 @@ describe("[mollie] subscription periods", () => {
       StartOf(ParseDate("2026-11-30")),
     );
   });
+
+  const afterMonthEnd = [
+    {
+      name: "a monthly period ending on a clamped February",
+      interval: "month",
+      anchor: "2027-01-31",
+      next: "2027-02-28",
+      now: "2027-02-10",
+      start: "2027-01-31",
+    },
+    {
+      name: "a monthly period ending on the anchor day after a clamped month",
+      interval: "month",
+      anchor: "2027-01-31",
+      next: "2027-03-31",
+      now: "2027-03-10",
+      start: "2027-02-28",
+    },
+    {
+      name: "a yearly period ending on a clamped February 28",
+      interval: "year",
+      anchor: "2028-02-29",
+      next: "2029-02-28",
+      now: "2028-06-01",
+      start: "2028-02-29",
+    },
+  ] as const;
+
+  for (const scenario of afterMonthEnd) {
+    it(`starts ${scenario.name} on the schedule date before it, counted from the anchor`, () => {
+      const record: SubscriptionRecord = {
+        id: "sub_after_month_end",
+        mollie: {
+          resource: "subscription",
+          id: "sub_after_month_end",
+          status: "active",
+          amount: { currency: "EUR", value: "10.00" },
+          interval: ToMollieInterval({ interval: scenario.interval, count: 1 }),
+          startDate: scenario.anchor,
+          nextPaymentDate: scenario.next,
+          description: "Subscription (after month end)",
+          customerId: "cst_after_month_end",
+          createdAt: new Date(
+            StartOf(ParseDate(scenario.anchor)) - 24 * HOUR_MS,
+          ).toISOString(),
+        },
+        own: {
+          reference: "after-month-end",
+          interval: scenario.interval,
+          intervalCount: 1,
+          start: "anchor",
+        },
+      };
+      const subscription = ToSubscription(
+        record,
+        StartOf(ParseDate(scenario.now)),
+      );
+      assert.equal(
+        FormatDate(DateOf(subscription.currentPeriodStart)),
+        scenario.start,
+      );
+      assert.equal(
+        FormatDate(DateOf(subscription.currentPeriodEnd)),
+        scenario.next,
+      );
+    });
+  }
 });

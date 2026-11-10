@@ -64,10 +64,7 @@ function endingBefore(record: SubscriptionRecord, end: number): Bounds {
   if (end <= StartOf(anchor)) {
     return { start: firstPeriodStart(record), end };
   }
-  return {
-    start: StartOf(AddPeriods(DateOf(end), periodOf(record), -1)),
-    end,
-  };
+  return { start: steppedBounds(record, end - 1).start, end };
 }
 
 function boundsAt(

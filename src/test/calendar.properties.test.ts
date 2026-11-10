@@ -325,64 +325,6 @@ function holds<Ts extends unknown[]>(
   });
 }
 
-function finding<Ts extends unknown[]>(
-  name: string,
-  claim: string,
-  property: fc.IProperty<Ts>,
-) {
-  it(`finding ${name}: ${claim}`, () => {
-    const details = fc.check(property, PARAMETERS);
-    assert.ok(details.failed, `${name} now holds: record it as holds`);
-  });
-}
-
-function periodStartFromNextDate(
-  anchor: string,
-  period: Period,
-  next: string,
-  now: string,
-): string {
-  const record = recordOf(ParseDate(anchor), period, { nextPaymentDate: next });
-  const { currentPeriodStart } = ToSubscription(
-    record,
-    StartOf(ParseDate(now)),
-  );
-  return FormatDate(DateOf(currentPeriodStart));
-}
-
-function pinClampedNextDate() {
-  const monthly: Period = { interval: "month", count: 1 };
-  const yearly: Period = { interval: "year", count: 1 };
-  assert.equal(
-    periodStartFromNextDate("2027-01-31", monthly, "2027-03-31", "2027-03-10"),
-    "2027-02-28",
-  );
-  assert.equal(
-    periodStartFromNextDate("2027-01-31", monthly, "2027-02-28", "2027-02-10"),
-    "2027-01-28",
-    "the scheduled previous date is 2027-01-31",
-  );
-  assert.equal(
-    periodStartFromNextDate("2027-01-31", monthly, "2027-02-28", "2027-01-31"),
-    "2027-01-28",
-  );
-  assert.equal(
-    periodStartFromNextDate("2028-02-29", yearly, "2029-02-28", "2028-06-01"),
-    "2028-02-28",
-    "the scheduled previous date is 2028-02-29",
-  );
-  const withoutNext = recordOf(ParseDate("2027-01-31"), monthly);
-  const { currentPeriodStart } = ToSubscription(
-    withoutNext,
-    StartOf(ParseDate("2027-02-10")),
-  );
-  assert.equal(
-    FormatDate(DateOf(currentPeriodStart)),
-    "2027-01-31",
-    "without a next payment date, the same period starts on the anchor day",
-  );
-}
-
 describe("[mollie] Europe/Amsterdam calendar properties", function () {
   this.timeout(SUITE_TIMEOUT_MS);
 
@@ -416,7 +358,7 @@ describe("[mollie] Europe/Amsterdam calendar properties", function () {
     "the period read from Mollie's next payment date ends at that date's Amsterdam midnight and starts count periods before it, unless the date is a clamped month end",
     periodBoundsFromNextDate,
   );
-  finding(
+  holds(
     "periodBoundsFromClampedNextDate",
     "the period read from a clamped month end as Mollie's next payment date is the schedule's own period",
     periodBoundsFromClampedNextDate,
@@ -430,11 +372,6 @@ describe("[mollie] Europe/Amsterdam calendar properties", function () {
     "unitLimits",
     "Mollie's longest interval is the refused boundary",
     unitLimits,
-  );
-
-  it(
-    "pins periodBoundsFromClampedNextDate: a clamped next payment date starts its period on the clamped day",
-    pinClampedNextDate,
   );
 
   it("generates both daylight-saving days, February 29 and month ends", () => {
