@@ -134,6 +134,22 @@ export function ReadOwnSubscription(
   };
 }
 
+/**
+ * The module's metadata of a subscription the interface shows, or undefined
+ * for a refused subscription that Mollie has ended. A refused subscription
+ * stays shown while Mollie can still bill it, and after a caller cancelled it.
+ */
+export function ShownSubscription(
+  mollie: MollieSubscription,
+): OwnSubscription | undefined {
+  const own = ReadOwnSubscription(mollie);
+  const isRefusalDone =
+    own?.refused !== undefined &&
+    own.cancel === undefined &&
+    (mollie.status === "canceled" || mollie.status === "completed");
+  return isRefusalDone ? undefined : own;
+}
+
 export function SubscriptionPath(customerId: string, id: string): string {
   return `/customers/${customerId}/subscriptions/${id}`;
 }
@@ -182,7 +198,8 @@ async function latestPayment(
   );
   const newest = spawned._embedded?.payments?.[0];
   if (newest) return newest;
-  return own.firstPayment ? readPayment(account, own.firstPayment) : undefined;
+  const first = own.firstPayment ?? own.refused;
+  return first ? readPayment(account, first) : undefined;
 }
 
 async function readCustomer(
@@ -302,8 +319,8 @@ export async function LoadRecord(
   if (!parsed) throw new SubscriptionNotFoundError(id);
   const mollie =
     fetched ?? (await FetchSubscription(account, parsed.parent, parsed.child));
-  const own = ReadOwnSubscription(mollie);
-  if (!own || own.refused) throw new SubscriptionNotFoundError(id);
+  const own = ShownSubscription(mollie);
+  if (!own) throw new SubscriptionNotFoundError(id);
   return TranslatingSubscription(id, () =>
     CompleteRecord(account, id, mollie, own),
   );

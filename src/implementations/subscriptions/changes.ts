@@ -21,9 +21,9 @@ import {
   type CancelMark,
   CompleteRecord,
   LoadRecord,
-  ReadOwnSubscription,
   KeyHash,
   RecordEarlyEnd,
+  ShownSubscription,
   SubscriptionPath,
   type SubscriptionRecord,
 } from "./records";
@@ -62,8 +62,8 @@ export async function ListSubscriptions(
   return TranslatingSubscription(customer, async () => {
     const records = await Promise.all(
       (await listed(account, customer)).flatMap((mollie) => {
-        const own = ReadOwnSubscription(mollie);
-        if (!own || own.refused) return [];
+        const own = ShownSubscription(mollie);
+        if (!own) return [];
         const id = SubscriptionId(customer, mollie.id);
         return [CompleteRecord(account, id, mollie, own)];
       }),

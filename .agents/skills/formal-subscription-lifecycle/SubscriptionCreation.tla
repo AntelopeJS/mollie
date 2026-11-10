@@ -54,10 +54,12 @@ TypeOK ==
 
 Running == {c \in Calls : pc[c] \notin {"idle", "done"}}
 
-(* ListSubscriptions and GetSubscription show a subscription that carries  *)
-(* the module's metadata and no refused mark (changes.ts:65-66,            *)
-(* records.ts:302-303). Every subscription here carries the metadata.      *)
-Listed(i) == ~subs[i].refused
+(* ListSubscriptions, GetSubscription and CancelSubscription show a        *)
+(* subscription that carries the module's metadata, unless it carries the  *)
+(* refused mark and Mollie has ended it (records.ts:142-151, 322-323,      *)
+(* changes.ts:65-66). A caller's cancel mark keeps a refused one shown;    *)
+(* no call here cancels. Every subscription here carries the metadata.     *)
+Listed(i) == ~(subs[i].refused /\ subs[i].status = "canceled")
 
 Init ==
   /\ subs = <<>>
