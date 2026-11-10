@@ -368,6 +368,14 @@ describe("[mollie] subscription periods", () => {
       now: "2027-07-07",
       start: "2027-07-07",
     },
+    {
+      name: "a monthly period whose end is not a schedule date",
+      interval: "month",
+      anchor: "2027-01-15",
+      next: "2027-02-20",
+      now: "2027-02-17",
+      start: "2027-02-15",
+    },
   ] as const;
 
   for (const scenario of afterMonthEnd) {

@@ -66,7 +66,7 @@ function endingBefore(record: SubscriptionRecord, end: number): Bounds {
     return { start: firstPeriodStart(record), end };
   }
   return {
-    start: StartOf(PeriodStartBefore(anchor, periodOf(record), DateOf(end))),
+    start: StartOf(PeriodStartBefore(anchor, periodOf(record), end)),
     end,
   };
 }
