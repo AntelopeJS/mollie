@@ -7,7 +7,7 @@
 (* atomic step that can fail before Mollie applies it, or after, with the  *)
 (* answer lost. Time stays inside the current period, so a period_end      *)
 (* cancellation has not ended yet. Every subscription starts active,       *)
-(* charged and listed.                                                     *)
+(* charged and listed. Every call runs in one module instance.             *)
 (***************************************************************************)
 EXTENDS Naturals, FiniteSets
 
@@ -58,7 +58,7 @@ Answer(x, a) == /\ pc' = [pc EXCEPT ![x] = "done"]
 
 (* What ToSubscription reports: canceled at Mollie with a period_end mark *)
 (* and no early end is cancelAtPeriodEnd; any other canceled one has      *)
-(* ended (mapping.ts:302-319).                                             *)
+(* ended (mapping.ts:93-110).                                              *)
 EndingLater(s) == status[s] = "canceled" /\ mark[s].timing = "period_end" /\ ended[s] = NoKey
 HasEnded(s) == status[s] = "canceled" /\ ~EndingLater(s)
 
@@ -105,10 +105,14 @@ Delete(x) ==
           /\ \E lost \in BOOLEAN : Answer(x, IF lost THEN "error" ELSE "ok")
   /\ UNCHANGED <<mark, ended, copy>>
 
-(* endEarly: RecordEarlyEnd reads the customer... *)
+(* endEarly: RecordEarlyEnd waits until no other call writes the          *)
+(* customer's early ends, then reads the customer...                      *)
+Writing == {y \in Calls : pc[y] = "patchCustomer"}
+
 ReadCustomer(x) ==
   /\ pc[x] = "readCustomer"
-  /\ copy' = [copy EXCEPT ![x] = ended]              \* records.ts:234
+  /\ Writing = {}                                    \* records.ts:229-248, 263
+  /\ copy' = [copy EXCEPT ![x] = ended]              \* records.ts:264
   /\ Go(x, "patchCustomer")
   /\ UNCHANGED <<status, mark, ended>>
 
@@ -116,7 +120,7 @@ ReadCustomer(x) ==
 (* this subscription's early end. Then it reads the subscription back.    *)
 PatchCustomer(x) ==
   /\ pc[x] = "patchCustomer"
-  /\ ended' = [copy[x] EXCEPT ![x[1]] = KeyOf(x)]    \* records.ts:235-243
+  /\ ended' = [copy[x] EXCEPT ![x[1]] = KeyOf(x)]    \* records.ts:265-273
   /\ copy' = [copy EXCEPT ![x] = NoCopy]
   /\ \E lost \in BOOLEAN : Answer(x, IF lost THEN "error" ELSE "endedEarly")
   /\ UNCHANGED <<status, mark>>
