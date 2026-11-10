@@ -360,6 +360,14 @@ describe("[mollie] subscription periods", () => {
       now: "2028-06-01",
       start: "2028-02-29",
     },
+    {
+      name: "a daily period more periods after its anchor than the stepped search reaches",
+      interval: "day",
+      anchor: "2000-01-01",
+      next: "2027-07-08",
+      now: "2027-07-07",
+      start: "2027-07-07",
+    },
   ] as const;
 
   for (const scenario of afterMonthEnd) {

@@ -143,6 +143,26 @@ export function AddPeriods(
   return unitsByInterval[period.interval]();
 }
 
+/**
+ * The schedule date one period before `end`, counted from `anchor`, so a
+ * month or year period keeps the anchor's day after a clamped month end.
+ * Constant time, whatever the number of periods since the anchor.
+ */
+export function PeriodStartBefore(
+  anchor: CalendarDate,
+  period: Period,
+  end: CalendarDate,
+): CalendarDate {
+  if (period.interval === "day" || period.interval === "week") {
+    return AddPeriods(end, period, -1);
+  }
+  const months =
+    period.count * (period.interval === "year" ? MONTHS_PER_YEAR : 1);
+  const elapsed =
+    (end.year - anchor.year) * MONTHS_PER_YEAR + (end.month - anchor.month);
+  return AddPeriods(anchor, period, Math.ceil(elapsed / months) - 1);
+}
+
 export function NextDateFrom(instant: number): CalendarDate {
   const today = DateOf(instant);
   return StartOf(today) >= instant ? today : addDays(today, 1);

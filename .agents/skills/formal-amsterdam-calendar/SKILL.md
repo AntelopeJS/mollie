@@ -67,7 +67,7 @@ Last code synchronization is `b355e9e`, the commit that makes `endingBefore` ste
 
 | File | Covered functions and role |
 | --- | --- |
-| `src/implementations/subscriptions/calendar.ts` | `DateOf`, `StartOf`, `FormatDate`, `ParseDate`, `AddPeriods`, `NextDateFrom`, `ToMollieInterval`, `FromMollieInterval` and the private `zonedParts`, `offsetAt`, `addDays`, `addMonths`, `daysInMonth`. |
+| `src/implementations/subscriptions/calendar.ts` | `DateOf`, `StartOf`, `FormatDate`, `ParseDate`, `AddPeriods`, `PeriodStartBefore`, `NextDateFrom`, `ToMollieInterval`, `FromMollieInterval` and the private `zonedParts`, `offsetAt`, `addDays`, `addMonths`, `daysInMonth`. |
 | `src/implementations/subscriptions/mapping.ts` | `ToSubscription` through `boundsAt`, `steppedBounds` and `endingBefore` for the period, `trialEnd`, `interval`, `intervalCount` and `vendorData.interval`. Status, ending and metadata are not covered. |
 | `src/test/calendar.properties.test.ts` | The properties, the seed, the run count and the generator coverage tests. |
 | `src/test/support/calendar-model.ts` | The oracle and the generators. |
@@ -91,7 +91,7 @@ Found on the first run, at `6747973`, and fixed at `b355e9e`. `endingBefore` in 
 a period ending 1997-06-30 starts 1997-05-29T22:00:00.000Z, not 1997-05-30T22:00:00.000Z
 ```
 
-A yearly subscription anchored 2028-02-29 with next date 2029-02-28 had the same fault. The fix reads the start as `steppedBounds(record, end - 1).start`: the schedule date before `end`, counted from the anchor. The finding is now `holds periodBoundsFromClampedNextDate` and its pinned test is gone. `[mollie] subscription periods` in `src/test/units.test.ts` holds the three smallest cases. The documentation already said "Month periods keep the anchor's day of the month"; the code now does.
+A yearly subscription anchored 2028-02-29 with next date 2029-02-28 had the same fault. The fix reads the start as `PeriodStartBefore` (`calendar.ts`): the schedule date before `end`, counted from the anchor. A day or week period steps one period back from `end`, which never clamps. A month or year period counts the months from the anchor to `end`, so it takes constant time and does not stop at `PERIOD_SEARCH_LIMIT`. A first version read the start from `steppedBounds`, which walked from the anchor: a review showed it cost up to 50 ms a read and gave a daily subscription past 10,000 periods a 50-day period. `units.test.ts` keeps that case. The finding is now `holds periodBoundsFromClampedNextDate` and its pinned test is gone. `[mollie] subscription periods` in `src/test/units.test.ts` holds the three smallest cases. The documentation already said "Month periods keep the anchor's day of the month"; the code now does.
 
 ## Mutation evidence
 
@@ -116,5 +116,6 @@ Each scratch change below was applied to the current code, caught with the shrun
 | `endingBefore`: the start one period back from the end, `StartOf(AddPeriods(DateOf(end), periodOf(record), -1))`, the code before the fix (`mapping.ts`) | `clamped` `[1996-07-31, month×1, 11, 0]` |
 | `endingBefore`: the same with `{ interval, count: 1 }` for `periodOf(record)`, so the count is ignored | `next` `[1996-01-31, day×2, 1, 0]`, `clamped` `[1996-07-31, month×1, 11, 0]` |
 | `endingBefore`: `steppedBounds(record, end).start`, the period that starts at the end date | `next` `[1996-03-31, day×1, 1, 0]`, `clamped` `[1996-07-31, month×1, 11, 0]` |
+| `PeriodStartBefore`: `Math.floor(elapsed / months)` for `Math.ceil(elapsed / months) - 1` (`calendar.ts`) | `next`, `clamped` |
 
 Every property fails under at least one scratch change. The split matters: the code before the fix fails `clamped` alone, so a pinned or recorded finding on the whole `nextPaymentDate` path would have hidden the `count` and end-date mutants from `next`. A review of the first version of this check found that those mutants passed all ten of its tests while the property over that path was a recorded finding, because a finding accepts any failure.
