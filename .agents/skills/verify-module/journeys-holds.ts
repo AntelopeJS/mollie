@@ -31,7 +31,7 @@ const holdCapture: Journey = {
       ]);
       const sent = callsTo(session, "POST", `/v2/payments/${id}/captures`);
       context.expect(captured.folder, [
-        same("Mollie received one capture of 10.00", [sent.length, pick(sent[0]?.body, "amount", "value")], [1, "10.00"]),
+        same("Mollie received one capture of 10.00 under the caller's idempotency key", [sent.length, pick(sent[0]?.body, "amount", "value"), sent[0]?.idempotencyKey ?? null], [1, "10.00", key]),
       ]);
       const replay = await call(session, "CapturePayment replayed", "CapturePayment", [id, key, { value: 1000, currency: "EUR" }, null]);
       const second = await call(session, "CapturePayment again under a new key", "CapturePayment", [id, fresh("capture"), { value: 1000, currency: "EUR" }, null]);

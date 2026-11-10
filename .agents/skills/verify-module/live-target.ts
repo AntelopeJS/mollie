@@ -1,19 +1,22 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { text } from "node:stream/consumers";
+import { buffer } from "node:stream/consumers";
 import { setTimeout as pause } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 
 import type { BrowserCheckout } from "../../../src/test/support/browser-checkout.ts";
-import { isRecord, isString, parseJson, pick, recordOf, type Json, type JsonRecord } from "./json.ts";
-import { ACCOUNTS, ACCOUNT_NAMES, send, type Account, type MollieTarget, type PaymentStatus, type RecordedCall, type WebhookReceiver, type WireAnswer } from "./target.ts";
+import { isRecord, isString, jsonOrText, pick, type Json, type JsonRecord } from "./json.ts";
+import { ACCOUNTS, ACCOUNT_NAMES, fetchWithin, send, type Account, type RawAnswer, type MollieTarget, type PaymentStatus, type RecordedCall, type WebhookReceiver, type WireAnswer } from "./target.ts";
 
 const MOLLIE_API = "https://api.mollie.com";
 const OUTAGE_DETAIL = "The service is temporarily unavailable";
 const PAYER_METHOD = "creditcard";
 const PAYER_LOCALE = "en_US";
-const PAYER_ATTEMPTS = 3;
+const PAYER_ATTEMPTS = 4;
+const PAYER_BACKOFF_MS = 1000;
+const NETWORK_ERROR = /net::ERR_|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up/;
+const SERVER_ERROR = 500;
 const SETTLE_TIMEOUT_MS = 60_000;
 const POLL_MS = 250;
 const UNSETTLED = new Set<Json | undefined>(["open", "pending"]);
@@ -59,12 +62,16 @@ function header(message: IncomingMessage, name: string): string | null {
   return isString(value) ? value : null;
 }
 
-function answerOf(raw: string): Json {
-  try {
-    return parseJson(raw);
-  } catch {
-    return raw;
-  }
+/** A request body as the proxy records it: the parsed JSON, `{}` when it is empty as the stand-in records it, and the text itself when it is not JSON. */
+function bodyOf(raw: Buffer): Json {
+  const parsed = jsonOrText(raw.toString("utf8"));
+  return parsed === null ? {} : parsed;
+}
+
+/** Why an answer of 500 or above makes Mollie unavailable: the request, the status, and Mollie's title and detail, or the start of a body that is not JSON. */
+function serverError(request: string, status: number, answer: Json): string {
+  const said = isString(answer) ? answer.slice(0, 200) : [pick(answer, "title"), pick(answer, "detail")].filter(isString).join(": ");
+  return `Mollie answered ${request} with ${status}${said === "" ? "" : ` (${said})`}`;
 }
 
 function summary(answer: Json): Json {
@@ -103,7 +110,8 @@ class LiveTarget implements MollieTarget {
   private readonly exchanges: Exchange[] = [];
   private receiver: WebhookReceiver | undefined;
   private lost: string | null = null;
-  private readonly server = createServer((message, response) => void this.forward(message, response));
+  private readonly inflight = new Set<Promise<void>>();
+  private readonly server = createServer((message, response) => this.track(this.forward(message, response)));
   private readonly keys: LiveKeys;
   private readonly checkout: Checkout;
 
@@ -124,15 +132,21 @@ class LiveTarget implements MollieTarget {
   }
 
   async wire(method: string, path: string, account: Account, body?: Json): Promise<WireAnswer> {
+    const request = `${method} ${path}`;
+    let answer: WireAnswer;
     try {
-      return await send(`${MOLLIE_API}${path}`, method, this.keys[account], body);
+      answer = await send(`${MOLLIE_API}${path}`, method, this.keys[account], body);
     } catch (error) {
-      this.lost ??= error instanceof Error ? error.message : String(error);
+      this.lose(`Mollie did not answer ${request}: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
+    if (answer.status < SERVER_ERROR) return answer;
+    const reason = serverError(request, answer.status, answer.json);
+    this.lose(reason);
+    throw new Error(reason);
   }
 
-  async settle(id: string, status: PaymentStatus, account: Account): Promise<void> {
+  async settle(id: string, status: PaymentStatus, account: Account): Promise<string | null> {
     const held = (await this.wire("GET", `/v2/payments/${id}`, account)).json;
     if (pick(held, "status") === "open") await this.pay(id, held, status, account);
     const settled = await this.settled(id, account);
@@ -140,7 +154,9 @@ class LiveTarget implements MollieTarget {
     if (reached !== status) throw new Error(`Mollie holds ${id} as ${JSON.stringify(reached ?? null)}, not ${status}`);
     if (status === "paid" && pick(settled, "sequenceType") === "first") await this.validMandate(id, account);
     const webhookUrl = pick(settled, "webhookUrl");
-    if (isString(webhookUrl)) await this.receiver?.(webhookUrl, `id=${id}`);
+    if (!isString(webhookUrl)) return null;
+    await this.receiver?.(webhookUrl, `id=${id}`);
+    return webhookUrl;
   }
 
   receiveWebhooks(receiver: WebhookReceiver | undefined): void {
@@ -157,27 +173,51 @@ class LiveTarget implements MollieTarget {
 
   async stop(): Promise<void> {
     this.receiver = undefined;
+    await Promise.allSettled(this.inflight);
     this.server.closeAllConnections();
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
     await this.checkout.close();
   }
 
-  /** Completes the payment's checkout as the payer, after Mollie's API sets what the payer would pick on its pages; a page that fails to load is tried again, up to three times, while the payment stays open. */
+  private lose(reason: string): void {
+    this.lost ??= reason;
+  }
+
+  /** Keeps a forwarded request until it is answered, so `stop` reads `unreachable` only after every request had its answer or its deadline. */
+  private track(exchange: Promise<void>): void {
+    this.inflight.add(exchange);
+    void exchange.finally(() => this.inflight.delete(exchange));
+  }
+
+  /**
+   * Completes the payment's checkout as the payer, after Mollie's API sets what the payer would pick on its pages. A page that fails to load is tried
+   * again while the payment stays open, 1 s, 3 s and 9 s later; when the last attempt still fails on the network, Mollie's pages count as unavailable.
+   */
   private async pay(id: string, held: Json, status: PaymentStatus, account: Account): Promise<void> {
     const choices = payerChoices(held);
     const page = Object.keys(choices).length === 0 ? held : (await this.wire("PATCH", `/v2/payments/${id}`, account, choices)).json;
     const link = pick(page, "_links", "checkout", "href") ?? pick(page, "_links", "changePaymentState", "href");
     if (!isString(link)) throw new Error(`Mollie offers no page to settle ${id} on`);
     for (let attempt = 1; ; attempt += 1) {
+      let failure: Error;
       try {
         await this.checkout.complete(link, status);
         return;
       } catch (error) {
-        const still = pick((await this.wire("GET", `/v2/payments/${id}`, account)).json, "status");
-        if (still !== "open") return;
-        if (attempt === PAYER_ATTEMPTS) throw error;
+        failure = error instanceof Error ? error : new Error(String(error));
       }
+      const still = pick((await this.wire("GET", `/v2/payments/${id}`, account)).json, "status");
+      if (still !== "open") return;
+      if (attempt === PAYER_ATTEMPTS) throw this.payerFailure(id, failure);
+      await pause(PAYER_BACKOFF_MS * 3 ** (attempt - 1));
     }
+  }
+
+  /** The error the last checkout attempt ends with; one the network caused makes Mollie's pages unavailable. */
+  private payerFailure(id: string, failure: Error): Error {
+    const [summary = ""] = failure.message.split("\n");
+    if (NETWORK_ERROR.test(summary)) this.lose(`Mollie's checkout page for ${id} could not be reached in ${PAYER_ATTEMPTS} attempts: ${summary}`);
+    return failure;
   }
 
   private async settled(id: string, account: Account): Promise<Json> {
@@ -204,34 +244,38 @@ class LiveTarget implements MollieTarget {
   }
 
   private async forward(message: IncomingMessage, response: ServerResponse): Promise<void> {
-    try {
-      const raw = await text(message);
-      if (this.outage !== undefined) {
-        reply(response, this.outage, JSON.stringify({ status: this.outage, title: "Service Unavailable", detail: OUTAGE_DETAIL }));
-        return;
-      }
-      const url = new URL(message.url ?? "/", this.apiUrl);
-      const presented = header(message, "authorization") ?? "";
-      const account = ACCOUNT_NAMES.find((name) => presented === `Bearer ${ACCOUNTS[name].key}`) ?? null;
-      const call: RecordedCall = { method: message.method ?? "GET", path: url.pathname, idempotencyKey: header(message, "idempotency-key"), body: recordOf(parseJson(raw)) };
-      if (account !== null) this.recorded[account].push(call);
-      const headers = new Headers({ Authorization: account === null ? presented : `Bearer ${this.keys[account]}` });
-      const passed: [string, string | null][] = [
-        ["Accept", header(message, "accept")],
-        ["Content-Type", header(message, "content-type")],
-        ["Idempotency-Key", call.idempotencyKey],
-        ["User-Agent", header(message, "user-agent")],
-      ];
-      for (const [name, value] of passed) if (value !== null) headers.set(name, value);
-      const answer = await fetch(`${MOLLIE_API}${url.pathname}${url.search}`, { method: call.method, headers, body: raw === "" ? undefined : raw });
-      const body = await answer.text();
-      this.exchanges.push({ account, ...call, query: url.search, status: answer.status, answer: summary(answerOf(body)) });
-      reply(response, answer.status, body, answer.headers.get("content-type") ?? undefined);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.lost ??= reason;
-      reply(response, 502, JSON.stringify({ status: 502, title: "Bad Gateway", detail: `the verify proxy could not reach Mollie: ${reason}` }));
+    const raw = await buffer(message).catch(() => null);
+    if (raw === null) return;
+    if (this.outage !== undefined) {
+      reply(response, this.outage, JSON.stringify({ status: this.outage, title: "Service Unavailable", detail: OUTAGE_DETAIL }));
+      return;
     }
+    const url = new URL(message.url ?? "/", this.apiUrl);
+    const presented = header(message, "authorization") ?? "";
+    const account = ACCOUNT_NAMES.find((name) => presented === `Bearer ${ACCOUNTS[name].key}`) ?? null;
+    const call: RecordedCall = { method: message.method ?? "GET", path: url.pathname, idempotencyKey: header(message, "idempotency-key"), body: bodyOf(raw) };
+    if (account !== null) this.recorded[account].push(call);
+    const headers = new Headers({ Authorization: account === null ? presented : `Bearer ${this.keys[account]}` });
+    const passed: [string, string | null][] = [
+      ["Accept", header(message, "accept")],
+      ["Content-Type", header(message, "content-type")],
+      ["Idempotency-Key", call.idempotencyKey],
+      ["User-Agent", header(message, "user-agent")],
+    ];
+    for (const [name, value] of passed) if (value !== null) headers.set(name, value);
+    const request = `${call.method} ${url.pathname}`;
+    let answer: RawAnswer;
+    try {
+      answer = await fetchWithin(`${MOLLIE_API}${url.pathname}${url.search}`, { method: call.method, headers, body: raw.length === 0 ? undefined : raw });
+    } catch (error) {
+      this.lose(`Mollie did not answer ${request}: ${error instanceof Error ? error.message : String(error)}`);
+      reply(response, 502, JSON.stringify({ status: 502, title: "Bad Gateway", detail: `the verify proxy got no answer from Mollie to ${request}` }));
+      return;
+    }
+    const json = jsonOrText(answer.body);
+    this.exchanges.push({ account, ...call, query: url.search, status: answer.status, answer: summary(json) });
+    if (answer.status >= SERVER_ERROR) this.lose(serverError(request, answer.status, json));
+    reply(response, answer.status, answer.body, answer.contentType ?? undefined);
   }
 }
 

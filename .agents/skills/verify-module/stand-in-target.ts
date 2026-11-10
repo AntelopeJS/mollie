@@ -62,12 +62,12 @@ class StandInTarget implements MollieTarget {
     return send(new URL(path, this.apiUrl).href, method, ACCOUNTS[account].key, body);
   }
 
-  settle(id: string, status: PaymentStatus, account: Account): Promise<void> {
+  settle(id: string, status: PaymentStatus, account: Account): Promise<string | null> {
     const { key } = ACCOUNTS[account];
     const payment = this.standIn.account(key).payments.get(id);
     if (payment === undefined) throw new Error(`the stand-in holds no payment ${id}`);
     this.standIn.settle(key, payment, status);
-    return Promise.resolve();
+    return Promise.resolve(payment.webhookUrl ?? null);
   }
 
   receiveWebhooks(receiver: WebhookReceiver | undefined): void {

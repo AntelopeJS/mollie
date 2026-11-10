@@ -15,11 +15,13 @@ const refundFlow: Journey = {
   async run(context) {
     await withSession(context, async (session) => {
       const id = await paidPayment(session, "paid payment");
-      const partial = await call(session, "RefundPayment 5.00", "RefundPayment", [{ payment: id, amount: { value: 500, currency: "EUR" } }, fresh("refund"), null]);
+      const key = fresh("refund");
+      const partial = await call(session, "RefundPayment 5.00", "RefundPayment", [{ payment: id, amount: { value: 500, currency: "EUR" } }, key, null]);
+      const sent = callsTo(session, "POST", `/v2/payments/${id}/refunds`)[0];
       context.expect(partial.folder, [
         answered(partial),
         same("the refund is for 5.00 on the payment", [pick(partial.value, "amount", "value"), pick(partial.value, "payment")], [500, id]),
-        same("Mollie received a refund of 5.00", pick(callsTo(session, "POST", `/v2/payments/${id}/refunds`)[0]?.body, "amount", "value"), "5.00"),
+        same("Mollie received a refund of 5.00 under the caller's idempotency key", [pick(sent?.body, "amount", "value"), sent?.idempotencyKey ?? null], ["5.00", key]),
       ], { critical: true });
       const over = await call(session, "RefundPayment one cent over what is left", "RefundPayment", [{ payment: id, amount: { value: 2001, currency: "EUR" } }, fresh("refund"), null]);
       context.expect(over.folder, [
@@ -76,7 +78,9 @@ const refundReplay: Journey = {
       const key = fresh("refund");
       const first = await call(session, "RefundPayment", "RefundPayment", [{ payment: id }, key, null]);
       const replay = await call(session, "RefundPayment replayed", "RefundPayment", [{ payment: id }, key, null]);
+      const keys = callsTo(session, "POST", `/v2/payments/${id}/refunds`).map((sent) => sent.idempotencyKey);
       context.expect(replay.folder, [
+        same("every refund request Mollie received carries the caller's idempotency key", [keys.length > 0, keys.every((sent) => sent === key)], [true, true]),
         answered(first),
         answered(replay),
         same("the replay returns the first refund", pick(replay.value, "id"), pick(first.value, "id")),

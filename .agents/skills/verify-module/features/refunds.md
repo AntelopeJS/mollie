@@ -42,9 +42,9 @@ An application module refunds all or part of a paid payment with `RefundPayment`
 
 ## Sub-features
 
-- `refund-flow`: a partial refund, then a refund with no amount that takes what is left, are recorded at Mollie and read back; Mollie holds both and nothing left to refund; one cent more than remains is refused without a request, and so is a third.
+- `refund-flow`: a partial refund under the caller's idempotency key, then a refund with no amount that takes what is left, are recorded at Mollie and read back; Mollie holds both and nothing left to refund; one cent more than remains is refused without a request, and so is a third.
 - `refund-settled`: once Mollie settles the refunds, the payment reports the refunded total, as Mollie does.
-- `refund-replay`: replaying a refund with its key returns the original, and Mollie holds one refund of the whole amount.
+- `refund-replay`: replaying a refund with its key returns the original, every refund request carries that key, and Mollie holds one refund of the whole amount.
 
 ## How to get to it (user POV)
 

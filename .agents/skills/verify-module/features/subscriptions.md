@@ -50,7 +50,7 @@ An application module subscribes a customer's saved method to a plan with `Creat
 
 ## Sub-features
 
-- `subscribe-charged`: a subscription is one Mollie subscription with the first period charged at once as a recurring payment, and reads back active.
+- `subscribe-charged`: a subscription is one Mollie subscription, created with the account's webhook URL, with the first period charged at once as a recurring payment, and reads back active.
 - `subscribe-replay`: one idempotency key makes one subscription and one first charge; a new key a new subscription.
 - `subscribe-schedule`: a trial or anchor defers the first charge to the next Amsterdam day, a year is twelve months at Mollie, and a period Mollie cannot bill is refused before any request.
 - `subscribe-refused`: another customer's method and a malformed one are invalid requests and create nothing.

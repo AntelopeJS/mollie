@@ -43,7 +43,7 @@ An application module holds funds with `authorizeOnly`, then captures in part wi
 
 ## Sub-features
 
-- `hold-capture`: an authorize-only payment with no saved method reads `requires_action`, held for manual capture at Mollie; once the payer authorizes it at Mollie's checkout nothing is captured; it captures in part and records the capture at Mollie; a replayed key returns the capture, another key is a state error.
+- `hold-capture`: an authorize-only payment with no saved method reads `requires_action`, held for manual capture at Mollie; once the payer authorizes it at Mollie's checkout nothing is captured; it captures in part under the caller's idempotency key and records the capture at Mollie; a replayed key returns the capture, another key is a state error.
 - `hold-saved-card`: an authorize-only charge on a saved card is `pending` until Mollie authorizes it, held for manual capture, and then reads `authorized` with nothing captured.
 - `hold-release`: cancelling an authorization releases it at Mollie, and a settled payment cannot be cancelled.
 - `cancel-open`: cancelling an open payment cancels it at Mollie, and cancelling it again returns it, whatever the key.

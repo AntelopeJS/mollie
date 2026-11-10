@@ -130,7 +130,7 @@ export async function withSession(context: JourneyContext, run: (session: Sessio
     context.edit("mollie requests", join(context.work, "mollie-requests.jsonl"), `${target.transcript()}\n`);
     await target.stop();
     const lost = target.unreachable();
-    if (lost !== null) context.notVerified(`Mollie's API stopped answering during the journey: ${lost}`);
+    if (lost !== null) context.notVerified(`Mollie was unavailable during the journey: ${lost}`);
   }
   if (choice.kind === "stand-in" && !choice.verifies) context.notVerified(choice.why);
 }
@@ -186,9 +186,21 @@ export function callsTo(session: Session, method: string, path: string, account:
   return callsOf(session, account).filter((entry) => entry.method === method && entry.path === path);
 }
 
-/** Moves a payment to `status` at Mollie as the payer or the bank would, and lets Mollie notify the module's webhook. */
-export function settle(session: Session, id: string, status: PaymentStatus, account: Account = "primary"): Promise<void> {
-  return session.target.settle(id, status, account);
+/** Whether Mollie notified a webhook as the payment settled: every payment the module creates carries the account's webhook URL, so one Mollie holds without any notifies no one. */
+function notified(id: string, webhookUrl: string | null): Check {
+  return {
+    name: "Mollie notifies the payment's webhook as it settles",
+    pass: webhookUrl !== null,
+    detail: webhookUrl === null ? `Mollie holds no webhookUrl for ${id}, so settling it notified no one` : `${id} notified ${webhookUrl}`,
+  };
+}
+
+/** Moves a payment to `status` at Mollie as the payer or the bank would, and lets Mollie notify the module's webhook; a payment with no webhook URL fails a check. */
+export async function settle(session: Session, id: string, status: PaymentStatus, account: Account = "primary"): Promise<void> {
+  const webhookUrl = await session.target.settle(id, status, account);
+  if (webhookUrl !== null) return;
+  const { context } = session;
+  context.expect(context.edit(`no webhook for ${id}`, join(context.work, `no-webhook-${id}.txt`), `Mollie holds no webhookUrl for ${id}\n`), [notified(id, null)]);
 }
 
 const WAIT_TIMEOUT_MS = 2000;
@@ -199,10 +211,11 @@ function requestCount(session: Session): number {
   return ACCOUNT_NAMES.reduce((total, account) => total + callsOf(session, account).length, 0);
 }
 
-/** `settle`, then waits until the module has handled the webhook delivery it causes and has sent Mollie nothing for 100 ms, so work the delivery started reaches Mollie before the next read. The wait stops two seconds after the payment settled; the check passes when the module answered that delivery without an error. */
+/** `settle`, then waits until the module has handled the webhook delivery it causes and has sent Mollie nothing for 100 ms, so work the delivery started reaches Mollie before the next read. The wait stops two seconds after the payment settled; the check passes when the module answered that delivery without an error, and fails at once when the payment has no webhook URL. */
 export async function settleDelivered(session: Session, id: string, status: PaymentStatus, account: Account = "primary"): Promise<Check> {
   const before = session.delivered.get(id)?.length ?? 0;
-  await settle(session, id, status, account);
+  const webhookUrl = await session.target.settle(id, status, account);
+  if (webhookUrl === null) return notified(id, null);
   const deadline = Date.now() + WAIT_TIMEOUT_MS;
   const delivery = () => session.delivered.get(id)?.[before];
   while (delivery() === undefined && Date.now() < deadline) await pause(POLL_MS);

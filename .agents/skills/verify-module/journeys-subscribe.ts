@@ -1,6 +1,6 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { isNumber, answered, call, callsTo, fresh, settleDelivered, pick, same, savedMethod, subscription, text, thrown, withSession, wire, type Json } from "./session.ts";
+import { WEBHOOK_URL, isNumber, answered, call, callsTo, fresh, settleDelivered, pick, same, savedMethod, subscription, text, thrown, withSession, wire, type Json } from "./session.ts";
 import { MONTHLY, amsterdamClock, monthAfter, requestOf, subscriptionAtProvider } from "./journeys-subscriptions-shared.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -30,9 +30,11 @@ const subscribeCharged: Journey = {
       ], { critical: true });
       const held = await subscriptionAtProvider(session, id);
       const first = callsTo(session, "POST", "/v2/payments").at(-1);
+      const sent = callsTo(session, "POST", `/v2/customers/${saved.customer}/subscriptions`);
       context.expect(created.folder, [
         same("Mollie holds one active subscription of 19.00 every month", [pick(held, "status"), pick(held, "amount"), pick(held, "interval")], ["active", { currency: "EUR", value: "19.00" }, "1 month"]),
         same("it describes itself with the caller's description and reference", text(pick(held, "description")).startsWith("Pro plan ("), true),
+        same("the one subscription Mollie received carries the account's webhook URL", [sent.length, pick(sent[0]?.body, "webhookUrl") ?? null], [1, WEBHOOK_URL]),
         same("Mollie was asked to charge the first period as a recurring payment on that customer and mandate", [pick(first?.body, "sequenceType"), pick(first?.body, "customerId"), pick(first?.body, "amount")], ["recurring", saved.customer, { currency: "EUR", value: "19.00" }]),
       ]);
       const delivery = await settleDelivered(session, text(pick(created.value, "latestPayment")), "paid");

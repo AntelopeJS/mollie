@@ -1,5 +1,5 @@
 import type { MolliePayment } from "../../../src/mollie/types.ts";
-import { isString, parseJson, pick, type Json } from "./json.ts";
+import { isString, jsonOrText, pick, type Json } from "./json.ts";
 
 /** An account the session configures the module with. */
 export type Account = "primary" | "second";
@@ -35,7 +35,30 @@ export function toCall(entry: Json): RecordedCall | null {
   return { method, path, idempotencyKey: isString(idempotencyKey) ? idempotencyKey : null, body: pick(entry, "body") ?? null };
 }
 
-/** What Mollie answered a request: the status, and the parsed JSON body, `null` when it is empty. */
+/** How long a request to Mollie may go without a whole answer before the session counts Mollie as unavailable: below the 15 s the harness's driver gives one call through core. */
+export const ANSWER_WITHIN_MS = 10_000;
+
+/** What Mollie answered a request, as it came. */
+export interface RawAnswer {
+  status: number;
+  contentType: string | null;
+  body: string;
+}
+
+/** `fetch` with a deadline: it rejects when the status and the whole body have not arrived within `ANSWER_WITHIN_MS`. */
+export function fetchWithin(url: string, init: RequestInit): Promise<RawAnswer> {
+  const signal = AbortSignal.timeout(ANSWER_WITHIN_MS);
+  const expired = new Promise<never>((_resolve, reject) => {
+    signal.addEventListener("abort", () => reject(new Error(`no answer within ${ANSWER_WITHIN_MS} ms`)), { once: true });
+  });
+  const answered = (async () => {
+    const response = await fetch(url, { ...init, signal });
+    return { status: response.status, contentType: response.headers.get("content-type"), body: await response.text() };
+  })();
+  return Promise.race([answered, expired]);
+}
+
+/** What Mollie answered a request: the status, and the parsed JSON body, `null` when it is empty and the text when it is not JSON. */
 export interface WireAnswer {
   status: number;
   json: Json;
@@ -45,8 +68,8 @@ export interface WireAnswer {
 export async function send(url: string, method: string, key: string, body?: Json): Promise<WireAnswer> {
   const init: RequestInit = { method, headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" } };
   if (body !== undefined) init.body = JSON.stringify(body);
-  const response = await fetch(url, init);
-  return { status: response.status, json: parseJson(await response.text()) };
+  const answer = await fetchWithin(url, init);
+  return { status: answer.status, json: jsonOrText(answer.body) };
 }
 
 /** Takes a webhook delivery as Mollie sends it: the webhook URL and the form body. */
@@ -63,12 +86,12 @@ export interface MollieTarget {
   calls(account: Account): RecordedCall[];
   /** A request the session sends Mollie itself, under the account's key; it is not one of the module's calls. */
   wire(method: string, path: string, account: Account, body?: Json): Promise<WireAnswer>;
-  /** Moves a payment to `status` as the payer or the bank would, then lets Mollie notify the payment's webhook. */
-  settle(id: string, status: PaymentStatus, account: Account): Promise<void>;
+  /** Moves a payment to `status` as the payer or the bank would, then lets Mollie notify the payment's webhook; resolves to the webhook URL it notified, `null` when the payment has none. */
+  settle(id: string, status: PaymentStatus, account: Account): Promise<string | null>;
   receiveWebhooks(receiver: WebhookReceiver | undefined): void;
   /** Every request Mollie received from the module, one JSON line each, for the evidence. */
   transcript(): string;
-  /** Why Mollie stopped answering during the session, or `null` while it answered every request. */
+  /** Why Mollie was unavailable during the session (an error status of 500 or above, no answer in time, a checkout page it did not serve), or `null` while it answered every request. */
   unreachable(): string | null;
   stop(): Promise<void>;
 }

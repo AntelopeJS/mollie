@@ -40,7 +40,7 @@ An application module sends the payer to a hosted payment page with `CreateCheck
 
 ## Sub-features
 
-- `hosted-session`: a session is one Mollie payment with the success URL and the payer's language, and follows its payment as the payer pays it.
+- `hosted-session`: a session is one Mollie payment with the success URL, the payer's language and the account's webhook URL, and follows its payment as the payer pays it.
 - `session-locales`: a language Mollie does not offer is left to the browser; a regional one keeps its region only when Mollie lists it (`en-GB` stays `en_GB`), otherwise it gets the region Mollie offers (`pt-BR` becomes `pt_PT`).
 
 ## How to get to it (user POV)

@@ -89,3 +89,12 @@ export function parseJson(text: string): Json {
   if (!isJson(parsed)) throw new Error("the text is not JSON data");
   return parsed;
 }
+
+/** Parses an answer's body: JSON text as its value, an empty text as `null`, and any other text as itself. */
+export function jsonOrText(text: string): Json {
+  try {
+    return parseJson(text);
+  } catch {
+    return text;
+  }
+}
