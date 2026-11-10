@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "mollie-webhook-route",
+      "area": "modules",
+      "style": "clean",
+      "prompt": "How do I write the route that receives Mollie's webhooks and passes them to VerifyWebhook in my AntelopeJS project?",
+      "expect": {
+        "skills": ["mollie"],
+        "acceptable": ["antelopejs", "taking-payments", "api-interface"],
+        "mustMention": ["VerifyWebhook"]
+      }
+    },
+    {
+      "id": "mollie-hosted-page-language-casual",
+      "area": "modules",
+      "style": "casual",
+      "prompt": "mollie checkout page shows up in english even though i passed locale ja, why",
+      "expect": {
+        "skills": ["mollie"],
+        "acceptable": ["antelopejs", "taking-payments"],
+        "mustMention": ["browser"]
+      }
+    },
+    {
+      "id": "mollie-hosted-page-language",
+      "area": "modules",
+      "style": "clean",
+      "prompt": "With @antelopejs/mollie, which language does Mollie's hosted checkout page show when I call CreateCheckoutSession with locale pt-BR?",
+      "expect": {
+        "skills": ["mollie"],
+        "acceptable": ["antelopejs", "taking-payments"],
+        "mustMention": ["pt_PT"]
+      }
+    },
+    {
+      "id": "mollie-taking-payments-neighbour",
+      "area": "modules",
+      "style": "clean",
+      "prompt": "In my AntelopeJS module, how do I refund a payment through the payment interface without caring which provider is wired?",
+      "expect": {
+        "skills": ["taking-payments"],
+        "acceptable": ["antelopejs", "ajs-consume-interface"],
+        "avoid": ["mollie"]
+      }
+    }
+  ]
+}

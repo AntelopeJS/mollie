@@ -38,6 +38,7 @@ Pass the raw body and the headers to `VerifyWebhook`. Mollie posts `id=tr_…`, 
 ## Facts to reason from when debugging
 
 - **Payer-present payments are redirects**: `requires_action` with Mollie's checkout URL. A checkout session's id is its payment's id.
+- **The hosted page language** comes from the checkout `locale`: a language gets the region Mollie offers it in (`fr` is `fr_FR`, `en` is `en_US`, `pt-BR` is `pt_PT`), and a language Mollie does not offer (`ja`, `zh`, …) or `auto` sends none, so Mollie picks from the browser. The table is in `docs/2.payments.md`.
 - **Off-session charges come back `pending`**; the outcome (`succeeded`, `authorized`, `failed`) arrives later through the webhook. In test mode nothing settles until someone submits the test-mode page.
 - **Saved methods are mandates**, id `cst_…:mdt_…`, belonging to one customer. Detaching one revokes the mandate, and Mollie cancels the subscriptions that charge it.
 - **`authorizeOnly`** only for cards, Klarna, Billie, Riverty, Vipps, MobilePay, PayPal, Billink; anything else is refused before Mollie is called.
