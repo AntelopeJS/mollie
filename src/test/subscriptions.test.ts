@@ -310,6 +310,34 @@ describe("[mollie] subscription creation", function () {
     assert.equal(replay.payment.id, first.payment.id);
     PrimaryAccount().declinesAtCreation.delete(child);
   });
+
+  it("cancels at Mollie on replay a refused subscription whose first cancel failed", async () => {
+    const payer = await NewPayer();
+    const { child } = ParsePaymentMethodId(payer.paymentMethod) ?? {
+      child: "",
+    };
+    PrimaryAccount().declinesAtCreation.add(child);
+    StandIn().faults.push({
+      method: "DELETE",
+      path: /^\/v2\/customers\/[^/]+\/subscriptions\/[^/]+$/,
+      status: 503,
+    });
+    const key = Key();
+    const body = request(payer);
+    await assert.rejects(CreateSubscription(body, key));
+
+    const replay = await Rejected(
+      CreateSubscription(body, key),
+      SubscriptionPaymentError,
+    );
+    assert.equal(replay.payment.status, "failed");
+    const owned = [...PrimaryAccount().subscriptions.values()].filter(
+      (subscription) => subscription.customerId === payer.customer,
+    );
+    assert.equal(owned.length, 1);
+    assert.equal(owned[0]?.status, "canceled");
+    PrimaryAccount().declinesAtCreation.delete(child);
+  });
 });
 
 describe("[mollie] renewals Mollie fires", function () {
