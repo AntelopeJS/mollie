@@ -58,6 +58,24 @@ const config: VerifyConfig = {
       passing: /^\s*[✔✓] holds (\w+)/gm,
       behaviour: { kind: "emit" },
     },
+    {
+      name: "formal-subscription-lifecycle",
+      covers: [
+        "src/implementations/subscriptions/creation.ts",
+        "src/implementations/subscriptions/records.ts",
+        "src/implementations/subscriptions/changes.ts",
+        "src/implementations/subscriptions/mapping.ts",
+        "src/implementations/subscriptions/events.ts",
+        "src/mollie/client.ts",
+        "src/mollie/metadata.ts",
+      ],
+      files: [".agents/skills/formal-subscription-lifecycle/**"],
+      command: ["node", ".agents/skills/formal-subscription-lifecycle/check.mjs", "--full"],
+      baseCommand: ["node", ".agents/skills/formal-subscription-lifecycle/check.mjs"],
+      violation: /^(?:finding|BROKEN|CHANGED|HOLDS) +(\w+)(?:: (?<states>\d+) states)?/gm,
+      passing: /(?<=^holds +(?:\w+, )*)(\w+)(?=,| \()/gm,
+      behaviour: { kind: "emit" },
+    },
   ],
   moduleConfig() {
     return { apiKey: PRIMARY_KEY };
