@@ -28,6 +28,7 @@ covers:
   - src/mollie/types.ts
 docs:
   - README.md
+  - skills/mollie/SKILL.md
   - docs/2.payments.md
 journeys:
   - refund-flow
@@ -50,7 +51,7 @@ An application module refunds all or part of a paid payment with `RefundPayment`
 ## Driving it with antelopejs-verify
 
 ```bash
-pnpm exec antelopejs-verify journey "$RUN" refunds
+node_modules/.bin/antelopejs-verify journey <run> refunds
 ```
 
 ## Gotchas

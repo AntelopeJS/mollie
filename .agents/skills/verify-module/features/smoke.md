@@ -24,7 +24,7 @@ The fixed journey every verdict runs: load the module as `local`, create one pay
 ## Driving it with antelopejs-verify
 
 ```bash
-pnpm exec antelopejs-verify journey "$RUN" smoke
+node_modules/.bin/antelopejs-verify journey <run> smoke
 ```
 
 ## Gotchas

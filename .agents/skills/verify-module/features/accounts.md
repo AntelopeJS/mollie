@@ -26,6 +26,7 @@ covers:
   - src/mollie/types.ts
 docs:
   - README.md
+  - skills/mollie/SKILL.md
   - docs/1.introduction.md
 journeys:
   - account-selection
@@ -40,8 +41,8 @@ An app developer configures a default Mollie account and further ones, and selec
 ## Sub-features
 
 - `account-selection`: a call that names a provider uses that account's key, and the payment lives only there.
-- `unknown-provider`: a provider nobody configured is a `PaymentError` that names it.
-- `bad-key`: a key Mollie does not know is a `PaymentError` carrying the 401, not a missing record.
+- `unknown-provider`: a provider nobody configured is a `PaymentError` that names it (a `SubscriptionError` for the subscription functions), and no request reaches Mollie.
+- `bad-key`: a key Mollie does not know is a `PaymentError` carrying Mollie's refusal message, not a missing record; the call harness returns an error's name and message only, so its `providerCode` is not observable.
 
 ## How to get to it (user POV)
 
@@ -50,7 +51,7 @@ An app developer configures a default Mollie account and further ones, and selec
 ## Driving it with antelopejs-verify
 
 ```bash
-pnpm exec antelopejs-verify journey "$RUN" accounts
+node_modules/.bin/antelopejs-verify journey <run> accounts
 ```
 
 ## Gotchas

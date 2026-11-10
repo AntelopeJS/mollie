@@ -1,6 +1,6 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { EUR, PRIMARY_KEY, RETURN_URL, answered, call, callsTo, fresh, paymentAtProvider, pick, same, settle, text, withSession } from "./session.ts";
+import { EUR, PRIMARY_KEY, RETURN_URL, SECOND_KEY, answered, call, callsOf, callsTo, fresh, paymentAtProvider, pick, same, settle, text, withSession } from "./session.ts";
 
 const payThroughStandIn: Journey = {
   title: "one payment created through core reaches the stand-in for Mollie under the account's key and reads back succeeded once Mollie settles it",
@@ -26,10 +26,15 @@ const requestContract: Journey = {
   entryPoint: "`CreatePayment` through core against the stand-in for Mollie",
   async run(context) {
     await withSession(context, async (session) => {
-      const created = await call(session, "CreatePayment", "CreatePayment", [{ amount: EUR, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
+      const key = fresh("key");
+      const created = await call(session, "CreatePayment", "CreatePayment", [{ amount: EUR, reference: fresh("order"), returnUrl: RETURN_URL }, key, null]);
+      const sent = callsTo(session, "POST", "/v2/payments", PRIMARY_KEY);
       context.expect(created.folder, [
         answered(created),
-        same("the stand-in, which refuses any other key, answered the payment request with a success", callsTo(session, "POST", "/v2/payments").length, 1),
+        same("the stand-in at the configured API URL took one POST to the payments endpoint under the account's key", sent.length, 1),
+        same("no request went out under the other account's key", callsOf(session, SECOND_KEY).length, 0),
+        same("the body is the JSON object of the payment asked for", [pick(sent[0]?.body, "amount"), pick(sent[0]?.body, "redirectUrl")], [{ currency: "EUR", value: "10.50" }, RETURN_URL]),
+        same("the idempotency key is the one the caller passed", sent[0]?.idempotencyKey ?? null, key),
       ]);
     });
   },

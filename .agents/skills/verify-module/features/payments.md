@@ -26,6 +26,7 @@ covers:
   - src/mollie/errors.ts
 docs:
   - README.md
+  - skills/mollie/SKILL.md
   - docs/2.payments.md
 journeys:
   - pay-redirect
@@ -54,7 +55,7 @@ An application module charges with `CreatePayment` and reads the payment back wi
 ## Driving it with antelopejs-verify
 
 ```bash
-pnpm exec antelopejs-verify journey "$RUN" payments
+node_modules/.bin/antelopejs-verify journey <run> payments
 ```
 
 ## Gotchas

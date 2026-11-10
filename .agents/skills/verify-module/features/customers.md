@@ -27,6 +27,7 @@ covers:
   - src/mollie/types.ts
 docs:
   - README.md
+  - skills/mollie/SKILL.md
   - docs/2.payments.md
 journeys:
   - customer-lifecycle
@@ -49,7 +50,7 @@ An application module keeps customers and their saved methods, and charges a sav
 ## Driving it with antelopejs-verify
 
 ```bash
-pnpm exec antelopejs-verify journey "$RUN" customers
+node_modules/.bin/antelopejs-verify journey <run> customers
 ```
 
 ## Gotchas

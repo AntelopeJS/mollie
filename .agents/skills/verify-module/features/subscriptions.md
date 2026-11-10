@@ -30,6 +30,7 @@ covers:
   - src/mollie/types.ts
 docs:
   - README.md
+  - skills/mollie/SKILL.md
   - docs/4.subscriptions.md
 journeys:
   - subscribe-charged
@@ -66,11 +67,11 @@ An application module subscribes a customer's saved method to a plan with `Creat
 ## Driving it with antelopejs-verify
 
 ```bash
-pnpm exec antelopejs-verify journey "$RUN" subscriptions
+node_modules/.bin/antelopejs-verify journey <run> subscriptions
 ```
 
 ## Gotchas
 
 - The Mollie side is the module's own stand-in (`src/test/stand-in`, built to `dist/test/stand-in`), so a feature proves agreement with its reading of Mollie's documentation, not with the live service; see [sandbox](sandbox.md).
-- Subscription events are raised to handlers registered in the module's own process, which a call through core cannot register, so no journey reaches them; their ids and triggers are judged from `docs/4.subscriptions.md` and the module's own tests.
+- Subscription events are raised to handlers registered in the module's own process, which a call through core cannot register, so the events are raised but no journey can observe them; their ids and triggers are judged from `docs/4.subscriptions.md` and the module's own tests.
 - Renewals are created by Mollie on its dates, with no test clock, so no journey reaches a renewal.

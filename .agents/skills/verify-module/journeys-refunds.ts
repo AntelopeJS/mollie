@@ -24,6 +24,7 @@ const refundFlow: Journey = {
         answered(rest),
         same("the refund takes the remaining 20.00", pick(rest.value, "amount", "value"), 2000),
         same("the caller's metadata comes back without the module's own bookkeeping", pick(rest.value, "metadata"), { ticket: "42" }),
+        same("the reason reaches Mollie in the refund's description", text(pick(callsTo(session, "POST", `/v2/payments/${id}/refunds`)[1]?.body, "description")).includes("fraudulent"), true),
       ]);
       const read = await call(session, "GetRefund", "GetRefund", [text(pick(rest.value, "id")), null]);
       const payment = await call(session, "GetPayment", "GetPayment", [id, null]);

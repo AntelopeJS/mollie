@@ -3,7 +3,7 @@ import type { Journey } from "@antelopejs/tooling-configs/verify";
 import { RETURN_URL, answered, call, callsTo, fresh, paymentAtProvider, pick, same, savedMethod, settle, text, thrown, withSession, wire, PRIMARY_KEY } from "./session.ts";
 
 const holdCapture: Journey = {
-  title: "an authorize-only payment is pending until Mollie authorizes it, then captures in part and records the capture at Mollie",
+  title: "an authorize-only payment on a saved card is pending until Mollie authorizes it, then captures in part and records the capture at Mollie",
   entryPoint: "`CreatePayment` with `authorizeOnly`, `GetPayment` and `CapturePayment` through core",
   async run(context) {
     await withSession(context, async (session) => {
@@ -43,7 +43,7 @@ const holdCapture: Journey = {
 };
 
 const holdRelease: Journey = {
-  title: "cancelling an authorized payment releases it, cancelling an open one cancels it, and a cancelled payment cancels again as a replay",
+  title: "cancelling an authorized payment releases it, cancelling an open one cancels it, and cancelling a cancelled payment returns it again, whatever the idempotency key",
   entryPoint: "`CancelPayment` through core on an authorized payment, an open one and a captured one",
   async run(context) {
     await withSession(context, async (session) => {

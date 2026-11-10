@@ -27,6 +27,7 @@ covers:
   - src/mollie/types.ts
 docs:
   - README.md
+  - skills/mollie/SKILL.md
   - docs/2.payments.md
 journeys:
   - hosted-session
@@ -40,7 +41,7 @@ An application module sends the payer to a hosted payment page with `CreateCheck
 ## Sub-features
 
 - `hosted-session`: a session is one Mollie payment with the success URL and the payer's language, and follows its payment as it settles.
-- `session-locales`: a language Mollie does not offer is left to the browser, and a regional one keeps its region.
+- `session-locales`: a language Mollie does not offer is left to the browser; a regional one keeps its region only when Mollie lists it (`en-GB` stays `en_GB`), otherwise it gets the region Mollie offers (`pt-BR` becomes `pt_PT`).
 
 ## How to get to it (user POV)
 
@@ -49,7 +50,7 @@ An application module sends the payer to a hosted payment page with `CreateCheck
 ## Driving it with antelopejs-verify
 
 ```bash
-pnpm exec antelopejs-verify journey "$RUN" checkout
+node_modules/.bin/antelopejs-verify journey <run> checkout
 ```
 
 ## Gotchas

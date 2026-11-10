@@ -1,6 +1,6 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { PRIMARY_KEY, RETURN_URL, SECOND_ACCOUNT, SECOND_KEY, answered, call, fresh, paymentAtProvider, pick, same, text, thrown, withSession } from "./session.ts";
+import { PRIMARY_KEY, RETURN_URL, SECOND_ACCOUNT, SECOND_KEY, answered, call, callsOf, fresh, paymentAtProvider, pick, same, text, thrown, withSession } from "./session.ts";
 
 const accountSelection: Journey = {
   title: "a call that names a provider uses that account's key: the payment lives in the second account and not in the default one",
@@ -31,13 +31,16 @@ const unknownProvider: Journey = {
   async run(context) {
     await withSession(context, async (session) => {
       const refused = await call(session, "GetPayment on an unknown provider", "GetPayment", ["tr_nope123456", "nobody"]);
-      context.expect(refused.folder, [same("the refusal names the provider", thrown(refused), ["PaymentError", 'No Mollie account configured under "nobody"'])]);
+      context.expect(refused.folder, [
+        same("the refusal names the provider", thrown(refused), ["PaymentError", 'No Mollie account configured under "nobody"']),
+        same("no request reached Mollie under either key", [callsOf(session, PRIMARY_KEY).length, callsOf(session, SECOND_KEY).length], [0, 0]),
+      ]);
     });
   },
 };
 
 const badKey: Journey = {
-  title: "an API key Mollie does not know is a PaymentError carrying the 401, not a missing record",
+  title: "an API key Mollie does not know is a PaymentError carrying Mollie's refusal message, not a missing record",
   entryPoint: "`GetPayment` with a well-shaped key the stand-in does not know, through core",
   async run(context) {
     await withSession(

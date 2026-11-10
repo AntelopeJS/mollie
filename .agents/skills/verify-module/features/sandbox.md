@@ -38,7 +38,7 @@ What only the real Mollie can show: that the requests the client builds are acce
 
 ## Sub-features
 
-- `request-contract`: a payment request reaches the stand-in, which refuses any key but the configured one, and is accepted: the one leg of the contract a stand-in can check.
+- `request-contract`: a payment request reaches the stand-in, which accepts the two session keys and records the request under the key it carried, and is accepted: the one leg of the contract a stand-in can check.
 - `sandbox-live`: always NOT VERIFIED. No journey reaches Mollie's test mode: it needs the merchant's `test_` API key. A verdict that requires this feature therefore reads NOT VERIFIED, never PASS. The smoke feature leaves it out so a diff that touches no client code is judged on the stand-in journeys.
 
 ## How to get to it (user POV)
@@ -48,7 +48,7 @@ What only the real Mollie can show: that the requests the client builds are acce
 ## Driving it with antelopejs-verify
 
 ```bash
-pnpm exec antelopejs-verify journey "$RUN" sandbox
+node_modules/.bin/antelopejs-verify journey <run> sandbox
 ```
 
 ## Gotchas
