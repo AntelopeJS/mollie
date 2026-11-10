@@ -1,4 +1,4 @@
-import type { Browser, Page } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright";
 
 import type { MolliePaymentStatus } from "../../mollie/types";
 import type { Checkout } from "./payer";
@@ -14,6 +14,19 @@ const CARD_FRAME = 'iframe[src*="/components/card/"]';
 const FINAL_STATE = 'input[name="final_state"]';
 const SETTLED_ACTIONS = 'input[name="action"]';
 const COMPLETED = /\/completed$/;
+const MOLLIE_HOST = /(^|\.)mollie\.com$/;
+
+async function leavesMollie(
+  context: BrowserContext,
+  start: string,
+): Promise<boolean> {
+  const response = await context.request.get(start, { maxRedirects: 0 });
+  const location = response.headers().location;
+  return (
+    location !== undefined &&
+    !MOLLIE_HOST.test(new URL(location, start).hostname)
+  );
+}
 
 function expiry(now: Date): string {
   return `12/${String((now.getFullYear() + 5) % 100).padStart(2, "0")}`;
@@ -55,6 +68,7 @@ export class BrowserCheckout implements Checkout {
     const context = await (await this.browser).newContext();
     context.setDefaultTimeout(STEP_TIMEOUT_MS);
     try {
+      if (await leavesMollie(context, start)) return;
       const page = await context.newPage();
       await page.goto(start);
       for (let step = 0; step < MAX_STEPS; step += 1) {
@@ -79,7 +93,8 @@ export class BrowserCheckout implements Checkout {
   }
 
   async close(): Promise<void> {
-    await (await this.browser)?.close();
+    const browser = await this.browser?.catch(() => undefined);
     this.browser = undefined;
+    await browser?.close();
   }
 }
