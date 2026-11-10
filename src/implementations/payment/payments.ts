@@ -13,7 +13,7 @@ import { IsMollieId } from "../../mollie/ids";
 import { DefinedFields } from "../../mollie/fields";
 import { ToPayment, ToPaymentStatus } from "./mapping";
 import { type Account, GetAccount } from "../../accounts";
-import { type Entity, NotFound, Translating } from "./errors";
+import { type Entity, InTurnOrder, NotFound, Translating } from "./errors";
 import { type OwnFields, ReadOwn, WriteMetadata } from "../../mollie/metadata";
 import { FromMollieAmount, ToMollieAmount } from "../../mollie/amounts";
 import { SubscriptionOfPayment } from "../shared/subscription-of-payment";
@@ -188,14 +188,14 @@ export async function CapturePayment(
   provider?: string,
 ): Promise<Payment> {
   const account = GetAccount(provider);
-  const payment = await ReadPayment(account, id);
-  if (
-    await Translating(id, PAYMENT_ENTITY, () =>
+  if (!IsMollieId("payment", id)) throw NotFound(id, PAYMENT_ENTITY);
+  const [payment, isCaptured] = await InTurnOrder(
+    ReadPayment(account, id),
+    Translating(id, PAYMENT_ENTITY, () =>
       hasCaptured(account, id, idempotencyKey),
-    )
-  ) {
-    return ToPayment(payment);
-  }
+    ),
+  );
+  if (isCaptured) return ToPayment(payment);
   if (payment.status !== "authorized") refuse(payment, "captured");
   assertCapturableAmount(payment, amount);
   return Translating(id, PAYMENT_ENTITY, async () => {
