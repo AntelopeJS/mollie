@@ -114,7 +114,7 @@ const holdRefused: Journey = {
       context.expect(onMandate.folder, [
         answered(customer),
         same("the stand-in saved the SEPA mandate", mandate.status, 201),
-        same("authorize-only on a SEPA mandate is a PaymentError", pick(thrown(onMandate), 0), "PaymentError"),
+        same("authorize-only on a SEPA mandate is a PaymentError naming the mandate's method", [pick(thrown(onMandate), 0), text(pick(thrown(onMandate), 1)).startsWith("Mollie cannot hold a directdebit payment")], ["PaymentError", true]),
         same("the module read the mandate from Mollie and sent no payment request", [callsTo(session, "GET", `/v2/customers/${customerId}/mandates/${mandateId}`).length, callsTo(session, "POST", "/v2/payments").length], [1, 0]),
       ]);
     });
