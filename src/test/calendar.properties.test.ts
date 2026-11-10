@@ -5,6 +5,7 @@ import fc from "fast-check";
 
 import {
   AddPeriods,
+  type CalendarDate,
   DateOf,
   FormatDate,
   FromMollieInterval,
@@ -204,28 +205,63 @@ const periodBoundsStepped = fc.property(
   },
 );
 
-const periodBoundsFromNextDate = fc.property(
-  DateArb,
-  PeriodArb,
-  fc.integer({ min: 1, max: MAX_PERIODS }),
-  POSITION,
-  (anchor, period, index, position) => {
-    const start = schedule(anchor, period, index - 1);
-    const end = schedule(anchor, period, index);
-    const now = within(start, end, position);
-    const next = isoOf(ExpectedAddPeriods(anchor, period, index));
-    const subscription = ToSubscription(
-      recordOf(anchor, period, { nextPaymentDate: next }),
-      now,
-    );
-    assert.equal(subscription.currentPeriodEnd, end);
-    assert.equal(
-      subscription.currentPeriodStart,
-      start,
-      `a period ending ${next} starts ${new Date(subscription.currentPeriodStart).toISOString()}, not ${new Date(start).toISOString()}`,
-    );
-  },
+function isClampedNextDate(
+  anchor: CalendarDate,
+  period: Period,
+  index: number,
+): boolean {
+  const isMonthly = period.interval === "month" || period.interval === "year";
+  return (
+    isMonthly && ExpectedAddPeriods(anchor, period, index).day !== anchor.day
+  );
+}
+
+function periodBoundsFromNextDateOf(
+  isInScope: (anchor: CalendarDate, period: Period, index: number) => boolean,
+) {
+  return fc.property(
+    DateArb,
+    PeriodArb,
+    fc.integer({ min: 1, max: MAX_PERIODS }),
+    POSITION,
+    (anchor, period, index, position) => {
+      fc.pre(isInScope(anchor, period, index));
+      const start = schedule(anchor, period, index - 1);
+      const end = schedule(anchor, period, index);
+      const nextDate = ExpectedAddPeriods(anchor, period, index);
+      const now = within(start, end, position);
+      const next = isoOf(nextDate);
+      const subscription = ToSubscription(
+        recordOf(anchor, period, { nextPaymentDate: next }),
+        now,
+      );
+      const endClock = WallClock(subscription.currentPeriodEnd);
+      assert.equal(
+        endClock.time,
+        "00:00:00",
+        "the period does not end at midnight",
+      );
+      assert.deepEqual(
+        endClock.date,
+        nextDate,
+        "the period ends on another date",
+      );
+      assert.equal(subscription.currentPeriodEnd, end);
+      assert.equal(
+        subscription.currentPeriodStart,
+        start,
+        `a period ending ${next} starts ${new Date(subscription.currentPeriodStart).toISOString()}, not ${new Date(start).toISOString()}`,
+      );
+    },
+  );
+}
+
+const periodBoundsFromNextDate = periodBoundsFromNextDateOf(
+  (anchor, period, index) => !isClampedNextDate(anchor, period, index),
 );
+
+const periodBoundsFromClampedNextDate =
+  periodBoundsFromNextDateOf(isClampedNextDate);
 
 const wireRoundTrip = fc.property(
   PeriodArb,
@@ -314,6 +350,39 @@ function periodStartFromNextDate(
   return FormatDate(DateOf(currentPeriodStart));
 }
 
+function pinClampedNextDate() {
+  const monthly: Period = { interval: "month", count: 1 };
+  const yearly: Period = { interval: "year", count: 1 };
+  assert.equal(
+    periodStartFromNextDate("2027-01-31", monthly, "2027-03-31", "2027-03-10"),
+    "2027-02-28",
+  );
+  assert.equal(
+    periodStartFromNextDate("2027-01-31", monthly, "2027-02-28", "2027-02-10"),
+    "2027-01-28",
+    "the scheduled previous date is 2027-01-31",
+  );
+  assert.equal(
+    periodStartFromNextDate("2027-01-31", monthly, "2027-02-28", "2027-01-31"),
+    "2027-01-28",
+  );
+  assert.equal(
+    periodStartFromNextDate("2028-02-29", yearly, "2029-02-28", "2028-06-01"),
+    "2028-02-28",
+    "the scheduled previous date is 2028-02-29",
+  );
+  const withoutNext = recordOf(ParseDate("2027-01-31"), monthly);
+  const { currentPeriodStart } = ToSubscription(
+    withoutNext,
+    StartOf(ParseDate("2027-02-10")),
+  );
+  assert.equal(
+    FormatDate(DateOf(currentPeriodStart)),
+    "2027-01-31",
+    "without a next payment date, the same period starts on the anchor day",
+  );
+}
+
 describe("[mollie] Europe/Amsterdam calendar properties", function () {
   this.timeout(SUITE_TIMEOUT_MS);
 
@@ -342,10 +411,15 @@ describe("[mollie] Europe/Amsterdam calendar properties", function () {
     "the period read from the start date is the schedule's own period",
     periodBoundsStepped,
   );
-  finding(
+  holds(
     "periodBoundsFromNextDate",
-    "the period read from Mollie's next payment date is the schedule's own period",
+    "the period read from Mollie's next payment date ends at that date's Amsterdam midnight and starts count periods before it, unless the date is a clamped month end",
     periodBoundsFromNextDate,
+  );
+  finding(
+    "periodBoundsFromClampedNextDate",
+    "the period read from a clamped month end as Mollie's next payment date is the schedule's own period",
+    periodBoundsFromClampedNextDate,
   );
   holds(
     "wireRoundTrip",
@@ -358,53 +432,10 @@ describe("[mollie] Europe/Amsterdam calendar properties", function () {
     unitLimits,
   );
 
-  it("pins periodBoundsFromNextDate: a clamped next payment date starts its period on the clamped day", () => {
-    const monthly: Period = { interval: "month", count: 1 };
-    const yearly: Period = { interval: "year", count: 1 };
-    assert.equal(
-      periodStartFromNextDate(
-        "2027-01-31",
-        monthly,
-        "2027-03-31",
-        "2027-03-10",
-      ),
-      "2027-02-28",
-    );
-    assert.equal(
-      periodStartFromNextDate(
-        "2027-01-31",
-        monthly,
-        "2027-02-28",
-        "2027-02-10",
-      ),
-      "2027-01-28",
-      "the scheduled previous date is 2027-01-31",
-    );
-    assert.equal(
-      periodStartFromNextDate(
-        "2027-01-31",
-        monthly,
-        "2027-02-28",
-        "2027-01-31",
-      ),
-      "2027-01-28",
-    );
-    assert.equal(
-      periodStartFromNextDate("2028-02-29", yearly, "2029-02-28", "2028-06-01"),
-      "2028-02-28",
-      "the scheduled previous date is 2028-02-29",
-    );
-    const withoutNext = recordOf(ParseDate("2027-01-31"), monthly);
-    const { currentPeriodStart } = ToSubscription(
-      withoutNext,
-      StartOf(ParseDate("2027-02-10")),
-    );
-    assert.equal(
-      FormatDate(DateOf(currentPeriodStart)),
-      "2027-01-31",
-      "without a next payment date, the same period starts on the anchor day",
-    );
-  });
+  it(
+    "pins periodBoundsFromClampedNextDate: a clamped next payment date starts its period on the clamped day",
+    pinClampedNextDate,
+  );
 
   it("generates both daylight-saving days, February 29 and month ends", () => {
     const dates = fc.sample(DateArb, PARAMETERS);
@@ -427,5 +458,23 @@ describe("[mollie] Europe/Amsterdam calendar properties", function () {
       "no year end",
     );
     assert.ok(Transitions(2026).toSummer < Transitions(2026).toWinter);
+  });
+
+  it("generates next payment dates on both sides of a clamped month end", () => {
+    const inputs = fc.sample(
+      fc.tuple(DateArb, PeriodArb, fc.integer({ min: 1, max: MAX_PERIODS })),
+      PARAMETERS,
+    );
+    const clamped = inputs.filter(([anchor, period, index]) =>
+      isClampedNextDate(anchor, period, index),
+    );
+    const keptDay = inputs.filter(
+      ([anchor, period, index]) =>
+        period.interval === "month" &&
+        anchor.day >= 29 &&
+        !isClampedNextDate(anchor, period, index),
+    );
+    assert.ok(clamped.length > 0, "no clamped next payment date");
+    assert.ok(keptDay.length > 0, "no month end that keeps the anchor day");
   });
 });
