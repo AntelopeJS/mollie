@@ -261,13 +261,16 @@ export async function CompleteRecord(
   };
 }
 
+/** Loads the record of subscription `id`, reading it from Mollie unless `fetched` already holds it. */
 export async function LoadRecord(
   account: Account,
   id: string,
+  fetched?: MollieSubscription,
 ): Promise<SubscriptionRecord> {
   const parsed = ParseSubscriptionId(id);
   if (!parsed) throw new SubscriptionNotFoundError(id);
-  const mollie = await FetchSubscription(account, parsed.parent, parsed.child);
+  const mollie =
+    fetched ?? (await FetchSubscription(account, parsed.parent, parsed.child));
   const own = ReadOwnSubscription(mollie);
   if (!own || own.refused) throw new SubscriptionNotFoundError(id);
   return TranslatingSubscription(id, () =>
