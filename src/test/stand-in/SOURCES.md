@@ -111,4 +111,5 @@ These exist only so the tests can make time pass or force an outcome. The module
 - `RenewSubscription`: what Mollie does on a `nextPaymentDate`.
 - `settle`: what the test-mode page does, without the page.
 - `outage`: every API call answers the given status (503, or 422 for a suspended account).
+- `faults`: the next request matching a method and a path answers the given status, once per entry.
 - `declinesAtCreation`: a recurring payment on that mandate is `failed` in its creating response. Nothing documents that Mollie ever does this; it exists to exercise the module's handling of a `failed` status in a creating response, which the API's schema allows.

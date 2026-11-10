@@ -264,16 +264,25 @@ async function chargeFirstPeriod(
   );
 }
 
+/** Cancels a refused subscription at Mollie, unless Mollie already ended it. */
+async function cancelRefused(
+  account: Account,
+  mollie: MollieSubscription,
+): Promise<void> {
+  if (mollie.status === "canceled" || mollie.status === "completed") return;
+  await account.client.execute({
+    method: "DELETE",
+    path: SubscriptionPath(mollie.customerId, mollie.id),
+  });
+}
+
 async function refuse(
   account: Account,
   mollie: MollieSubscription,
   payment: MolliePayment,
 ): Promise<never> {
-  await updateOwn(account, mollie, { refused: payment.id });
-  await account.client.execute({
-    method: "DELETE",
-    path: SubscriptionPath(mollie.customerId, mollie.id),
-  });
+  const refused = await updateOwn(account, mollie, { refused: payment.id });
+  await cancelRefused(account, refused);
   throw refusal(payment);
 }
 
@@ -295,7 +304,10 @@ async function settleFirstPeriod(
 ): Promise<SubscriptionRecord> {
   let mollie = created;
   let own = ownOf(mollie);
-  if (own.refused) throw refusal(await readPayment(account, own.refused));
+  if (own.refused) {
+    await cancelRefused(account, mollie);
+    throw refusal(await readPayment(account, own.refused));
+  }
   if (own.start === "charged" && !own.firstPayment) {
     const payment = await chargeFirstPeriod(account, id, mollie, creation);
     if (payment.status === "failed") await refuse(account, mollie, payment);

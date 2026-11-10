@@ -151,6 +151,8 @@ export class MollieStandIn {
   readonly accounts = new Map<string, Account>();
   readonly deliveries: Delivery[] = [];
   outage: number | undefined;
+  /** Requests that answer a status once each, matched by method and path, before any route runs. */
+  readonly faults: { method: string; path: RegExp; status: number }[] = [];
   private receiver: WebhookReceiver | undefined;
   private server: Server | undefined;
   private baseUrl = "";
@@ -304,6 +306,14 @@ export class MollieStandIn {
         this.outage,
         "The service is temporarily unavailable",
       );
+    const fault = this.faults.findIndex(
+      (entry) =>
+        entry.method === message.method && entry.path.test(url.pathname),
+    );
+    if (fault !== -1) {
+      const [{ status }] = this.faults.splice(fault, 1);
+      throw new StandInError(status, "The service is temporarily unavailable");
+    }
     const route = API_ROUTES.map((candidate) => ({
       candidate,
       match:
