@@ -54,12 +54,18 @@ async function spawnedBy(
   }
 }
 
+/** The subscription a payment charges, with its Mollie resource when reading it was needed. */
+export interface ChargedSubscription {
+  id: string;
+  mollie?: MollieSubscription;
+}
+
 export async function SubscriptionOfPayment(
   account: Account,
   payment: MolliePayment,
-): Promise<string | undefined> {
+): Promise<ChargedSubscription | undefined> {
   const charged = ReadOwn(payment.metadata, OWN_CHARGE);
-  if (isOwnChargeData(charged)) return charged.subscription;
+  if (isOwnChargeData(charged)) return { id: charged.subscription };
   if (!payment.subscriptionId || !payment.customerId) return undefined;
   const subscription = await spawnedBy(
     account,
@@ -67,6 +73,9 @@ export async function SubscriptionOfPayment(
     payment.subscriptionId,
   );
   return subscription && IsOwnSubscription(subscription)
-    ? SubscriptionId(payment.customerId, payment.subscriptionId)
+    ? {
+        id: SubscriptionId(payment.customerId, payment.subscriptionId),
+        mollie: subscription,
+      }
     : undefined;
 }

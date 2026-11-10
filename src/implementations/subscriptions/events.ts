@@ -9,7 +9,7 @@ import {
 import { LoadRecord } from "./records";
 import { ToSubscription } from "./mapping";
 import type { Account } from "../../accounts";
-import { SubscriptionOfPayment } from "../shared/subscription-of-payment";
+import type { ChargedSubscription } from "../shared/subscription-of-payment";
 import type { MolliePayment, MolliePaymentStatus } from "../../mollie/types";
 
 const handlers = new Map<string, SubscriptionEventHandler>();
@@ -57,10 +57,12 @@ export function LifecycleEvent(
 
 async function currentState(
   account: Account,
-  id: string,
+  charged: ChargedSubscription,
 ): Promise<Subscription | undefined> {
   try {
-    return ToSubscription(await LoadRecord(account, id));
+    return ToSubscription(
+      await LoadRecord(account, charged.id, charged.mollie),
+    );
   } catch (error) {
     if (error instanceof SubscriptionNotFoundError) return undefined;
     throw error;
@@ -75,15 +77,14 @@ function chargeTime(payment: MolliePayment): number {
 export async function DispatchChargeEvents(
   account: Account,
   payment: MolliePayment,
+  charged: ChargedSubscription | undefined,
 ): Promise<void> {
   const type = CHARGE_EVENT_BY_STATUS[payment.status];
-  if (!type) return;
-  const id = await SubscriptionOfPayment(account, payment);
-  if (!id) return;
-  const subscription = await currentState(account, id);
+  if (!type || !charged) return;
+  const subscription = await currentState(account, charged);
   if (!subscription) return;
   await Raise({
-    id: `${id}:${payment.id}:${payment.status}`,
+    id: `${charged.id}:${payment.id}:${payment.status}`,
     type,
     createdAt: chargeTime(payment),
     subscription,

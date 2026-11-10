@@ -191,3 +191,59 @@ describe("[mollie] subscription events", function () {
     assert.equal(canceled[0].subscription.status, "canceled");
   });
 });
+
+function subscriptionReadsDuring<T>(
+  subscription: Subscription,
+  work: () => Promise<T>,
+): Promise<[T, number]> {
+  const { parent, child } = ParseSubscriptionId(subscription.id) ?? {
+    parent: "",
+    child: "",
+  };
+  const path = `/v2/customers/${parent}/subscriptions/${child}`;
+  const before = PrimaryAccount().requests.length;
+  return work().then((result) => [
+    result,
+    PrimaryAccount()
+      .requests.slice(before)
+      .filter((request) => request.method === "GET" && request.path === path)
+      .length,
+  ]);
+}
+
+describe("[mollie] subscription reads per webhook", function () {
+  this.timeout(TEST_TIMEOUT);
+
+  before(function () {
+    RequireStandIn(this);
+  });
+
+  it("reads a renewal's subscription from Mollie once per webhook delivery", async () => {
+    const payer = await NewPayer();
+    const subscription = await CreateSubscription(monthly(payer), Key());
+    const renewal = renew(subscription);
+    await Eventually(
+      () =>
+        StandIn().deliveries.some(
+          (delivery) => delivery.body === `id=${renewal.id}`,
+        ),
+      "the renewal's delivery",
+    );
+    const [event, reads] = await subscriptionReadsDuring(subscription, () =>
+      VerifyWebhook({ body: WebhookBody(renewal.id), headers: FORM }),
+    );
+    assert.equal(event?.type, "payment.succeeded");
+    assert.equal(reads, 1);
+  });
+
+  it("reads no subscription for an open renewal, whose webhook raises nothing", async () => {
+    const payer = await NewPayer();
+    const subscription = await CreateSubscription(monthly(payer), Key());
+    const renewal = renew(subscription);
+    const [event, reads] = await subscriptionReadsDuring(subscription, () =>
+      VerifyWebhook({ body: WebhookBody(renewal.id), headers: FORM }),
+    );
+    assert.equal(event, undefined);
+    assert.equal(reads, 0);
+  });
+});

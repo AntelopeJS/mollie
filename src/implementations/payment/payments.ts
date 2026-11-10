@@ -63,12 +63,11 @@ function PaymentBody(
   };
 }
 
-export async function MarkSubscriptionCharge(
-  account: Account,
+export function MarkSubscriptionCharge(
   mollie: MolliePayment,
-  payment = ToPayment(mollie),
-): Promise<Payment> {
-  const subscription = await SubscriptionOfPayment(account, mollie);
+  subscription: string | undefined,
+): Payment {
+  const payment = ToPayment(mollie);
   if (!subscription) return payment;
   return {
     ...payment,
@@ -128,8 +127,11 @@ export async function GetPayment(
 ): Promise<Payment> {
   const account = GetAccount(provider);
   const payment = await ReadPayment(account, id);
-  return Translating(id, PAYMENT_ENTITY, () =>
-    MarkSubscriptionCharge(account, payment),
+  return Translating(id, PAYMENT_ENTITY, async () =>
+    MarkSubscriptionCharge(
+      payment,
+      (await SubscriptionOfPayment(account, payment))?.id,
+    ),
   );
 }
 

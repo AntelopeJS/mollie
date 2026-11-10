@@ -12,6 +12,7 @@ import { IsMollieId } from "../../mollie/ids";
 import { type Account, GetAccount } from "../../accounts";
 import { DispatchChargeEvents } from "../subscriptions/events";
 import { MarkSubscriptionCharge, ReadPayment } from "./payments";
+import { SubscriptionOfPayment } from "../shared/subscription-of-payment";
 import type { MolliePayment, MolliePaymentStatus } from "../../mollie/types";
 
 const ID_FIELD = "id";
@@ -66,18 +67,17 @@ async function confirmedPayment(
   }
 }
 
-async function buildEvent(
-  account: Account,
+function buildEvent(
   payment: MolliePayment,
-): Promise<PaymentEvent | undefined> {
-  const type = EVENT_BY_STATUS[payment.status];
-  if (!type) return undefined;
+  type: PaymentEventType,
+  subscription: string | undefined,
+): PaymentEvent {
   const at = STATUS_TIME[payment.status](payment) ?? payment.createdAt;
   return {
     id: `${payment.id}:${payment.status}`,
     type,
     createdAt: ToEpochMillis(at),
-    payment: await MarkSubscriptionCharge(account, payment),
+    payment: MarkSubscriptionCharge(payment, subscription),
   };
 }
 
@@ -87,8 +87,11 @@ export async function VerifyWebhook(
 ): Promise<PaymentEvent | undefined> {
   const account = GetAccount(provider);
   const payment = await confirmedPayment(account, namedPayment(request));
+  const type = EVENT_BY_STATUS[payment.status];
+  if (!type) return undefined;
   return Translating(payment.id, "payment", async () => {
-    await DispatchChargeEvents(account, payment);
-    return buildEvent(account, payment);
+    const charged = await SubscriptionOfPayment(account, payment);
+    await DispatchChargeEvents(account, payment, charged);
+    return buildEvent(payment, type, charged?.id);
   });
 }
