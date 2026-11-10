@@ -10,6 +10,8 @@ import { PaymentMethodId } from "../../mollie/ids";
 import { MollieStandIn } from "../stand-in/server";
 import type { AccountConfig } from "../../accounts";
 import { DefinedFields } from "../../mollie/fields";
+import { BrowserCheckout } from "./browser-checkout";
+import { HttpCheckout } from "./http-checkout";
 import { type PayerPolicy, TestPayer } from "./payer";
 import { SelectTarget, type TestTarget } from "./target";
 import type { MolliePayment } from "../../mollie/types";
@@ -139,6 +141,7 @@ export async function StartHarness(
   const payer = new TestPayer(
     client,
     policy,
+    target.standIn ? new HttpCheckout() : new BrowserCheckout(),
     target.standIn ? STAND_IN_PAYER_INTERVAL_MS : LIVE_PAYER_INTERVAL_MS,
   );
   payer.start();
