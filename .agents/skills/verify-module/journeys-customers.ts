@@ -73,7 +73,8 @@ const savedMethodCharge: Journey = {
       context.expect(after.folder, [
         answered(detached),
         same("no saved method is left", pick(after.value, "length") ?? (Array.isArray(after.value) ? after.value.length : -1), 0),
-        same("Mollie keeps the revoked mandate as invalid", pick((await wire(session.base, "GET", `/v2/customers/${saved.customer}/mandates/${mandate}`, PRIMARY_KEY)).json, "status"), "invalid"),
+        same("Mollie no longer holds the mandate as valid", pick((await wire(session.base, "GET", `/v2/customers/${saved.customer}/mandates/${mandate}`, PRIMARY_KEY)).json, "status") === "valid", false),
+        same("the module asked Mollie to revoke the mandate", callsTo(session, "DELETE", `/v2/customers/${saved.customer}/mandates/${mandate}`).length, 1),
       ]);
     });
   },

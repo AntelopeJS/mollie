@@ -41,9 +41,9 @@ An application module holds funds with `authorizeOnly`, then captures in part wi
 
 ## Sub-features
 
-- `hold-capture`: an authorize-only charge on a saved card is `pending` until Mollie authorizes it (a hosted card payment reads `requires_action` instead), then captures in part and records the capture at Mollie; a replayed key returns the capture, another key is a state error.
+- `hold-capture`: an authorize-only charge on a saved card is `pending` until Mollie authorizes it, a hosted one reads `requires_action` while it waits on the payer, and the card one captures in part and records the capture at Mollie; a replayed key returns the capture, another key is a state error.
 - `hold-release`: cancelling an authorization releases it, cancelling an open payment cancels it, cancelling again returns it, and a settled payment cannot be cancelled.
-- `hold-refused`: an authorize-only payment on a method Mollie would capture at once is refused before any payment request; a saved SEPA mandate is read from Mollie first, to learn its method.
+- `hold-refused`: an authorize-only payment on a method Mollie would capture at once is refused before any payment request; on a saved SEPA mandate it is refused after the module reads the mandate from Mollie to learn its method.
 
 ## How to get to it (user POV)
 

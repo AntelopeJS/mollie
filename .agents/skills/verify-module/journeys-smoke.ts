@@ -22,7 +22,7 @@ const payThroughStandIn: Journey = {
 };
 
 const requestContract: Journey = {
-  title: "a request to Mollie is a JSON POST under the account's API key as a bearer token, to the configured API URL",
+  title: "a request to Mollie is a POST carrying the payment as its body, under the account's API key as a bearer token, to the configured API URL",
   entryPoint: "`CreatePayment` through core against the stand-in for Mollie",
   async run(context) {
     await withSession(context, async (session) => {
