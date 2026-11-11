@@ -26,8 +26,8 @@ Java 11 or later comes from `$JAVA`, else `java` on PATH, else the `eclipse-temu
 
 | Configuration | Creation calls | Subscriptions cancelled | States (creation, cancellation) | Wall time |
 | --- | --- | --- | --- | --- |
-| CI (`<spec>.ci.cfg`) | 2 | 2 | 2,944, 3,057 | about 5 s |
-| Full (`<spec>.cfg`) | 3 | 3 | 142,913, 172,039 | about 9 s |
+| CI (`<spec>.ci.cfg`) | 2 | 2 | 3,126, 3,021 | about 5 s |
+| Full (`<spec>.cfg`) | 3 | 3 | 158,592, 165,731 | about 9 s |
 
 The times are uncached runs in Docker Java 21 on 32 cores; most of each is container and JVM start-up.
 
