@@ -15,7 +15,8 @@ export function IsCount(value: unknown): value is number {
   return typeof value === "number";
 }
 
-const LAST_DAY_OF_9999 = Date.UTC(9999, 11, 31);
+/** The start of 31 December 9999 UTC, the latest instant {@link IsInstant} accepts. */
+export const LAST_DAY_OF_9999 = Date.UTC(9999, 11, 31);
 
 /**
  * A whole number of milliseconds from the epoch to the start of 31 December

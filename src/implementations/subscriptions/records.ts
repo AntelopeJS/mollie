@@ -26,6 +26,7 @@ import {
   IsCount,
   IsInstant,
   IsText,
+  LAST_DAY_OF_9999,
   ObjectWith,
   OneOf,
   Optional,
@@ -34,8 +35,10 @@ import {
 import {
   FitsMetadataLimit,
   MergeOwn,
+  MetadataRoom,
   type OwnFields,
   ReadOwn,
+  WriteMetadata,
 } from "../../mollie/metadata";
 import type {
   JsonValue,
@@ -126,6 +129,44 @@ export function KeyHash(idempotencyKey: string): string {
     .update(idempotencyKey)
     .digest("hex")
     .slice(0, KEY_HASH_LENGTH);
+}
+
+/**
+ * The longest cancellation idempotency key every subscription keeps room
+ * for, in UTF-8 bytes of its JSON text. A UUID takes 36.
+ */
+export const CANCEL_KEY_BYTES = 64;
+
+/** Mollie's payment ids are opaque; test mode gave 24 characters in November 2026. */
+const PAYMENT_ID_ROOM = 32;
+
+/**
+ * The widest marks the module adds to a subscription's metadata after
+ * creating it: the first charge, which is wider than the refusal it
+ * excludes, and a cancellation at the period end under a key of
+ * `CANCEL_KEY_BYTES`, ending at the latest instant the module reads.
+ */
+const WIDEST_LATER_MARKS: Pick<OwnSubscription, "firstPayment" | "cancel"> = {
+  firstPayment: "x".repeat(PAYMENT_ID_ROOM),
+  cancel: {
+    timing: "period_end",
+    key: "x".repeat(CANCEL_KEY_BYTES),
+    endsAt: LAST_DAY_OF_9999,
+  },
+};
+
+/**
+ * The bytes a new subscription's metadata, `own` beside the caller's
+ * `metadata`, leaves of Mollie's limit once the module has added its later
+ * marks; negative when one of those writes would pass the limit.
+ */
+export function RoomAfterLaterWrites(
+  own: OwnSubscription,
+  metadata: Record<string, string> | undefined,
+): number {
+  return MetadataRoom(
+    WriteMetadata({ ...own, ...WIDEST_LATER_MARKS }, metadata),
+  );
 }
 
 export interface SubscriptionRecord {

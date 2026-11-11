@@ -101,7 +101,7 @@ Assert only what a user observes: what the interface returns and what the stand-
 | `Expire`, `LateFailure` | Mollie forgets a key after an hour (`src/test/stand-in/SOURCES.md`, Idempotency); Mollie settles the first charge after the call returned |
 | `Listed` | `ShownSubscription` (records.ts:142-151), from `ListSubscriptions` (changes.ts:56-75) and `LoadRecord` (records.ts:313-327), which `GetSubscription` and `CancelSubscription` call |
 | `Load` | `LoadRecord` with `earlyEndOf` (records.ts:228-244), `ToSubscription`'s ending (mapping.ts:93-110), `cancel` (changes.ts:126-151), `replayOrRefuse` and `isSameRequest` (77-96) |
-| `PatchMark`, `Delete` | `cancelAtMollie` (changes.ts:98-112) |
+| `PatchMark`, `Delete` | `cancelAtMollie` (changes.ts:125-142); its room check (134-138) rejects before the PATCH and sends nothing, a call that ends with no state change, which `Fail` covers |
 | `ReadCustomer`, `PatchCustomer` | `endEarly` (changes.ts:114-124), `RecordEarlyEnd` with `oneAtATime` (records.ts:246-290) |
 | no action | `UpdateSubscriptionPaymentMethod` (changes.ts:186-209), the webhook path (`DispatchChargeEvents`, events.ts:75-98, `SubscriptionOfPayment`) |
 
@@ -113,7 +113,7 @@ The creation spec runs 2 (CI) or 3 (full) calls under one key for one customer, 
 
 The models leave out:
 
-- trial and anchor starts, which never charge or refuse, and request validation and the mandate read, which write nothing.
+- trial and anchor starts, which never charge or refuse, and request validation, the room check of the metadata (creation.ts:160, from 410) and the mandate read, which write nothing.
 - the 250-payment page `earlierCharge` reads: the model sees every charge of the customer, and docs/4.subscriptions.md states the bound.
 - a replay whose body differs from the first request's, such as a `startDate` across an Amsterdam midnight, which Mollie answers 400 while it remembers the key; Mollie's 409 to a replay racing its original; a request Mollie applies after the client timed out.
 - retries of a cancellation under the same key: two attempts each grow the cancellation spec past 4.5 million states.

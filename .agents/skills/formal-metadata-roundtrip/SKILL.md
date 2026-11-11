@@ -49,7 +49,7 @@ The model is `src/test/support/metadata-model.ts`. The expected values are the g
 | `ownSubscriptionValues` | same, the interval table of `docs/4.subscriptions.md`, and the forms of Mollie's `interval` it documents | With Mollie's `interval` drawn from documented forms and ones Mollie never sends, an own subscription record the module accepts has values it could have written: an integer count from 1 to the interval's longest, and a cancellation end that is an integer from 0 to the start of 31 December 9999 UTC. A read rejects only with a `SubscriptionError` naming the subscription, and only when neither the stored period nor Mollie's interval is one the module writes. | holds (F3 fixed) |
 | `laterWritesFit` | `docs/4.subscriptions.md` "Metadata": about 1 kB per subscription, an own record of up to about 400 bytes, about 600 bytes for the caller's `metadata` | Caller metadata of at most 600 bytes (the JSON text, padded to exactly 600 half the time) next to an own record of at most 400 bytes stays within 1,024 bytes after the first charge or the refusal and then a cancellation now or at the period end. Nothing beyond the budget is generated. | holds |
 | `earlyEndsFit` | `docs/4.subscriptions.md` "Cancelling": "room for about twenty" early ends | Twenty early ends fit a customer with no other metadata. | holds |
-| `subscriptionWritesFit` | interface `CancelSubscription`: a subscription that has not ended can be cancelled; `CreateSubscription` refuses a request outside the contract with `InvalidSubscriptionRequestError` | For any caller metadata of any size (padded from 0 to 1,024 bytes) next to an own record with keys up to the widest of the budget, whose creation fits Mollie's 1,024 bytes, the first charge or the refusal and then a cancellation now or at the period end with a key of up to 64 bytes (`CANCEL_KEY_BYTES`) stay within 1,024 bytes. Creations past 1,024 are discarded: Mollie refuses them, so the module never stores them. | finding F5 |
+| `subscriptionWritesFit` | interface `CancelSubscription`: a subscription that has not ended can be cancelled; `CreateSubscription` refuses a request outside the contract with `InvalidSubscriptionRequestError`; `docs/4.subscriptions.md` "Metadata": at least 600 caller bytes with a reference and key of up to 64 bytes | For an own record with keys up to the widest of the budget and caller metadata of any size (padded from 0 to 1,024 bytes, or to 16 bytes either side of the edge where the widest write reaches 1,024), creation's room check (`RoomAfterLaterWrites`) accepts every caller of at most 600 bytes beside a reference and key of at most 64 bytes. For every creation it accepts, the first charge or the refusal, with a payment id of 10 or 21 characters, and then a cancellation now or at the period end with a key of up to 64 bytes, stay within 1,024 bytes. | holds (F5 fixed) |
 | `corpusReads` | the golden corpus | Every shape written since `ef5dfaf` reads through the interfaces as the version that wrote it read it. | holds |
 | `legacyEarlyEnd` | the golden corpus | The first release's early end ends its subscription early. | holds |
 | `corpusCoversWriters` | the golden corpus | Every record today's writers write has the format of a fixture still written (`until: null`). | holds |
@@ -82,7 +82,8 @@ A writer change that stores a new format fails `corpusCoversWriters` and names t
 This is randomized testing of real code, not an exhaustive proof. It does not cover:
 
 - What Mollie does with metadata beyond a JSON round trip. Whether it keeps key order, accepts NUL or lone surrogates, counts its 1 kB in bytes or characters, and refuses or truncates above it is not observed. The stand-in refuses a request whose `metadata` is over 1,024 bytes, (`SOURCES.md`). `laterWritesFit` counts UTF-8 bytes of the JSON text.
-- Cancellation keys longer than 64 bytes. The interface bounds no idempotency key, and the cancellation key is only known when the caller cancels. `subscriptionWritesFit` keeps room for a key of 64 bytes of JSON text, a UUID takes 36.
+- Cancellation keys longer than 64 bytes. The interface bounds no idempotency key, and the cancellation key is only known when the caller cancels. Creation keeps room for a key of 64 bytes of JSON text, a UUID takes 36. A longer key that does not fit makes `CancelSubscription` reject with a `SubscriptionError` and send nothing (`subscription-metadata-room.test.ts`).
+- The room creation keeps beyond what Mollie was seen to write. It reserves 32 characters for a payment id, and test mode gave 24, and an end of 15 digits, where a period end in this century takes 13: 10 bytes in all. A change to the reserve smaller than that passes the property (M42 in `MUTATIONS.md`).
 - The one byte past 1,024 at the budget's joint edge. 400 own bytes, 600 caller bytes and the 25 bytes of the two wrapper keys make 1,025. The widest keys make an own record of 398 bytes and 1,023 in all (`pins laterWritesFit`). The docs say "about", so the byte is not asserted.
 - Inputs the interfaces never pass: caller metadata values that are not strings, and own records the module never writes, such as `firstPayment` with `refused`. The generators produce such combinations anyway, as a superset.
 - Two writers merging into the same metadata at once. `formal-subscription-lifecycle` owns that race.
@@ -94,7 +95,7 @@ This is randomized testing of real code, not an exhaustive proof. It does not co
 
 ## Coverage record
 
-Last code synchronization is `#62`, on top of the F3 fix (#63).
+Last code synchronization is the F5 fix, on top of #62.
 
 | File | Covered functions and role |
 | --- | --- |
@@ -113,30 +114,18 @@ Generator coverage at the default seed, over 300 samples each:
 - It holds a cancellation mark 75 times: 11 with a valid key and an unknown timing, 6 with a key of another type, 23 with an end of another type.
 - Metadata another writer left has a `metadata` object of its own 149 times and is JSON text 138 times, and 71 nested objects hold a string entry. 209 non-object texts are JSON of another type.
 - The caller metadata of `laterWritesFit` is exactly 600 bytes 105 times and never more.
+- `subscriptionWritesFit` runs 300 creations the room check accepts and discards 432 it refuses.
 - Own records are 43 payments, 45 charges, 49 captures, 44 refunds, 79 customers and 40 subscriptions.
 - Tampered subscription records have a count of 0 or less 151 times and a non-integer count 82 times. 249 hold a cancellation end, 137 of them an integer past the last day of 9999 that a `Date` still holds.
 - Mollie's interval is a form Mollie does not document 69 times and a documented one 231 times.
 
 ## Findings
 
-One finding stands. Counterexamples are at seed `20261111`. F1 to F4 are in `FIXED.md`.
-
-### F5: `subscriptionWritesFit`, a subscription created with long caller metadata can never be cancelled
-
-`CreateSubscription` checks no size, so Mollie stores any metadata up to 1,024 bytes. The module then adds `firstPayment` (31 bytes) on a charged start, or `refused`, and `cancelAtMollie` (`changes.ts`) PATCHes the cancellation mark, 35 bytes plus the key for `now` and 65 plus the key at the period end, before its DELETE. When that PATCH passes 1,024 bytes, Mollie answers 422 `The metadata storage is currently limited to 1024 bytes`, observed in test mode on 2026-11-11, `CancelSubscription` rejects with a `SubscriptionError`, the DELETE never runs, and Mollie keeps billing. Every later cancellation fails the same way. With a 55-byte key, caller metadata of about 680 to 760 bytes is enough.
-
-```text
-Counterexample: [{"reference":"\u0000\u0000","createKey":"antelope","interval":"day","intervalCount":1,"start":"anchor"},{"pad":"x" × 727},["tr_AAAAAAAAAA","\u0000" × 10 + "xxxx",1000000000000]]
-caller 737 bytes, created 865, with firstPayment 896, cancelled now 995, cancelled at the period end 1025
-```
-
-`pins subscriptionWritesFit` drives it through the interface on the stand-in: `CreateSubscription` with 700 bytes of caller metadata and a test key resolves with that metadata, `CancelSubscription` rejects for `now` and for `period_end` with `SubscriptionError` `The metadata storage is currently limited to 1024 bytes`, and the subscription stays `active` through `GetSubscription` and at Mollie. The test skips against Mollie's test mode.
-
-`laterWritesFit` still holds: within the documented 600 caller bytes and 400 own bytes, every write fits. F5 is a caller past that budget, which `CreateSubscription` accepts.
+No finding stands. Counterexamples are at seed `20261111`. F1 to F5 are in `FIXED.md`.
 
 ## Fixed
 
-`FIXED.md` records the findings this check found and fixed, F1 to F4, and how each was fixed: F1 and F2 in #62, F3 in #63, F4 in #61.
+`FIXED.md` records the findings this check found and fixed, F1 to F5, and how each was fixed: F1 and F2 in #62, F3 in #63, F4 in #61, F5 in the pull request after #64.
 
 
 ## Mutation evidence

@@ -72,13 +72,13 @@ Load(x) ==
       same == mark[s].key = KeyOf(x) \/ ended[s] = KeyOf(x)
   IN
   /\ pc[x] = "idle"
-  /\ IF HasEnded(s)                                  \* changes.ts:133-135, 77-96
+  /\ IF HasEnded(s)                                  \* changes.ts:163-165, 98-118
      THEN Answer(x, IF same THEN "ok" ELSE "error")
-     ELSE IF EndingLater(s) /\ t = "period_end"     \* changes.ts:136
+     ELSE IF EndingLater(s) /\ t = "period_end"     \* changes.ts:166
      THEN Answer(x, "ok")
-     ELSE IF EndingLater(s)                          \* changes.ts:137-138
+     ELSE IF EndingLater(s)                          \* changes.ts:167-168
      THEN Go(x, "readCustomer")
-     ELSE Go(x, "patchMark")                         \* changes.ts:139-146
+     ELSE Go(x, "patchMark")                         \* changes.ts:169-176
   /\ UNCHANGED <<status, mark, ended, copy>>
 
 (* cancelAtMollie PATCHes the metadata it loaded plus the cancel mark.    *)
@@ -86,7 +86,7 @@ PatchMark(x) ==
   LET s == x[1]
   IN
   /\ pc[x] = "patchMark"
-  /\ IF status[s] = "canceled"                       \* changes.ts:105-109
+  /\ IF status[s] = "canceled"                       \* changes.ts:139
      THEN /\ Answer(x, "error")
           /\ UNCHANGED mark
      ELSE /\ mark' = [mark EXCEPT ![s] = [timing |-> x[2], key |-> KeyOf(x)]]
@@ -98,7 +98,7 @@ Delete(x) ==
   LET s == x[1]
   IN
   /\ pc[x] = "delete"
-  /\ IF status[s] = "canceled"                       \* changes.ts:110-111
+  /\ IF status[s] = "canceled"                       \* changes.ts:140
      THEN /\ Answer(x, "error")
           /\ UNCHANGED status
      ELSE /\ status' = [status EXCEPT ![s] = "canceled"]

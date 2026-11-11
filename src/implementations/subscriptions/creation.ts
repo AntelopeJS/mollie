@@ -39,10 +39,12 @@ import {
   ToMollieInterval,
 } from "./calendar";
 import {
+  CANCEL_KEY_BYTES,
   CompleteRecord,
   CreateKeyOf,
   type OwnSubscription,
   ReadOwnSubscription,
+  RoomAfterLaterWrites,
   type StartKind,
   SubscriptionPath,
   type SubscriptionRecord,
@@ -137,26 +139,51 @@ async function existingFor(
   );
 }
 
+type Requested = Pick<Creation, "request" | "idempotencyKey" | "period">;
+
+function ownOfRequest(requested: Requested, start: StartKind): OwnSubscription {
+  const { request, period } = requested;
+  return {
+    reference: request.reference,
+    createKey: requested.idempotencyKey,
+    interval: period.interval,
+    intervalCount: period.count,
+    start,
+  };
+}
+
+/**
+ * Refuses a creation whose metadata would leave no room for the marks the
+ * module adds later: Mollie would refuse the cancellation's mark, and the
+ * subscription could never be cancelled.
+ */
+function assertRoomToCancel(requested: Requested): void {
+  const { request, period } = requested;
+  const own = ownOfRequest(requested, scheduleOf(request, period).start);
+  const room = RoomAfterLaterWrites(own, request.metadata);
+  if (room >= 0) return;
+  const callerBytes = Buffer.byteLength(JSON.stringify(request.metadata ?? {}));
+  throw invalid(
+    `The subscription's metadata takes ${callerBytes} bytes as JSON, and with this reference and idempotency key it leaves ${callerBytes + room} bytes for the subscription's metadata: Mollie keeps 1,024 bytes of metadata per subscription, and the module keeps the rest for its own record, the first charge and a cancellation under an idempotency key of up to ${CANCEL_KEY_BYTES} bytes`,
+  );
+}
+
 function subscriptionBody(
   account: Account,
   creation: Creation,
   schedule: Schedule,
 ) {
   const { request, period } = creation;
-  const own: OwnSubscription = {
-    reference: request.reference,
-    createKey: creation.idempotencyKey,
-    interval: period.interval,
-    intervalCount: period.count,
-    start: schedule.start,
-  };
   return {
     amount: ToMollieAmount(request.amount),
     interval: ToMollieInterval(period),
     startDate: FormatDate(schedule.startDate),
     description: `${request.description ?? DEFAULT_DESCRIPTION} (${request.reference})`,
     mandateId: creation.mandateId,
-    metadata: WriteMetadata(own, request.metadata),
+    metadata: WriteMetadata(
+      ownOfRequest(creation, schedule.start),
+      request.metadata,
+    ),
     ...DefinedFields({ webhookUrl: account.webhookUrl }),
   };
 }
@@ -380,6 +407,7 @@ export async function CreateSubscription(
     count: request.intervalCount ?? 1,
   };
   ToMollieInterval(period);
+  assertRoomToCancel({ request, idempotencyKey, period });
   const account = SubscriptionAccount(provider);
   const mandateId = await ChargeableMandate(
     account,
