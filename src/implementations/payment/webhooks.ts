@@ -7,7 +7,7 @@ import {
 } from "@antelopejs/interface-payment";
 
 import { Translating } from "./errors";
-import { ToEpochMillis } from "./mapping";
+import { ToEpochMillis, ToPayment } from "./mapping";
 import { IsMollieId } from "../../mollie/ids";
 import { type Account, GetAccount } from "../../accounts";
 import { DispatchChargeEvents } from "../subscriptions/events";
@@ -77,7 +77,7 @@ function buildEvent(
     id: `${payment.id}:${payment.status}`,
     type,
     createdAt: ToEpochMillis(at),
-    payment: MarkSubscriptionCharge(payment, subscription),
+    payment: MarkSubscriptionCharge(ToPayment(payment), subscription),
   };
 }
 

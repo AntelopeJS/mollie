@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { PaymentError } from "@antelopejs/interface-payment";
 
 import { MollieClient } from "./mollie/client";
@@ -17,18 +18,45 @@ export interface AccountConfig {
 export interface Account {
   client: MollieClient;
   webhookUrl?: string;
+  /** How long `CapturePayment` follows a capture until Mollie applies it. */
+  settleTimeoutMs: number;
+}
+
+/** What every account shares, from the module's top-level configuration. */
+export interface SharedSettings {
+  apiUrl?: string;
+  settleTimeoutMs?: number;
 }
 
 const accounts = new Map<string, Account>();
 const DEFAULT_ACCOUNT = "";
+const DEFAULT_SETTLE_TIMEOUT_MS = 10_000;
+const LONGEST_TIMER_MS = 2_147_483_647;
+
+/**
+ * The configured settle budget. A configuration read from JSON can carry any
+ * value there, and anything but a whole number of milliseconds from 0 to the
+ * longest delay a Node timer holds refuses to start the module.
+ * `Number.isInteger` takes no string for a number.
+ */
+function settleTimeoutMs(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_SETTLE_TIMEOUT_MS;
+  if (!Number.isInteger(value) || value < 0 || value > LONGEST_TIMER_MS) {
+    throw new RangeError(
+      `settleTimeoutMs must be a whole number of milliseconds from 0 to ${LONGEST_TIMER_MS}, not ${inspect(value)}`,
+    );
+  }
+  return value;
+}
 
 export function RegisterAccount(
   name: string | undefined,
   config: AccountConfig,
-  apiUrl?: string,
+  shared: SharedSettings,
 ): void {
   accounts.set(name ?? DEFAULT_ACCOUNT, {
-    client: new MollieClient({ apiKey: config.apiKey, apiUrl }),
+    client: new MollieClient({ apiKey: config.apiKey, apiUrl: shared.apiUrl }),
+    settleTimeoutMs: settleTimeoutMs(shared.settleTimeoutMs),
     ...DefinedFields({ webhookUrl: config.webhookUrl || undefined }),
   });
 }

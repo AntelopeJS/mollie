@@ -28,6 +28,8 @@ export interface MollieRequest {
   body?: object;
   idempotencyKey?: string;
   query?: Record<string, string>;
+  /** Ends the request early, on top of the client's own timeout. */
+  signal?: AbortSignal;
 }
 
 export interface MollieClientOptions {
@@ -91,6 +93,7 @@ export class MollieClient {
     path: string,
     resource: string,
     isItem: Guard<T>,
+    signal?: AbortSignal,
   ): Promise<T[]> {
     const isPage = ObjectWith<ListPage<T>>({
       _embedded: Optional(RecordOf(ListOf(isItem))),
@@ -99,7 +102,10 @@ export class MollieClient {
     const items: T[] = [];
     let next: string | undefined = `${API_VERSION_PATH}${path}`;
     while (next) {
-      const page = await this.request({ method: "GET", path: next }, isPage);
+      const page = await this.request(
+        { method: "GET", path: next, ...DefinedFields({ signal }) },
+        isPage,
+      );
       items.push(...(page._embedded?.[resource] ?? []));
       next = relativeLink(page._links?.next?.href);
     }
@@ -112,7 +118,10 @@ export class MollieClient {
         method: request.method,
         headers: this.headers(request),
         body: request.body ? JSON.stringify(request.body) : undefined,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.any([
+          AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          ...(request.signal ? [request.signal] : []),
+        ]),
       });
     } catch (error) {
       throw MollieApiError.unreachable(error);

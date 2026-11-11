@@ -36,8 +36,9 @@ const holdCapture: Journey = {
       const replay = await call(session, "CapturePayment replayed", "CapturePayment", [id, key, { value: 1000, currency: "EUR" }, null]);
       const second = await call(session, "CapturePayment again under a new key", "CapturePayment", [id, fresh("capture"), { value: 1000, currency: "EUR" }, null]);
       context.expect(second.folder, [
-        same("the same key returns the original capture", pick(replay.value, "amountCaptured", "value"), 1000),
+        same("the same key returns the original capture", [pick(replay.value, "status"), pick(replay.value, "amountCaptured", "value")], ["succeeded", 1000]),
         same("capturing again under a new key is refused as a state error", pick(thrown(second), 0), "InvalidPaymentStateError"),
+        same("the refused capture never reached Mollie", callsTo(session, "POST", `/v2/payments/${id}/captures`).length, 1),
       ]);
     });
   },

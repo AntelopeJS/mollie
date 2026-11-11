@@ -13,6 +13,7 @@ import {
 import { IsJsonValue } from "./json";
 import type {
   MollieAmount,
+  MollieCapture,
   MollieCustomer,
   MollieMandate,
   MolliePayment,
@@ -95,6 +96,17 @@ export const IsMollieRefund: Guard<MollieRefund> = ObjectWith<MollieRefund>({
   ]),
   paymentId: IsText,
   description: Optional(IsText),
+  metadata: IsMetadata,
+  createdAt: IsText,
+});
+
+export const IsMollieCapture: Guard<MollieCapture> = ObjectWith<MollieCapture>({
+  resource: OneOf(["capture"]),
+  id: IsText,
+  mode: OneOf(["live", "test"]),
+  amount: Nullable(IsMollieAmount),
+  status: OneOf(["pending", "succeeded", "failed"]),
+  paymentId: IsText,
   metadata: IsMetadata,
   createdAt: IsText,
 });
