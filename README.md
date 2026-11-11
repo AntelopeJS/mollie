@@ -38,6 +38,7 @@ It needs no other module. It uses no Redis, no database and no API module.
 - `webhookUrl` is the public URL of your route that passes Mollie's deliveries to `VerifyWebhook`. The module sends it with every payment and subscription it creates. Without it, Mollie calls nothing, so the module raises no payment event and reports no subscription renewal. Mollie refuses a `localhost` URL.
 - `accounts` holds further Mollie accounts, each with its own `apiKey` and `webhookUrl`. The key of each entry is the name that callers pass as the trailing `provider` argument of an interface function. The top-level account is the default.
 - `apiUrl` is the base URL of the Mollie API. It defaults to `https://api.mollie.com`. The test suite points it at a local stand-in.
+- `settleTimeoutMs` is how long `CapturePayment` waits for Mollie to apply a capture, in every account. It defaults to 10 seconds. `0` returns as soon as Mollie accepts the capture.
 
 The module uses API keys only. It does not support Mollie Connect or OAuth.
 
@@ -85,6 +86,7 @@ The module raises only `payment.*` events. A classic delivery names a payment, n
 - **Saved methods are Mollie mandates.** A payment with `savePaymentMethod` creates one, as Mollie's `first` payment. A saved method belongs to one customer. Detaching it revokes the mandate, and Mollie then cancels every subscription that charges it.
 - **Off-session charges settle later.** A charge against a saved method comes back `pending`. Mollie reports `succeeded`, `authorized` or `failed` afterwards, through the webhook. A decline is then a `failed` payment, not the result of the creating call.
 - **Holding funds works only for some methods.** `authorizeOnly` needs a method that Mollie can capture by hand: cards, Klarna, Billie, Riverty, Vipps, MobilePay, PayPal and Billink. The module refuses any other method instead of letting Mollie capture at once, and a hosted page offers only those methods.
+- **Captures settle after the call.** Mollie accepts a capture as `pending` and applies it about a second later. `CapturePayment` waits for that up to `settleTimeoutMs`. If Mollie has not applied the capture by then, `CapturePayment` returns the payment `pending`, with `amountCaptured` set to the amount being captured. A second capture of the same payment rejects with `InvalidPaymentStateError` before it reaches Mollie.
 - **Idempotency keys last one hour at Mollie.** `RefundPayment`, `CapturePayment` and `CreateSubscription` find their earlier result by key at any time. For other calls, a replay within the hour returns the original result. After the hour, Mollie treats the same key as a new request.
 - **No `refund.*` or `dispute.opened` events.** See [Webhooks](#webhooks).
 

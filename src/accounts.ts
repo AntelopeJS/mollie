@@ -17,18 +17,28 @@ export interface AccountConfig {
 export interface Account {
   client: MollieClient;
   webhookUrl?: string;
+  /** How long `CapturePayment` follows a capture until Mollie applies it. */
+  settleTimeoutMs: number;
+}
+
+/** What every account shares, from the module's top-level configuration. */
+export interface SharedSettings {
+  apiUrl?: string;
+  settleTimeoutMs?: number;
 }
 
 const accounts = new Map<string, Account>();
 const DEFAULT_ACCOUNT = "";
+const DEFAULT_SETTLE_TIMEOUT_MS = 10_000;
 
 export function RegisterAccount(
   name: string | undefined,
   config: AccountConfig,
-  apiUrl?: string,
+  shared: SharedSettings,
 ): void {
   accounts.set(name ?? DEFAULT_ACCOUNT, {
-    client: new MollieClient({ apiKey: config.apiKey, apiUrl }),
+    client: new MollieClient({ apiKey: config.apiKey, apiUrl: shared.apiUrl }),
+    settleTimeoutMs: shared.settleTimeoutMs ?? DEFAULT_SETTLE_TIMEOUT_MS,
     ...DefinedFields({ webhookUrl: config.webhookUrl || undefined }),
   });
 }

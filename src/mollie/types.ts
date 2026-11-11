@@ -92,7 +92,7 @@ export interface MollieRefund {
   createdAt: string;
 }
 
-export type MollieCaptureStatus = "pending" | "succeeded" | "failed";
+type MollieCaptureStatus = "pending" | "succeeded" | "failed";
 
 export interface MollieCapture {
   resource: "capture";

@@ -20,6 +20,7 @@ import {
   ReadOwn,
 } from "../../mollie/metadata";
 import type {
+  MollieCapture,
   MollieMandate,
   MolliePayment,
   MolliePaymentStatus,
@@ -105,10 +106,32 @@ export function CheckoutUrl(payment: MolliePayment): string | undefined {
     : undefined;
 }
 
-export function ToPaymentStatus(payment: MolliePayment): PaymentStatus {
+/**
+ * The capture Mollie has accepted for an authorized payment but not applied to
+ * it yet. Mollie keeps the payment `authorized`, with nothing captured, until
+ * it processes the capture.
+ */
+function inFlight(
+  payment: MolliePayment,
+  capture: MollieCapture | undefined,
+): MollieCapture | undefined {
+  return payment.status === "authorized" && capture?.status !== "failed"
+    ? capture
+    : undefined;
+}
+
+/**
+ * The payment's status for the interface. `capture` is the payment's capture,
+ * when the caller has read it: with one in flight the payment is `pending`.
+ */
+export function ToPaymentStatus(
+  payment: MolliePayment,
+  capture?: MollieCapture,
+): PaymentStatus {
   if (CheckoutUrl(payment)) {
     return "requires_action";
   }
+  if (inFlight(payment, capture)) return "pending";
   return STATUS_BY_MOLLIE[payment.status] ?? "pending";
 }
 
@@ -128,7 +151,14 @@ function toFailure(payment: MolliePayment): PaymentFailure {
   };
 }
 
-function capturedAmount(payment: MolliePayment): Payment["amountCaptured"] {
+function capturedAmount(
+  payment: MolliePayment,
+  capture: MollieCapture | undefined,
+): Payment["amountCaptured"] {
+  const accepted = inFlight(payment, capture);
+  if (accepted) {
+    return FromMollieAmount(accepted.amount ?? payment.amount);
+  }
   if (payment.amountCaptured) {
     return FromMollieAmount(payment.amountCaptured);
   }
@@ -143,15 +173,22 @@ function savedMethod(payment: MolliePayment): string | undefined {
     : undefined;
 }
 
-export function ToPayment(payment: MolliePayment): Payment {
-  const status = ToPaymentStatus(payment);
+/**
+ * The payment as the interface reports it. Pass the payment's capture when it
+ * has been read, so that one Mollie has not applied yet shows.
+ */
+export function ToPayment(
+  payment: MolliePayment,
+  capture?: MollieCapture,
+): Payment {
+  const status = ToPaymentStatus(payment, capture);
   const metadata = ReadCallerMetadata(payment.metadata);
   const paymentMethod = savedMethod(payment);
   const redirectUrl = CheckoutUrl(payment);
   return {
     id: payment.id,
     amount: FromMollieAmount(payment.amount),
-    amountCaptured: capturedAmount(payment),
+    amountCaptured: capturedAmount(payment, capture),
     amountRefunded: payment.amountRefunded
       ? FromMollieAmount(payment.amountRefunded)
       : ZeroAmount(payment.amount.currency),

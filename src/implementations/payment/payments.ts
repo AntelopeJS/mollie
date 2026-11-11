@@ -1,6 +1,7 @@
-import { IsText, ObjectWith, Optional } from "../../mollie/guards";
-import { IsJsonValue } from "../../mollie/json";
-import { IsMolliePayment } from "../../mollie/resources";
+import { IsText } from "../../mollie/guards";
+import { MollieApiError } from "../../mollie/errors";
+import { setTimeout as delay } from "node:timers/promises";
+import { IsMollieCapture, IsMolliePayment } from "../../mollie/resources";
 import { SUBSCRIPTION_METADATA_KEY } from "@antelopejs/interface-subscriptions";
 import {
   type Amount,
@@ -23,7 +24,11 @@ import {
 import { type OwnFields, ReadOwn, WriteMetadata } from "../../mollie/metadata";
 import { FromMollieAmount, ToMollieAmount } from "../../mollie/amounts";
 import { SubscriptionOfPayment } from "../shared/subscription-of-payment";
-import type { MolliePayment, MollieSequenceType } from "../../mollie/types";
+import type {
+  MollieCapture,
+  MolliePayment,
+  MollieSequenceType,
+} from "../../mollie/types";
 import {
   AssertCapturable,
   AssertConsistent,
@@ -35,6 +40,8 @@ import {
 const PAYMENT_ENTITY = "payment";
 const MANUAL = "manual";
 const CAPTURE_PAGE = "?limit=250";
+const SETTLE_POLL_MS = 250;
+const UNPROCESSABLE = 422;
 
 function sequenceType(
   request: PaymentRequest,
@@ -70,10 +77,9 @@ function PaymentBody(
 }
 
 export function MarkSubscriptionCharge(
-  mollie: MolliePayment,
+  payment: Payment,
   subscription: string | undefined,
 ): Payment {
-  const payment = ToPayment(mollie);
   if (!subscription) return payment;
   return {
     ...payment,
@@ -140,18 +146,27 @@ export async function GetPayment(
 ): Promise<Payment> {
   const account = GetAccount(provider);
   const payment = await ReadPayment(account, id);
-  return Translating(id, PAYMENT_ENTITY, async () =>
-    MarkSubscriptionCharge(
-      payment,
+  return Translating(id, PAYMENT_ENTITY, async () => {
+    const [capture] =
+      payment.status === "authorized" ? await readCaptures(account, id) : [];
+    return MarkSubscriptionCharge(
+      ToPayment(payment, capture),
       (await SubscriptionOfPayment(account, payment))?.id,
-    ),
-  );
+    );
+  });
 }
 
-function refuse(payment: MolliePayment, action: string): never {
-  const status = ToPaymentStatus(payment);
+function refuse(
+  payment: MolliePayment,
+  action: string,
+  capture?: MollieCapture,
+): never {
+  const status = ToPaymentStatus(payment, capture);
+  const atMollie = capture
+    ? `${payment.status} at Mollie, with capture ${capture.id} ${capture.status}`
+    : `${payment.status} at Mollie`;
   throw new InvalidPaymentStateError(
-    `Payment ${payment.id} is ${status} (${payment.status} at Mollie) and cannot be ${action}`,
+    `Payment ${payment.id} is ${status} (${atMollie}) and cannot be ${action}`,
     status,
   );
 }
@@ -167,31 +182,106 @@ function assertCapturableAmount(payment: MolliePayment, amount?: Amount): void {
   }
 }
 
-interface Capture {
-  metadata?: MolliePayment["metadata"];
-}
-
-const IsCapture = ObjectWith<Capture>({ metadata: Optional(IsJsonValue) });
-
 interface OwnCapture {
   key: string;
 }
 
 const OWN_CAPTURE: OwnFields<OwnCapture> = { key: IsText };
 
-async function hasCaptured(
+interface Hold {
+  payment: MolliePayment;
+  captures: MollieCapture[];
+}
+
+function readCaptures(account: Account, id: string): Promise<MollieCapture[]> {
+  return account.client.list(
+    `/payments/${id}/captures${CAPTURE_PAGE}`,
+    "captures",
+    IsMollieCapture,
+  );
+}
+
+async function readHold(account: Account, id: string): Promise<Hold> {
+  const [payment, captures] = await InTurnOrder(
+    ReadPayment(account, id),
+    readCaptures(account, id),
+  );
+  return { payment, captures };
+}
+
+/**
+ * The capture made earlier under this key, or `undefined` when the payment can
+ * take one. Mollie takes one capture per authorization, so any other capture,
+ * whatever its status, refuses the call.
+ */
+function earlierCapture(
+  { payment, captures }: Hold,
+  idempotencyKey: string,
+): MollieCapture | undefined {
+  const own = captures.find(
+    (capture) => ReadOwn(capture.metadata, OWN_CAPTURE)?.key === idempotencyKey,
+  );
+  if (own) return own;
+  const [other] = captures;
+  if (payment.status !== "authorized" || other) {
+    refuse(payment, "captured", other);
+  }
+  return undefined;
+}
+
+/**
+ * Mollie answers 422 to a capture of a payment that has one already, as it
+ * does for a suspended account. The payment is read again: a capture made
+ * meanwhile decides the call, and otherwise the 422 stands.
+ */
+async function requestCapture(
   account: Account,
   id: string,
   idempotencyKey: string,
-): Promise<boolean> {
-  const captures = await account.client.list(
-    `/payments/${id}/captures${CAPTURE_PAGE}`,
-    "captures",
-    IsCapture,
-  );
-  return captures.some(
-    (capture) => ReadOwn(capture.metadata, OWN_CAPTURE)?.key === idempotencyKey,
-  );
+  amount?: Amount,
+): Promise<MollieCapture> {
+  try {
+    return await account.client.request(
+      {
+        method: "POST",
+        path: `/payments/${id}/captures`,
+        body: {
+          metadata: WriteMetadata({ key: idempotencyKey }),
+          ...DefinedFields({
+            amount: amount ? ToMollieAmount(amount) : undefined,
+          }),
+        },
+        idempotencyKey,
+      },
+      IsMollieCapture,
+    );
+  } catch (error) {
+    if (!(error instanceof MollieApiError) || error.status !== UNPROCESSABLE) {
+      throw error;
+    }
+    const own = earlierCapture(await readHold(account, id), idempotencyKey);
+    if (!own) throw error;
+    return own;
+  }
+}
+
+/**
+ * Mollie applies a capture to the payment after it answers. The payment is
+ * read until it leaves `authorized` or the account's settle budget runs out;
+ * in the second case it is returned `pending`, with the amount being captured.
+ */
+async function followCapture(
+  account: Account,
+  payment: MolliePayment,
+  capture: MollieCapture,
+): Promise<Payment> {
+  const deadline = Date.now() + account.settleTimeoutMs;
+  let current = payment;
+  while (current.status === "authorized" && Date.now() < deadline) {
+    await delay(SETTLE_POLL_MS);
+    current = await ReadPayment(account, payment.id);
+  }
+  return ToPayment(current, capture);
 }
 
 export async function CapturePayment(
@@ -202,28 +292,13 @@ export async function CapturePayment(
 ): Promise<Payment> {
   const account = GetAccount(provider);
   if (!IsMollieId("payment", id)) throw NotFound(id, PAYMENT_ENTITY);
-  const [payment, isCaptured] = await InTurnOrder(
-    ReadPayment(account, id),
-    Translating(id, PAYMENT_ENTITY, () =>
-      hasCaptured(account, id, idempotencyKey),
-    ),
-  );
-  if (isCaptured) return ToPayment(payment);
-  if (payment.status !== "authorized") refuse(payment, "captured");
-  assertCapturableAmount(payment, amount);
   return Translating(id, PAYMENT_ENTITY, async () => {
-    await account.client.execute({
-      method: "POST",
-      path: `/payments/${id}/captures`,
-      body: {
-        metadata: WriteMetadata({ key: idempotencyKey }),
-        ...DefinedFields({
-          amount: amount ? ToMollieAmount(amount) : undefined,
-        }),
-      },
-      idempotencyKey,
-    });
-    return ToPayment(await ReadPayment(account, id));
+    const hold = await readHold(account, id);
+    const earlier = earlierCapture(hold, idempotencyKey);
+    if (earlier) return followCapture(account, hold.payment, earlier);
+    assertCapturableAmount(hold.payment, amount);
+    const capture = await requestCapture(account, id, idempotencyKey, amount);
+    return followCapture(account, hold.payment, capture);
   });
 }
 

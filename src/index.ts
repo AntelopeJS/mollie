@@ -22,12 +22,24 @@ export interface Config extends AccountConfig {
    * suite points it at a local stand-in.
    */
   apiUrl?: string;
+  /**
+   * How long `CapturePayment` waits for Mollie to apply a capture, in every
+   * account. Mollie accepts a capture as `pending` and applies it about a
+   * second later; past this budget the payment is returned `pending`, with the
+   * amount being captured. `0` returns as soon as Mollie accepts the capture.
+   * Default 10 seconds.
+   */
+  settleTimeoutMs?: number;
 }
 
 export async function construct(config: Config): Promise<void> {
-  RegisterAccount(undefined, config, config.apiUrl);
+  const shared = {
+    apiUrl: config.apiUrl,
+    settleTimeoutMs: config.settleTimeoutMs,
+  };
+  RegisterAccount(undefined, config, shared);
   for (const [name, account] of Object.entries(config.accounts ?? {})) {
-    RegisterAccount(name, account, config.apiUrl);
+    RegisterAccount(name, account, shared);
   }
   ImplementInterface(payment, await import("./implementations/payment"));
   ImplementInterface(
