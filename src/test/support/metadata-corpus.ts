@@ -108,7 +108,6 @@ export interface Fixture {
   since: string;
   until: string | null;
   writer: string;
-  finding?: string;
   seed: Seed;
   reads: Reads;
 }
@@ -133,7 +132,6 @@ const IsFixture = ObjectWith<Fixture>({
   since: IsText,
   until: OrNull(IsText),
   writer: IsText,
-  finding: Optional(IsText),
   seed: ObjectWith<Seed>({
     customer: Optional(IsSeedRecord),
     subscription: Optional(

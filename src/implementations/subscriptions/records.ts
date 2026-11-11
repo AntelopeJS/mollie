@@ -62,6 +62,13 @@ export interface EarlyEnd {
 
 type StoredEarlyEnd = [number, string];
 
+/** An early end as the first release stored it: the cancellation key itself, not its hash. */
+interface FirstReleaseEarlyEnd {
+  endedAt: number;
+  endsAt: number;
+  key: string;
+}
+
 interface OwnCustomer {
   endedEarly: Record<string, JsonValue>;
 }
@@ -90,6 +97,15 @@ const isStoredEarlyEnd: Guard<StoredEarlyEnd> = (
   value.length === 2 &&
   IsCount(value[0]) &&
   IsText(value[1]);
+
+const FIRST_RELEASE_FIELDS = 3;
+
+const isFirstReleaseEarlyEnd: Guard<FirstReleaseEarlyEnd> =
+  ObjectWith<FirstReleaseEarlyEnd>({
+    endedAt: IsCount,
+    endsAt: IsCount,
+    key: IsText,
+  });
 
 const OWN_CUSTOMER: OwnFields<OwnCustomer> = {
   endedEarly: RecordOf(IsJsonValue),
@@ -220,9 +236,17 @@ function endedEarly(customer: MollieCustomer): Record<string, JsonValue> {
 }
 
 function toEarlyEnd(stored: JsonValue | undefined): EarlyEnd | undefined {
-  if (!isStoredEarlyEnd(stored)) return undefined;
-  const [endedAt, keyHash] = stored;
-  return { endedAt, keyHash };
+  if (isStoredEarlyEnd(stored)) {
+    const [endedAt, keyHash] = stored;
+    return { endedAt, keyHash };
+  }
+  const isFirstRelease =
+    isFirstReleaseEarlyEnd(stored) &&
+    Object.keys(stored).length === FIRST_RELEASE_FIELDS;
+  if (isFirstRelease) {
+    return { endedAt: stored.endedAt, keyHash: KeyHash(stored.key) };
+  }
+  return undefined;
 }
 
 async function earlyEndOf(

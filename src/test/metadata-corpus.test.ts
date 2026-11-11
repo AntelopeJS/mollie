@@ -70,11 +70,6 @@ const PERIOD = { value: 1900, currency: "EUR" };
 const FAR_END = Date.UTC(2100, 0, 1);
 let keyedRuns = 0;
 
-const FINDINGS = {
-  legacyEarlyEnd:
-    "an early end the first release stored as an object ends its subscription early",
-} satisfies Record<string, string>;
-
 const requestedSeed = Number.parseInt(process.env.FC_SEED ?? "", 10);
 const PARAMETERS = {
   seed: Number.isInteger(requestedSeed) ? requestedSeed : DEFAULT_SEED,
@@ -349,23 +344,20 @@ describe("[mollie] metadata written by earlier versions", function () {
   });
 
   it("holds corpusReads: every stored shape since ef5dfaf reads as the version that wrote it read it", async () => {
-    const current = FIXTURES.filter((fixture) => !fixture.finding);
-    assert.ok(current.length > 0);
-    assert.deepEqual(await mismatches(current), []);
+    assert.ok(FIXTURES.length > 0);
+    assert.deepEqual(await mismatches(FIXTURES), []);
   });
 
-  for (const [name, claim] of Object.entries(FINDINGS)) {
-    it(`finding ${name}: ${claim}`, async () => {
-      const recorded = FIXTURES.filter((fixture) => fixture.finding === name);
-      assert.ok(recorded.length > 0, `no fixture records ${name}`);
-      const found = await mismatches(recorded);
-      assert.equal(
-        found.length,
-        recorded.length,
-        `${name} now reads as written: record it as holds`,
-      );
-    });
-  }
+  it("holds legacyEarlyEnd: the first release's early end ends its subscription early", async () => {
+    const [legacy] = FIXTURES.filter(
+      (fixture) => fixture.name === "early-end-first-release",
+    );
+    assert.ok(legacy);
+    const read = await ReadFixture(legacy);
+    assert.equal(read.subscription?.status, "canceled");
+    assert.equal(read.subscription?.cancelAtPeriodEnd, false);
+    assert.equal(read.subscription?.endedAt, 1779265800000);
+  });
 
   it("holds corpusCoversWriters: every record the writers write today has the shape of a current fixture", async () => {
     const payer = await NewPayer({ crm: "c-1" });
@@ -405,17 +397,6 @@ describe("[mollie] metadata written by earlier versions", function () {
   it("holds foreignInterfaceView: GetPayment and GetCustomer read another writer's metadata, with no `antelope` key, as its string entries", async () => {
     const details = await fc.check(foreignInterfaceView, PARAMETERS);
     assert.ok(!details.failed, fc.defaultReportMessage(details));
-  });
-
-  it("pins legacyEarlyEnd: the first release's early end reads as an end at the period end", async () => {
-    const [legacy] = FIXTURES.filter(
-      (fixture) => fixture.finding === "legacyEarlyEnd",
-    );
-    assert.ok(legacy);
-    const read = await ReadFixture(legacy);
-    assert.equal(read.subscription?.status, "active");
-    assert.equal(read.subscription?.cancelAtPeriodEnd, true);
-    assert.equal(read.subscription?.endedAt, null);
   });
 
   it("pins mergeKeepsForeignValue: an early end erases a customer's metadata that is a string", async () => {
