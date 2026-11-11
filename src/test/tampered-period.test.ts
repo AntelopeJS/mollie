@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
+import { VerifyWebhook } from "@antelopejs/interface-payment";
 import {
   CancelSubscription,
   CreateSubscription,
@@ -27,6 +28,7 @@ import { RenewSubscription } from "./stand-in/subscriptions-api";
 import { UNDOCUMENTED_MOLLIE_INTERVALS } from "./support/calendar-model";
 import { CurrentHarness } from "./support/harness";
 import {
+  FORM,
   Key,
   PrimaryAccount,
   Reference,
@@ -35,6 +37,7 @@ import {
   SettledPayment,
   StandIn,
   TEST_TIMEOUT,
+  WebhookBody,
   Within,
 } from "./support/helpers";
 import { NewPayer, type Payer } from "./support/payers";
@@ -303,6 +306,12 @@ describe("[mollie] a subscription whose stored period and Mollie's interval are 
       const request = requestFor(payer);
       const key = Key();
       const broken = await CreateSubscription(request, key);
+      const renewal = RenewSubscription(
+        PrimaryAccount(),
+        StandIn().paymentHooks,
+        heldByMollie(broken.id),
+      );
+      await SettledPayment(renewal.id);
       await tamper(broken.id, (stored) => ({ ...stored, intervalCount: 0 }));
       heldByMollie(broken.id).interval = interval;
       const held = heldFor(payer);
@@ -318,6 +327,12 @@ describe("[mollie] a subscription whose stored period and Mollie's interval are 
       }
       assert.equal(heldByMollie(broken.id).status, "active");
       assert.equal(heldFor(payer), held);
+
+      const event = await VerifyWebhook({
+        body: WebhookBody(renewal.id),
+        headers: FORM,
+      });
+      assert.equal(event?.payment?.id, renewal.id);
 
       const another = await create(payer);
       const ids = (await ListSubscriptions(payer.customer)).map(
