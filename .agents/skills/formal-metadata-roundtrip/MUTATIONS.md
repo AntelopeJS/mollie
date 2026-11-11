@@ -26,5 +26,9 @@ Each scratch change below was applied to the current code, rebuilt, run with bot
 | M20 | `MergeOwn` also writes a 120-byte `modifiedBy` field | `laterWritesFit` (a 600-byte caller and widest keys), `earlyEndsFit`, `mergeKeepsForeignKeys`, `corpusCoversWriters` |
 | M21 | `toEarlyEnd` ignores the first release's `{endedAt, key}` object (the code before the F4 fix) | `corpusReads`, `legacyEarlyEnd`, and both tests of `legacy-early-end.test.ts` |
 | M22 | `toEarlyEnd` keeps the first release's `key` unhashed as the key hash | the replay test of `legacy-early-end.test.ts` alone: no property replays a subscription cancellation under a stored key |
+| M23 | `ReadOwnSubscription` keeps any stored interval count, as before the F3 fix | `ownSubscriptionValues` `[{antelope:{…,interval:"day",intervalCount:0,start:"anchor"},metadata:{}}]` |
+| M24 | `OWN_SUBSCRIPTION.cancel.endsAt` accepts any number, as before the F3 fix | `ownSubscriptionValues` `[{antelope:{…,cancel:{timing:"now",key:"\u0000",endsAt:-5e-324}},metadata:{}}]` |
 
 M17 to M19 survived the first version: dropping the guard failed only a pin, a cancellation timing of any string passed `readsNeverThrow`, and no property asserted that a string is parsed. The generators then gained foreign metadata with a `metadata` object of its own and as JSON text, cancellation marks with a valid key and one bad field, and `textRoundTrip` and `textWithoutObject`, and `AssertOwnTypes` gained the cancellation mark. M20 shows that `laterWritesFit` and `earlyEndsFit` can fail at all. M7 and M13 first survived. The generators then gained a well-formed own record with one mistyped field, and keys with edge spaces or another case, and `keyedRoundTrip` went from 40 to 100 runs. Both are now caught.
+
+M23 and M24 each put back half of the code before the F3 fix. M24 also fails the stand-in test in `src/test/tampered-period.test.ts` for a cancellation end of `1e300`, with `RangeError: Invalid time value`.

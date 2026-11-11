@@ -15,6 +15,18 @@ export function IsCount(value: unknown): value is number {
   return typeof value === "number";
 }
 
+const LATEST_INSTANT = 8.64e15;
+
+/** A whole number of milliseconds since the epoch, not before it, that a `Date` can hold. */
+export function IsInstant(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= LATEST_INSTANT
+  );
+}
+
 export function IsFlag(value: unknown): value is boolean {
   return typeof value === "boolean";
 }

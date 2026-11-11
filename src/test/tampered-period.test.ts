@@ -6,9 +6,15 @@ import {
   GetSubscription,
   InvalidSubscriptionStateError,
   ListSubscriptions,
+  SUBSCRIPTION_INTERVALS,
   type Subscription,
 } from "@antelopejs/interface-subscriptions";
 
+import {
+  AddPeriods,
+  ParseDate,
+  PeriodStartBefore,
+} from "../implementations/subscriptions/calendar";
 import { SubscriptionPath } from "../implementations/subscriptions/records";
 import { ParseSubscriptionId } from "../mollie/ids";
 import { IsJsonObject } from "../mollie/metadata";
@@ -153,6 +159,35 @@ const TAMPERED: { name: string; own: JsonObject }[] = [
   },
   { name: "an interval count of -1", own: { intervalCount: -1 } },
 ];
+
+describe("[mollie] calendar periods with a count no schedule has", () => {
+  const anchor = ParseDate("2026-01-31");
+  const end = Date.parse("2026-06-15T00:00:00Z");
+  let stopWatching: () => Promise<void> = async () => undefined;
+
+  before(() => {
+    stopWatching = watchEventLoop(BLOCKED_LIMIT_MS);
+  });
+
+  after(async () => {
+    await stopWatching();
+  });
+
+  for (const count of [0, -1, 1.5]) {
+    it(`refuses an interval count of ${count} with a RangeError instead of a date or a loop`, () => {
+      for (const interval of SUBSCRIPTION_INTERVALS) {
+        assert.throws(
+          () => AddPeriods(anchor, { interval, count }, 1),
+          RangeError,
+        );
+        assert.throws(
+          () => PeriodStartBefore(anchor, { interval, count }, end),
+          RangeError,
+        );
+      }
+    });
+  }
+});
 
 describe("[mollie] subscriptions whose own record another writer changed", function () {
   this.timeout(TEST_TIMEOUT);

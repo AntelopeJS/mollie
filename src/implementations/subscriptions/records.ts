@@ -17,11 +17,13 @@ import type { Account } from "../../accounts";
 import { MollieApiError } from "../../mollie/errors";
 import { IsJsonValue } from "../../mollie/json";
 import { TranslatingSubscription } from "./errors";
+import { FromMollieInterval, IsBillablePeriod, type Period } from "./calendar";
 import { DefinedFields } from "../../mollie/fields";
 import { ParseSubscriptionId } from "../../mollie/ids";
 import {
   type Guard,
   IsCount,
+  IsInstant,
   IsText,
   ObjectWith,
   OneOf,
@@ -86,7 +88,7 @@ const OWN_SUBSCRIPTION: OwnFields<OwnSubscription> = {
   cancel: ObjectWith<CancelMark>({
     timing: OneOf(CANCELLATION_TIMINGS),
     key: IsText,
-    endsAt: Optional(IsCount),
+    endsAt: Optional(IsInstant),
   }),
 };
 
@@ -130,22 +132,31 @@ export interface SubscriptionRecord {
 
 const LATEST_PAYMENT_PAGE = { limit: "1" };
 
+function storedPeriod(own: Partial<OwnSubscription>): Period | undefined {
+  const { interval, intervalCount: count } = own;
+  if (interval === undefined || count === undefined) return undefined;
+  const period = { interval, count };
+  return IsBillablePeriod(period) ? period : undefined;
+}
+
+/**
+ * The module's record of a subscription, or undefined when its metadata holds
+ * none. Anything holding the API key can change that metadata, so an interval
+ * and count the module could not have written read as the interval Mollie
+ * bills: `n months` reads as `month` × n. Throws a `RangeError` only when
+ * Mollie's interval is also not one of the forms Mollie documents.
+ */
 export function ReadOwnSubscription(
   mollie: MollieSubscription,
 ): OwnSubscription | undefined {
   const own = ReadOwn(mollie.metadata, OWN_SUBSCRIPTION);
-  if (
-    own?.reference === undefined ||
-    own.interval === undefined ||
-    own.intervalCount === undefined ||
-    own.start === undefined
-  )
-    return undefined;
+  if (own?.reference === undefined || own.start === undefined) return undefined;
+  const period = storedPeriod(own) ?? FromMollieInterval(mollie.interval);
   return {
     ...own,
     reference: own.reference,
-    interval: own.interval,
-    intervalCount: own.intervalCount,
+    interval: period.interval,
+    intervalCount: period.count,
     start: own.start,
   };
 }

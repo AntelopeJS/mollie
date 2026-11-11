@@ -128,11 +128,33 @@ function addMonths(
   return { year, month, day: Math.min(anchorDay, daysInMonth(year, month)) };
 }
 
+/**
+ * Whether Mollie can bill `period`: a whole count of at least one, no longer
+ * than Mollie's longest interval for its unit.
+ */
+export function IsBillablePeriod(period: Period): boolean {
+  const unit = UNIT_BY_INTERVAL[period.interval];
+  return (
+    Number.isInteger(period.count) &&
+    period.count >= 1 &&
+    period.count * unit.perInterval <= unit.maximum
+  );
+}
+
+/**
+ * The schedule date `times` periods after `anchor`. Throws a `RangeError` for
+ * a count that is not a whole number of at least one, which no schedule has.
+ */
 export function AddPeriods(
   anchor: CalendarDate,
   period: Period,
   times: number,
 ): CalendarDate {
+  if (!Number.isInteger(period.count) || period.count < 1) {
+    throw new RangeError(
+      `An interval count is a whole number of at least 1, not ${period.count}`,
+    );
+  }
   const total = period.count * times;
   const unitsByInterval: Record<SubscriptionInterval, () => CalendarDate> = {
     day: () => addDays(anchor, total),

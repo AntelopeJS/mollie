@@ -367,7 +367,7 @@ describe("[mollie] metadata round trip properties", function () {
     "every metadata reader returns its documented types for any JSON, and a record without an own object is not the module's",
     readsNeverThrow,
   );
-  finding(
+  holds(
     "ownSubscriptionValues",
     "an own subscription record the module accepts has values the module writes",
     ownSubscriptionValues,
@@ -458,30 +458,6 @@ describe("[mollie] metadata generators and pinned findings", () => {
     assert.ok(counts.some((count) => IsNumberValue(count) && count <= 0));
     assert.ok(
       counts.some((count) => IsNumberValue(count) && !Number.isInteger(count)),
-    );
-  });
-
-  it("pins ownSubscriptionValues: interval counts 0 and -1 read as the module's, and 0 makes the period read throw", () => {
-    const tampered = (intervalCount: number) =>
-      SubscriptionWith(
-        Wire({
-          [OWN]: {
-            ...READ_OWN,
-            createKey: "create-1",
-            interval: "day",
-            intervalCount,
-          },
-          metadata: {},
-        }),
-      );
-    assert.equal(ReadOwnSubscription(tampered(-1))?.intervalCount, -1);
-    const mollie = tampered(0);
-    const own = ReadOwnSubscription(mollie);
-    assert.ok(own);
-    assert.equal(own.intervalCount, 0);
-    assert.throws(
-      () => ToSubscription({ id: SUBSCRIPTION_ID, mollie, own }, NOW),
-      { name: "RangeError", message: "Invalid time value" },
     );
   });
 
