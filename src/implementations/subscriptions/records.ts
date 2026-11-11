@@ -344,7 +344,7 @@ export async function RecordEarlyEnd(
     const metadata = MergeOwn(customer.metadata, { endedEarly: merged });
     if (!FitsMetadataLimit(metadata)) {
       throw new SubscriptionError(
-        `No room is left in the metadata of customer ${customer.id} to record the early end of subscription ${record.mollie.id}: Mollie keeps about 1 kB of metadata per customer, and the customer's own metadata and the early ends already recorded fill it`,
+        `There is no room to record the early end of subscription ${record.mollie.id} in the metadata of customer ${customer.id}: Mollie keeps about 1 kB of metadata per customer, and the customer's own metadata and the early ends already recorded fill it`,
       );
     }
     await account.client.execute({
