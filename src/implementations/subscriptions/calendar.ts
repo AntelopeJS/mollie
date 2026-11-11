@@ -143,6 +143,51 @@ export function AddPeriods(
   return unitsByInterval[period.interval]();
 }
 
+const MS_PER_DAY = 86_400_000;
+
+function unitsBetween(
+  anchor: CalendarDate,
+  date: CalendarDate,
+  interval: Period["interval"],
+): number {
+  const months =
+    (date.year - anchor.year) * MONTHS_PER_YEAR + (date.month - anchor.month);
+  const days =
+    (Date.UTC(date.year, date.month - 1, date.day) -
+      Date.UTC(anchor.year, anchor.month - 1, anchor.day)) /
+    MS_PER_DAY;
+  const byInterval: Record<Period["interval"], number> = {
+    day: days,
+    week: days / DAYS_PER_WEEK,
+    month: months,
+    year: months / MONTHS_PER_YEAR,
+  };
+  return byInterval[interval];
+}
+
+/**
+ * The last schedule date that starts strictly before `end`, counted from
+ * `anchor`, so a month or year period keeps the anchor's day after a clamped
+ * month end. Constant time, whatever the number of periods since the anchor:
+ * the index is estimated from the elapsed days or months, then corrected
+ * against the schedule's own dates.
+ */
+export function PeriodStartBefore(
+  anchor: CalendarDate,
+  period: Period,
+  end: number,
+): CalendarDate {
+  const elapsed = unitsBetween(anchor, DateOf(end), period.interval);
+  let index = Math.max(0, Math.floor(elapsed / period.count));
+  while (index > 0 && StartOf(AddPeriods(anchor, period, index)) >= end) {
+    index -= 1;
+  }
+  while (StartOf(AddPeriods(anchor, period, index + 1)) < end) {
+    index += 1;
+  }
+  return AddPeriods(anchor, period, index);
+}
+
 export function NextDateFrom(instant: number): CalendarDate {
   const today = DateOf(instant);
   return StartOf(today) >= instant ? today : addDays(today, 1);

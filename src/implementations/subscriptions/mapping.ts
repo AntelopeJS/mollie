@@ -11,6 +11,7 @@ import { ReadCallerMetadata } from "../../mollie/metadata";
 import type { MolliePaymentStatus } from "../../mollie/types";
 import {
   AddPeriods,
+  PeriodStartBefore,
   DateOf,
   ParseDate,
   type Period,
@@ -65,7 +66,7 @@ function endingBefore(record: SubscriptionRecord, end: number): Bounds {
     return { start: firstPeriodStart(record), end };
   }
   return {
-    start: StartOf(AddPeriods(DateOf(end), periodOf(record), -1)),
+    start: StartOf(PeriodStartBefore(anchor, periodOf(record), end)),
     end,
   };
 }
