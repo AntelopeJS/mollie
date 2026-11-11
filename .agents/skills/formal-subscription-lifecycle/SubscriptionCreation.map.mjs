@@ -27,7 +27,8 @@ const WHERE = new Map([
   ["earlier", "Read it uncharged"],
   ["postCharge", "Found no first charge"],
   ["patchFirst", "Holds an open first charge"],
-  ["patchRefused", "Holds a failed first charge"],
+  ["patchRefused", "Holds a declined first charge"],
+  ["recheck", "Found the first charge failed"],
   ["cancel", "Cancelling it as refused"],
 ]);
 
@@ -84,11 +85,12 @@ const STEPS = {
   Get: (who, next) =>
     next === "cancel" ? `${who} reads it refused` : next === "done" ? `${who} reads it charged` : `${who} reads it uncharged`,
   Earlier: (who, next) =>
-    next === "postCharge" ? `${who} finds no first charge` : `${who} finds the first charge ${next === "patchRefused" ? "failed" : "open"}`,
+    next === "postCharge" ? `${who} finds no first charge` : `${who} finds the first charge ${next === "recheck" ? "failed" : "open"}`,
   PostCharge: (who, next) =>
     next === "patchRefused" ? `${who} charges, Mollie declines` : next === "patchFirst" ? `${who} charges` : `${who}'s charge answer is lost`,
   PatchFirst: (who) => `${who} records the first charge`,
   PatchRefused: (who) => `${who} marks the subscription refused`,
+  Recheck: (who, next) => (next === "done" ? `${who} reads it again, charged` : `${who} reads it again, uncharged`),
   Cancel: (who) => `${who} cancels the refused subscription`,
   Fail: (who) => `a request of ${who} fails`,
 };

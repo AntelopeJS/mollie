@@ -161,6 +161,19 @@ function subscriptionBody(
   };
 }
 
+async function readSubscription(
+  account: Account,
+  mollie: MollieSubscription,
+): Promise<MollieSubscription> {
+  return account.client.request(
+    {
+      method: "GET",
+      path: SubscriptionPath(mollie.customerId, mollie.id),
+    },
+    IsMollieSubscription,
+  );
+}
+
 async function createAtMollie(
   account: Account,
   creation: Creation,
@@ -240,8 +253,6 @@ async function chargeFirstPeriod(
   mollie: MollieSubscription,
   creation: Creation,
 ): Promise<MolliePayment> {
-  const earlier = await earlierCharge(account, id, mollie);
-  if (earlier) return earlier;
   return account.client.request(
     {
       method: "POST",
@@ -276,6 +287,11 @@ async function cancelRefused(
   });
 }
 
+/**
+ * Refuses a subscription whose first charge Mollie declined in its creating
+ * response, which this call holds. No call records such a charge as the first
+ * period, so the `refused` mark erases no `firstPayment`.
+ */
 async function refuse(
   account: Account,
   mollie: MollieSubscription,
@@ -296,6 +312,25 @@ function ownOf(mollie: MollieSubscription): OwnSubscription {
   return own;
 }
 
+/**
+ * Settles a first charge an earlier call made, found failed. That charge may
+ * have failed after another call recorded it as the first period and returned
+ * the subscription, so this call writes no metadata: it returns the
+ * subscription when a call has recorded the charge, and otherwise cancels it.
+ */
+async function settleFailedEarlierCharge(
+  account: Account,
+  id: string,
+  read: MollieSubscription,
+  payment: MolliePayment,
+): Promise<SubscriptionRecord> {
+  const mollie = await readSubscription(account, read);
+  const own = ownOf(mollie);
+  if (own.firstPayment) return CompleteRecord(account, id, mollie, own);
+  await cancelRefused(account, mollie);
+  throw refusal(payment);
+}
+
 async function settleFirstPeriod(
   account: Account,
   id: string,
@@ -309,7 +344,12 @@ async function settleFirstPeriod(
     throw refusal(await readPayment(account, own.refused));
   }
   if (own.start === "charged" && !own.firstPayment) {
-    const payment = await chargeFirstPeriod(account, id, mollie, creation);
+    const earlier = await earlierCharge(account, id, mollie);
+    if (earlier?.status === "failed") {
+      return settleFailedEarlierCharge(account, id, mollie, earlier);
+    }
+    const payment =
+      earlier ?? (await chargeFirstPeriod(account, id, mollie, creation));
     if (payment.status === "failed") await refuse(account, mollie, payment);
     mollie = await updateOwn(account, mollie, { firstPayment: payment.id });
     own = ownOf(mollie);
@@ -323,13 +363,7 @@ async function create(
 ): Promise<Subscription> {
   const posted = await createAtMollie(account, creation);
   const id = SubscriptionId(creation.request.customer, posted.id);
-  const current = await account.client.request(
-    {
-      method: "GET",
-      path: SubscriptionPath(posted.customerId, posted.id),
-    },
-    IsMollieSubscription,
-  );
+  const current = await readSubscription(account, posted);
   return ToSubscription(
     await settleFirstPeriod(account, id, current, creation),
   );
