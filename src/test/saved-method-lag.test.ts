@@ -34,6 +34,8 @@ const OVERRUN_MS = 750;
 const MANDATE_READ = /^\/v2\/customers\/[^/]+\/mandates\/[^/]+$/;
 const PAID_AT_RESOLUTION_MS = 1500;
 const QUICK_MS = MANDATE_WAIT_MS / 10;
+const SHORT_LAG_MS = 1_500;
+const FEW_CALLERS = 5;
 
 async function paidSavingPayment(
   paymentMethod: string,
@@ -203,18 +205,18 @@ describe("[mollie] the wait for a saved card's mandate", function () {
     });
   });
 
-  it("waits again on the next read when a mandate read failed", async () => {
-    await withMandateLag("creditcard", STUCK_MS, async () => {
-      const { payment } = await paidSavingPayment("creditcard");
+  it("keeps every concurrent caller waiting past a failed mandate read", async () => {
+    await withMandateLag("creditcard", SHORT_LAG_MS, async () => {
+      const { customer, payment } = await paidSavingPayment("creditcard");
       StandIn().faults.push({ method: "GET", path: MANDATE_READ, status: 503 });
-      const [first, firstMs] = await timed(GetPayment(payment));
-      assert.equal(first.status, "succeeded");
-      assert.ok(firstMs < QUICK_MS, `the failed read took ${firstMs} ms`);
-      const [second, secondMs] = await timed(GetPayment(payment));
-      assert.equal(second.status, "succeeded");
-      assert.ok(
-        secondMs >= MANDATE_WAIT_MS - PAID_AT_RESOLUTION_MS,
-        `the next read took ${secondMs} ms`,
+      const reads = await Promise.all(
+        Array.from({ length: FEW_CALLERS }, () => GetPayment(payment)),
+      );
+      assert.ok(reads.every((read) => read.status === "succeeded"));
+      assert.equal(
+        (await ListPaymentMethods(customer)).length,
+        1,
+        "a failed read released the callers before the card was listable",
       );
     });
   });

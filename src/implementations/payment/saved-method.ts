@@ -51,20 +51,25 @@ async function isPending(
   }
 }
 
-/** Whether the wait reached an answer: the mandate settled, or the budget ran out. */
+/**
+ * Whether the wait reached an answer: the mandate settled, or the budget ran
+ * out after a read that succeeded. A failed read is tried again at the next
+ * poll, because every caller sharing this wait would otherwise stop with it.
+ */
 async function pollUntilListable(
   account: Account,
   card: SavedCard,
   deadline: number,
 ): Promise<boolean> {
+  let lastReadFailed = false;
   for (let left = deadline - Date.now(); left > 0;) {
     const pending = await isPending(account, card, left);
     if (pending === false) return true;
-    if (pending === undefined) return Date.now() >= deadline;
+    lastReadFailed = pending === undefined;
     await delay(Math.min(MANDATE_POLL_MS, Math.max(0, deadline - Date.now())));
     left = deadline - Date.now();
   }
-  return true;
+  return !lastReadFailed;
 }
 
 interface WaitLedger {
