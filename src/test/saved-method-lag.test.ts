@@ -7,7 +7,11 @@ import {
   VerifyWebhook,
 } from "@antelopejs/interface-payment";
 
-import { MANDATE_WAIT_MS } from "../implementations/payment/saved-method";
+import {
+  MANDATE_POLL_MS,
+  MANDATE_WAIT_MS,
+} from "../implementations/payment/saved-method";
+import { IsoIn } from "./stand-in/state";
 import {
   Eventually,
   FORM,
@@ -16,12 +20,18 @@ import {
   Reference,
   RequireStandIn,
   ReturnUrl,
+  StandIn,
   TEST_TIMEOUT,
   WebhookBody,
 } from "./support/helpers";
 
 const AMOUNT = { value: 1900, currency: "EUR" };
 const STUCK_MS = 10 * MANDATE_WAIT_MS;
+const CALLERS = 50;
+const SLOW_READ_MS = 8_000;
+const CLOCK_SKEW_MS = 60_000;
+const OVERRUN_MS = 750;
+const MANDATE_READ = /^\/v2\/customers\/[^/]+\/mandates\/[^/]+$/;
 const PAID_AT_RESOLUTION_MS = 1500;
 const QUICK_MS = MANDATE_WAIT_MS / 10;
 
@@ -124,6 +134,88 @@ describe("[mollie] a saved card, as soon as its payment reads succeeded", functi
       const [listed, listMs] = await timed(ListPaymentMethods(customer));
       assert.deepEqual(listed, []);
       assert.ok(listMs < QUICK_MS, `the listing took ${listMs} ms`);
+    });
+  });
+});
+
+describe("[mollie] the wait for a saved card's mandate", function () {
+  this.timeout(TEST_TIMEOUT);
+
+  before(function () {
+    RequireStandIn(this);
+  });
+
+  it("sends a bounded number of mandate reads however many callers wait on one payment", async () => {
+    await withMandateLag("creditcard", STUCK_MS, async () => {
+      const { payment } = await paidSavingPayment("creditcard");
+      const account = PrimaryAccount();
+      const reads = () =>
+        account.requests.filter(
+          (request) =>
+            request.method === "GET" && MANDATE_READ.test(request.path),
+        ).length;
+      const before = reads();
+      const answers = await Promise.all(
+        Array.from({ length: CALLERS }, () => GetPayment(payment)),
+      );
+      assert.ok(answers.every((answer) => answer.status === "succeeded"));
+      const sent = reads() - before;
+      assert.ok(
+        sent <= MANDATE_WAIT_MS / MANDATE_POLL_MS + 1,
+        `${CALLERS} callers sent ${sent} mandate reads`,
+      );
+    });
+  });
+
+  it("never holds a call past the budget when a mandate read is slow", async () => {
+    await withMandateLag("creditcard", STUCK_MS, async () => {
+      const { payment } = await paidSavingPayment("creditcard");
+      const slow = { method: "GET", path: MANDATE_READ, ms: SLOW_READ_MS };
+      StandIn().latencies.push(slow);
+      try {
+        const [read, readMs] = await timed(GetPayment(payment));
+        assert.equal(read.status, "succeeded");
+        assert.ok(
+          readMs <= MANDATE_WAIT_MS + OVERRUN_MS,
+          `the read took ${readMs} ms`,
+        );
+      } finally {
+        StandIn().latencies.splice(StandIn().latencies.indexOf(slow), 1);
+      }
+    });
+  });
+
+  it("waits once for a payment whose paidAt is ahead of the host clock", async () => {
+    await withMandateLag("creditcard", STUCK_MS, async () => {
+      const { payment } = await paidSavingPayment("creditcard");
+      const stored = PrimaryAccount().payments.get(payment);
+      assert.ok(stored);
+      stored.paidAt = IsoIn(CLOCK_SKEW_MS);
+      const [first, firstMs] = await timed(GetPayment(payment));
+      assert.equal(first.status, "succeeded");
+      assert.ok(
+        firstMs <= MANDATE_WAIT_MS + OVERRUN_MS,
+        `the first read took ${firstMs} ms`,
+      );
+      const [second, secondMs] = await timed(GetPayment(payment));
+      assert.equal(second.status, "succeeded");
+      assert.ok(secondMs < QUICK_MS, `the next read took ${secondMs} ms`);
+    });
+  });
+
+  it("waits again on the next read when a mandate read failed", async () => {
+    await withMandateLag("creditcard", STUCK_MS, async () => {
+      const { payment } = await paidSavingPayment("creditcard");
+      StandIn().faults.push({ method: "GET", path: MANDATE_READ, status: 503 });
+      const [first, firstMs] = await timed(GetPayment(payment));
+      assert.equal(first.status, "succeeded");
+      assert.ok(firstMs < QUICK_MS, `the failed read took ${firstMs} ms`);
+      const [second, secondMs] = await timed(GetPayment(payment));
+      assert.equal(second.status, "succeeded");
+      assert.ok(
+        secondMs >= MANDATE_WAIT_MS - PAID_AT_RESOLUTION_MS,
+        `the next read took ${secondMs} ms`,
+      );
     });
   });
 });

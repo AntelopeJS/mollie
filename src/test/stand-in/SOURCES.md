@@ -155,5 +155,6 @@ These exist only so the tests can make time pass or force an outcome. The module
 - `delays`: the next request matching a method and a path is answered that many milliseconds late, once per entry, standing for a slow Mollie.
 - `interceptions`: work run once just before the next request matching a method and a path, standing for another caller acting between the module's read and its request.
 - `declinesAtCreation`: a recurring payment on that mandate is `failed` in its creating response. Nothing documents that Mollie ever does this; it exists to exercise the module's handling of a `failed` status in a creating response, which the API's schema allows.
+- `latencies`: every request matching a method and a path is held for the given milliseconds before any route runs, so a slow read can be timed.
 - `mandateLagMs`: how long a mandate of each method stays `pending` after its payment is paid.
 - `declinesAtCreation`: a recurring payment on that mandate is `failed` in its creating response. Mollie is not documented to do this; it exercises a `failed` creating response, which the schema allows.
