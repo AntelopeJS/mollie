@@ -1,6 +1,6 @@
 {
   "name": "@antelopejs/mollie",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "A Mollie payment module that implements the payment and subscriptions interfaces of antelopejs",
   "keywords": [
     "antelopejs",
@@ -9,6 +9,7 @@
     "payment",
     "subscription"
   ],
+  "homepage": "https://github.com/AntelopeJS/mollie#readme",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -16,6 +17,7 @@
   },
   "files": [
     "dist",
+    "!dist/test",
     "docs",
     "skills"
   ],
