@@ -226,20 +226,51 @@ async function earlyEndOf(
   }
 }
 
+const customerWrites = new Map<string, Promise<void>>();
+
+async function oneAtATime(
+  customerId: string,
+  write: () => Promise<void>,
+): Promise<void> {
+  const earlier = customerWrites.get(customerId);
+  const current = (async () => {
+    await Promise.allSettled([earlier]);
+    await write();
+  })();
+  customerWrites.set(customerId, current);
+  try {
+    await current;
+  } finally {
+    if (customerWrites.get(customerId) === current) {
+      customerWrites.delete(customerId);
+    }
+  }
+}
+
+/**
+ * Adds the subscription's early end to its customer's metadata. The write
+ * carries every early end the read before it found, and Mollie has no
+ * conditional update, so two early ends written from one earlier read would
+ * erase each other. Within this process, each customer's early ends are read
+ * and written one at a time.
+ */
 export async function RecordEarlyEnd(
   account: Account,
   record: SubscriptionRecord,
   earlyEnd: EarlyEnd,
 ): Promise<void> {
-  const customer = await readCustomer(account, record.mollie.customerId);
-  const merged = {
-    ...endedEarly(customer),
-    [record.mollie.id]: [earlyEnd.endedAt, earlyEnd.keyHash],
-  };
-  await account.client.execute({
-    method: "PATCH",
-    path: `/customers/${customer.id}`,
-    body: { metadata: MergeOwn(customer.metadata, { endedEarly: merged }) },
+  const { customerId } = record.mollie;
+  await oneAtATime(customerId, async () => {
+    const customer = await readCustomer(account, customerId);
+    const merged = {
+      ...endedEarly(customer),
+      [record.mollie.id]: [earlyEnd.endedAt, earlyEnd.keyHash],
+    };
+    await account.client.execute({
+      method: "PATCH",
+      path: `/customers/${customer.id}`,
+      body: { metadata: MergeOwn(customer.metadata, { endedEarly: merged }) },
+    });
   });
 }
 

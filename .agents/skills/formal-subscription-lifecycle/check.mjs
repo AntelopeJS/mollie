@@ -23,9 +23,7 @@ const CREATION_FINDINGS = {
 };
 
 /** Rules main breaks in the cancellation spec. */
-const CANCELLATION_FINDINGS = {
-  EarlyEndNotLost: 13,
-};
+const CANCELLATION_FINDINGS = {};
 
 /** The findings of each spec under each configuration, in run order. */
 const SPECS = {

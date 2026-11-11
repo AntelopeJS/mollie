@@ -56,7 +56,7 @@ Running == {c \in Calls : pc[c] \notin {"idle", "done"}}
 
 (* ListSubscriptions and GetSubscription show a subscription that carries  *)
 (* the module's metadata and no refused mark (changes.ts:65-66,            *)
-(* records.ts:271-272). Every subscription here carries the metadata.      *)
+(* records.ts:302-303). Every subscription here carries the metadata.      *)
 Listed(i) == ~subs[i].refused
 
 Init ==
