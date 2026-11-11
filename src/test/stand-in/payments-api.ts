@@ -11,6 +11,7 @@ import {
   type PaymentHooks,
   PaymentOf,
   ReadAmount,
+  RefundsLink,
   zero,
 } from "./payments";
 import {
@@ -242,19 +243,84 @@ function refundable(payment: MolliePayment, amount: MollieAmount): void {
   }
 }
 
-function adjust(payment: MolliePayment, refunded: string): void {
-  const refundedUnits = minor(refunded);
-  const total = minor(payment.amountRefunded?.value ?? "0") + refundedUnits;
-  const left =
-    minor((payment.amountRemaining ?? payment.amount).value) - refundedUnits;
-  payment.amountRefunded = {
+type PaymentAmount = "amountRemaining" | "amountRefunded";
+
+function move(
+  payment: MolliePayment,
+  field: PaymentAmount,
+  units: number,
+  from: MollieAmount,
+): void {
+  payment[field] = {
     currency: payment.amount.currency,
-    value: format(total, payment.amount.value),
+    value: format(minor((payment[field] ?? from).value) + units, from.value),
   };
-  payment.amountRemaining = {
+}
+
+function moveRemaining(
+  payment: MolliePayment,
+  refunded: string,
+  direction: 1 | -1,
+): void {
+  move(payment, "amountRemaining", direction * minor(refunded), payment.amount);
+}
+
+function moveRefunded(
+  payment: MolliePayment,
+  refunded: string,
+  direction: 1 | -1,
+): void {
+  const none = {
     currency: payment.amount.currency,
-    value: format(left, payment.amount.value),
+    value: zero(payment.amount),
   };
+  move(payment, "amountRefunded", direction * minor(refunded), none);
+}
+
+/**
+ * Sets what Mollie reports in one of a payment's own amounts, or leaves it out.
+ * Mollie's test mode reports `amountRemaining` above the payment's amount on
+ * some paid payments, and `amountRefunded` can trail a refund that already
+ * reads `refunded`.
+ */
+export function ReportAmount(
+  account: Account,
+  paymentId: string,
+  field: PaymentAmount,
+  value: string | undefined,
+): void {
+  const payment = PaymentOf(account, paymentId);
+  payment[field] =
+    value === undefined
+      ? undefined
+      : { currency: payment.amount.currency, value };
+}
+
+const UNSUCCESSFUL: ReadonlySet<MollieRefund["status"]> = new Set([
+  "failed",
+  "canceled",
+]);
+
+/**
+ * Moves a refund to another status the way Mollie does. A refund that ends
+ * `failed` or `canceled` gives its amount back to `amountRemaining`, and the
+ * payment's `amountRefunded` follows the refund into and out of `refunded`.
+ */
+export function ReviseRefund(
+  account: Account,
+  refund: MollieRefund,
+  status: MollieRefund["status"],
+): void {
+  const payment = PaymentOf(account, refund.paymentId);
+  const wasLost = UNSUCCESSFUL.has(refund.status);
+  const isLost = UNSUCCESSFUL.has(status);
+  if (isLost && !wasLost) moveRemaining(payment, refund.amount.value, 1);
+  if (wasLost && !isLost) moveRemaining(payment, refund.amount.value, -1);
+  const wasSettled = refund.status === "refunded";
+  const isSettled = status === "refunded";
+  if (isSettled && !wasSettled) moveRefunded(payment, refund.amount.value, 1);
+  if (wasSettled && !isSettled) moveRefunded(payment, refund.amount.value, -1);
+  refund.status = status;
 }
 
 export function CreateRefund(request: Request): StandInResponse {
@@ -265,15 +331,17 @@ export function CreateRefund(request: Request): StandInResponse {
     resource: "refund",
     id: NewId("re"),
     amount,
-    status: "pending",
+    status: "refunded",
     paymentId: payment.id,
     description: Text(request.body.description),
     metadata: request.body.metadata ?? null,
     createdAt: NowIso(),
   };
-  adjust(payment, amount.value);
+  moveRemaining(payment, amount.value, -1);
+  moveRefunded(payment, amount.value, 1);
+  payment._links.refunds = RefundsLink(request.hooks, payment.id);
   request.account.refunds.set(refund.id, refund);
-  return Ok(refund, 201);
+  return Ok({ ...refund, status: "pending" }, 201);
 }
 
 export function GetRefund(request: Request): StandInResponse {

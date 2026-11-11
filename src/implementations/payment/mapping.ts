@@ -174,12 +174,52 @@ function savedMethod(payment: MolliePayment): string | undefined {
 }
 
 /**
+ * Whether Mollie holds a refund of the payment. Mollie links `refunds` on a
+ * payment from the first refund it creates, and on no payment before. Its
+ * `amountRemaining` is no sign of a refund: test mode reports it above the
+ * payment's amount on some paid payments.
+ */
+export function HasRefunds(payment: MolliePayment): boolean {
+  return Boolean(payment._links.refunds);
+}
+
+/**
+ * The total of the refunds Mollie reports `refunded`, the interface's
+ * `succeeded` refunds. `Payment.amountRefunded` is "how much has been refunded
+ * so far. Zero until a refund settles", so a `queued`, `pending`, `processing`,
+ * `failed` or `canceled` refund is not counted. Mollie's own `amountRefunded`
+ * moves when a refund settles, but it can trail the refund's status, so it is
+ * read only when the refunds could not be (`null`), rather than failing the
+ * read of a payment that exists.
+ */
+function refundedAmount(
+  payment: MolliePayment,
+  refunds: readonly MollieRefund[] | null,
+): Payment["amountRefunded"] {
+  if (refunds === null) {
+    return payment.amountRefunded
+      ? FromMollieAmount(payment.amountRefunded)
+      : ZeroAmount(payment.amount.currency);
+  }
+  const value = refunds
+    .filter((refund) => REFUND_STATUS_BY_MOLLIE[refund.status] === "succeeded")
+    .reduce(
+      (total, refund) => total + FromMollieAmount(refund.amount).value,
+      0,
+    );
+  return { value, currency: ZeroAmount(payment.amount.currency).currency };
+}
+
+/**
  * The payment as the interface reports it. Pass the payment's capture when it
- * has been read, so that one Mollie has not applied yet shows.
+ * has been read, so that one Mollie has not applied yet shows, and its refunds
+ * when it has any (`HasRefunds`), for the refunded amount, or `null` when
+ * listing them failed.
  */
 export function ToPayment(
   payment: MolliePayment,
   capture?: MollieCapture,
+  refunds: readonly MollieRefund[] | null = [],
 ): Payment {
   const status = ToPaymentStatus(payment, capture);
   const metadata = ReadCallerMetadata(payment.metadata);
@@ -189,9 +229,7 @@ export function ToPayment(
     id: payment.id,
     amount: FromMollieAmount(payment.amount),
     amountCaptured: capturedAmount(payment, capture),
-    amountRefunded: payment.amountRefunded
-      ? FromMollieAmount(payment.amountRefunded)
-      : ZeroAmount(payment.amount.currency),
+    amountRefunded: refundedAmount(payment, refunds),
     status,
     reference: ReadOwn(payment.metadata, OWN_PAYMENT)?.reference ?? "",
     createdAt: ToEpochMillis(payment.createdAt),

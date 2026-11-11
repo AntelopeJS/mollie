@@ -50,7 +50,6 @@ A journey whose claim needs behaviour Mollie's test mode cannot produce runs on 
 | `cancel-open`            | No method the test account offers (`creditcard`, `paybybank`, `bancontact`, `belfius`) leaves an open payment cancelable: Mollie answers 422. |
 | `saved-method-pending`   | An off-session card charge is answered `paid` by the creating call, so it is never `pending`.                                                  |
 | `subscribe-declined`     | The same: a first period charged on a saved card is `paid` at once and is never declined afterwards.                                            |
-| `refund-settled`         | The payment's `amountRefunded` stays 0.00 after a refund, whether the refund reads `pending` or `refunded`.                                    |
 | `account-selection`      | Needs two Mollie accounts: live only when `MOLLIE_SECOND_API_KEY` names a second test account.                                                 |
 | `webhook-other-account`  | The same.                                                                                                                                       |
 

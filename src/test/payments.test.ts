@@ -22,7 +22,9 @@ import { ReadOwn } from "../mollie/metadata";
 import { ParsePaymentMethodId } from "../mollie/ids";
 import { CurrentHarness, SECOND_ACCOUNT } from "./support/harness";
 import {
+  HeldRefundTotal,
   Key,
+  PaidPayment,
   PrimaryAccount,
   Reference,
   Rejected,
@@ -51,13 +53,6 @@ function offSession(
     },
     Key(),
   );
-}
-
-async function paidPayment(): Promise<string> {
-  const payment = await offSession(CurrentHarness().chargeable);
-  const settled = await SettledPayment(payment.id);
-  assert.equal(settled.status, "succeeded");
-  return payment.id;
 }
 
 describe("[mollie] authorize and capture, settled the way Mollie settles", function () {
@@ -242,23 +237,23 @@ describe("[mollie] replaying captures and refunds", function () {
   });
 
   it("returns the original refund for a replayed key, even once nothing is left to refund", async () => {
-    const id = await paidPayment();
+    const id = await PaidPayment();
     const key = Key();
     const first = await RefundPayment({ payment: id }, key);
     const replay = await RefundPayment({ payment: id }, key);
     assert.equal(replay.id, first.id);
-    assert.equal((await GetPayment(id)).amountRefunded.value, 2500);
+    assert.equal(await HeldRefundTotal(id), 2500);
   });
 
   it("does not refund twice when a partial refund is replayed after Mollie forgot the key", async () => {
-    const id = await paidPayment();
+    const id = await PaidPayment();
     const key = Key();
     const first = await RefundPayment({ payment: id, amount: EUR(500) }, key);
     const later = await Within(2 * HOUR_MS, () =>
       RefundPayment({ payment: id, amount: EUR(500) }, key),
     );
     assert.equal(later.id, first.id);
-    assert.equal((await GetPayment(id)).amountRefunded.value, 500);
+    assert.equal(await HeldRefundTotal(id), 500);
   });
 });
 
@@ -266,7 +261,7 @@ describe("[mollie] payments edge cases", function () {
   this.timeout(TEST_TIMEOUT);
 
   it("refunds whatever is left when no amount is given, and keeps the reason out of the caller's metadata", async () => {
-    const id = await paidPayment();
+    const id = await PaidPayment();
     await RefundPayment({ payment: id, amount: EUR(500) }, Key());
     const refund = await RefundPayment(
       { payment: id, reason: "fraudulent", metadata: { ticket: "42" } },
@@ -276,11 +271,11 @@ describe("[mollie] payments edge cases", function () {
     assert.deepEqual(refund.metadata, { ticket: "42" });
     const read = await GetRefund(refund.id);
     assert.equal(read.payment, id);
-    assert.equal((await GetPayment(id)).amountRefunded.value, 2500);
+    assert.equal(await HeldRefundTotal(id), 2500);
   });
 
   it("refuses a refund once nothing is left, from the payment it read", async () => {
-    const id = await paidPayment();
+    const id = await PaidPayment();
     await RefundPayment({ payment: id }, Key());
     await assert.rejects(
       () => RefundPayment({ payment: id }, Key()),
@@ -290,7 +285,7 @@ describe("[mollie] payments edge cases", function () {
 
   it("does not read an account suspension (422) as a payment-state refusal", async function () {
     RequireStandIn(this);
-    const id = await paidPayment();
+    const id = await PaidPayment();
     StandIn().outage = 422;
     try {
       const error = await Rejected(
@@ -323,7 +318,7 @@ describe("[mollie] payments edge cases", function () {
   });
 
   it("refuses to cancel a captured payment", async () => {
-    const id = await paidPayment();
+    const id = await PaidPayment();
     await assert.rejects(
       () => CancelPayment(id, Key()),
       InvalidPaymentStateError,
