@@ -163,8 +163,13 @@ function assertRoomToCancel(requested: Requested): void {
   const room = RoomAfterLaterWrites(own, request.metadata);
   if (room >= 0) return;
   const callerBytes = Buffer.byteLength(JSON.stringify(request.metadata ?? {}));
+  const left = callerBytes + room;
+  const fit =
+    left < 0
+      ? `this reference and idempotency key alone take ${-left} bytes more than the room, leaving none for the subscription's metadata`
+      : `with this reference and idempotency key it leaves ${left} bytes for the subscription's metadata`;
   throw invalid(
-    `The subscription's metadata takes ${callerBytes} bytes as JSON, and with this reference and idempotency key it leaves ${callerBytes + room} bytes for the subscription's metadata: Mollie keeps 1,024 bytes of metadata per subscription, and the module keeps the rest for its own record, the first charge and a cancellation under an idempotency key of up to ${CANCEL_KEY_BYTES} bytes`,
+    `The subscription's metadata takes ${callerBytes} bytes as JSON, and ${fit}: Mollie keeps 1,024 bytes of metadata per subscription, and the module keeps the rest for its own record, the first charge and a cancellation under an idempotency key of up to ${CANCEL_KEY_BYTES} bytes`,
   );
 }
 
@@ -207,6 +212,7 @@ async function createAtMollie(
 ): Promise<MollieSubscription> {
   const existing = await existingFor(account, creation);
   if (existing) return existing;
+  assertRoomToCancel(creation);
   const schedule = scheduleOf(creation.request, creation.period);
   return account.client.request(
     {
@@ -407,7 +413,6 @@ export async function CreateSubscription(
     count: request.intervalCount ?? 1,
   };
   ToMollieInterval(period);
-  assertRoomToCancel({ request, idempotencyKey, period });
   const account = SubscriptionAccount(provider);
   const mandateId = await ChargeableMandate(
     account,

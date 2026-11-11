@@ -151,4 +151,40 @@ describe("[mollie] a subscription's metadata keeps room to cancel it", function 
     const read = await GetSubscription(created.id);
     assert.deepEqual([read.status, read.cancelAtPeriodEnd], ["active", false]);
   });
+
+  it("returns, on a replay of its creation, a subscription created past the room before it was kept", async () => {
+    const payer = await NewPayer();
+    const reference = Reference();
+    const key = Key();
+    const created = await create(payer, {}, reference, key);
+    const child = created.id.split(":")[1] ?? "";
+    const held = PrimaryAccount().subscriptions.get(child);
+    assert.ok(held && IsObject(held.metadata));
+    await CurrentHarness().client.execute({
+      method: "PATCH",
+      path: `/customers/${payer.customer}/subscriptions/${child}`,
+      body: {
+        metadata: { ...held.metadata, metadata: callerOf(OVER_BUDGET_BYTES) },
+      },
+    });
+    const posts = subscriptionPosts(payer.customer);
+    const replayed = await create(
+      payer,
+      callerOf(OVER_BUDGET_BYTES),
+      reference,
+      key,
+    );
+    assert.equal(replayed.id, created.id);
+    assert.equal(subscriptionPosts(payer.customer), posts);
+  });
+
+  it("says a reference that alone overflows the room leaves none, not a negative count", async () => {
+    const payer = await NewPayer();
+    const error = await Rejected(
+      create(payer, {}, "r".repeat(OVER_BUDGET_BYTES)),
+      InvalidSubscriptionRequestError,
+    );
+    assert.doesNotMatch(error.message, /-\d+ bytes/);
+    assert.match(error.message, /leaving none for the subscription's metadata/);
+  });
 });
