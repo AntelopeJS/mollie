@@ -40,6 +40,25 @@ const config: VerifyConfig = {
     env: ["MOLLIE_API_KEY"],
     sandbox: "Mollie's test mode at api.mollie.com, under the merchant's test_ API key; the journeys refuse any other key",
   },
+  formal: [
+    {
+      name: "formal-amsterdam-calendar",
+      covers: ["src/implementations/subscriptions/calendar.ts", "src/implementations/subscriptions/mapping.ts"],
+      files: [
+        ".agents/skills/formal-amsterdam-calendar/**",
+        "src/test/calendar.properties.test.ts",
+        "src/test/support/calendar-model.ts",
+      ],
+      command: [
+        "sh",
+        "-c",
+        "pnpm run build >/dev/null && pnpm exec ajs module test . -f dist/test/calendar.properties.test.js",
+      ],
+      violation: /^\s*(?:\d+\) (?:holds|finding)|[✔✓] finding) (\w+)/gm,
+      passing: /^\s*[✔✓] holds (\w+)/gm,
+      behaviour: { kind: "emit" },
+    },
+  ],
   moduleConfig() {
     return { apiKey: PRIMARY_KEY };
   },
