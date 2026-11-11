@@ -65,7 +65,6 @@
       "since": "ef5dfaf",
       "until": "eedbca1",
       "writer": "subscriptions/records.ts RecordEarlyEnd",
-      "finding": "legacyEarlyEnd",
       "seed": {
         "customer": {
           "id": "cst_corpusEnd01",

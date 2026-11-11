@@ -48,7 +48,7 @@ The model is `src/test/support/metadata-model.ts`. The expected values are the g
 | `laterWritesFit` | `docs/4.subscriptions.md` "Metadata": about 1 kB per subscription, an own record of up to about 400 bytes, about 600 bytes for the caller's `metadata` | Caller metadata of at most 600 bytes (the JSON text, padded to exactly 600 half the time) next to an own record of at most 400 bytes stays within 1,024 bytes after the first charge or the refusal and then a cancellation now or at the period end. Nothing beyond the budget is generated. | holds |
 | `earlyEndsFit` | `docs/4.subscriptions.md` "Cancelling": "room for about twenty" early ends | Twenty early ends fit a customer with no other metadata. | holds |
 | `corpusReads` | the golden corpus | Every shape written since `ef5dfaf` reads through the interfaces as the version that wrote it read it. | holds |
-| `legacyEarlyEnd` | the golden corpus | The first release's early end ends its subscription early. | finding F4 |
+| `legacyEarlyEnd` | the golden corpus | The first release's early end ends its subscription early. | holds |
 | `corpusCoversWriters` | the golden corpus | Every record today's writers write has the format of a fixture still written (`until: null`). | holds |
 | `foreignInterfaceView` | same as `foreignCallerView` | `GetPayment` and `GetCustomer` on the stand-in read another writer's metadata, with no `antelope` key, as its string entries (an object, one with a `metadata` object of its own, or the text of either). | holds |
 | `keyedRoundTrip` | `docs/2.payments.md` replays, `docs/4.subscriptions.md` early ends | A refund, a capture and an early end stored under any key replay under that key, and the early end's hash names the same request. | holds |
@@ -60,7 +60,7 @@ The model is `src/test/support/metadata-model.ts`. The expected values are the g
 The shapes come from `git log -p` of `src/mollie/metadata.ts`, `src/implementations/subscriptions/records.ts` and every `WriteMetadata` and `MergeOwn` caller, from `ef5dfaf` to `c0f7ded`.
 
 - `ef5dfaf` wrote a payment `{reference}`, a first-period charge `{reference, subscription}`, a refund with `{}` or `{reason}`, a capture with no metadata, a customer `{}`, an early end as `{endedAt, endsAt, key}`, and a subscription `{reference, createKey, interval, intervalCount, start}` with `firstPayment`, `refused` and `cancel` merged in later.
-- `eedbca1`, 27 minutes later, added `key` to refunds and `{key}` to captures, and stored an early end as `[endedAt, keyHash]`, the first 8 hex digits of the key's SHA-256. It also kept a customer's foreign top-level keys visible.
+- `eedbca1`, 27 minutes later, added `key` to refunds and `{key}` to captures, and stored an early end as `[endedAt, keyHash]`, the first 8 hex digits of the key's SHA-256. It also kept a customer's foreign top-level keys visible. The reader has accepted the first release's object again since the fix of F4: it reads `{endedAt, key}` as an early end whose hash is the key's.
 - `c8e56ae` shows a refused subscription the caller cancelled, so `refused` with `cancel` is a shape the interface reads.
 - `82a6eee`, `b1b17af`, `f5c6543`, `4266686`, `5d48627`, `2bf8046`, `8799bff` and `c0f7ded` changed how records are read and when marks are written, not the stored shapes.
 
@@ -71,7 +71,7 @@ A writer change that stores a new format fails `corpusCoversWriters` and names t
 1. Read the shrunk counterexample. Most are `[metadata, ...]` or `[own record, caller metadata, ...]`. A corpus failure prints the fixture's name, its `since` and what it read.
 2. Replay it through the named public function, or through the interface on the stand-in, before you judge. A failure in `metadata-model.ts` or `metadata-corpus.ts` is an oracle error until that replay shows the module wrong.
 3. A failing property is a product finding. Report the counterexample before you propose a fix, exclude inputs, skip the property or loosen the model. Do not fix covered code in the pull request that adds or changes this check: `antelopejs-verify formal` fails a new check that lands with a covered-code change.
-4. Fix a finding in its own pull request. Rename its `finding` to `holds`, delete its `pins` test, and move it under Fixed below. `formal` then reports it fixed against the base.
+4. Fix a finding in its own pull request. Rename its `finding` to `holds`, delete its `pins` test, and move it under Fixed below. `formal` then reports it fixed against the base. A finding recorded as a fixture (`legacyEarlyEnd`) leaves the fixtures' `finding` field and the `finding` test of `metadata-corpus.test.ts` when it is fixed: add them back with the next such finding.
 
 ## Bounds and exclusions
 
@@ -95,7 +95,7 @@ Last code synchronization is `c0f7ded`.
 | File | Covered functions and role |
 | --- | --- |
 | `src/mollie/metadata.ts` | `WriteMetadata`, `MergeOwn`, `ReadOwn`, `ReadCallerMetadata` and the private `parse` (its JSON-text reading included) and `strings`. |
-| `src/implementations/subscriptions/records.ts` | `ReadOwnSubscription`, `ShownSubscription`, `KeyHash`, the `OWN_SUBSCRIPTION` and `OWN_CUSTOMER` guards, and through the interface `endedEarly`, `toEarlyEnd`, `earlyEndOf` and `RecordEarlyEnd`. |
+| `src/implementations/subscriptions/records.ts` | `ReadOwnSubscription`, `ShownSubscription`, `KeyHash`, the `OWN_SUBSCRIPTION` and `OWN_CUSTOMER` guards, and through the interface `endedEarly`, `toEarlyEnd` (both stored shapes), `earlyEndOf` and `RecordEarlyEnd`. |
 | `src/implementations/shared/subscription-of-payment.ts` | `SubscriptionOfPayment` and its two guards. |
 | Writers, through `corpusCoversWriters` | `PaymentBody`, `CapturePayment` (`payments.ts`), `RefundPayment` (`refunds.ts`), `CreateCustomer` (`customers.ts`), `subscriptionBody`, `chargeFirstPeriod`, `updateOwn` (`creation.ts`), `cancelAtMollie` (`changes.ts`). These files are not in `covers`, so `formal` does not run this check for them, but `pnpm test` does. |
 | Readers, through the interface | `ToPayment`, `ToRefund` (`payment/mapping.ts`), `ToSubscription` (`subscriptions/mapping.ts`), refund and capture replays. |
@@ -114,7 +114,7 @@ Generator coverage at the default seed, over 300 samples each:
 
 ## Findings
 
-Four findings stand. Counterexamples are at seed `20261111`. None is fixed here.
+Three findings stand, F1 to F3. F4 is fixed, under Fixed below. Counterexamples are at seed `20261111`. None of the three is fixed here.
 
 ### F1: `mergeKeepsForeignValue`, an early end erases a customer's metadata that is not an object
 
@@ -150,14 +150,18 @@ intervalCount -1: ToSubscription did not return within 3000 ms
 
 `pins ownSubscriptionValues` holds the first two lines. The hang was shown with `ToSubscription` in a worker thread stopped after 3 s. No committed test runs it.
 
-### F4: `legacyEarlyEnd`, the first release's early end no longer reads
+## Fixed
 
-`ef5dfaf` stored an early end as `{endedAt, endsAt, key}`. `eedbca1` changed it to `[endedAt, keyHash]`, and `toEarlyEnd` reads only the list. A subscription ended early under `ef5dfaf` now reads as still running until its period end. The format lived 27 minutes on `main`, and no version reached npm.
+### F4: `legacyEarlyEnd`, the first release's early end no longer read
+
+`ef5dfaf` stored an early end as `{endedAt, endsAt, key}`. `eedbca1` changed it to `[endedAt, keyHash]`, and `toEarlyEnd` read only the list. A subscription ended early under `ef5dfaf` read as still running until its period end. The format lived 27 minutes on `main`, and no version reached npm.
 
 ```text
 recorded: {"status":"canceled","cancelAtPeriodEnd":false,"endedAt":1779265800000, ...}
-reads:    {"status":"active","cancelAtPeriodEnd":true,"endedAt":null, ...}
+read before the fix: {"status":"active","cancelAtPeriodEnd":true,"endedAt":null, ...}
 ```
+
+`toEarlyEnd` (`records.ts`) now also reads `{endedAt, key}` as an early end named by `KeyHash(key)`. The first release compared the raw key, today's code compares hashes, and the hash of the stored key matches the replay of the same key under both. The read writes nothing back. The fixture lost its `finding` mark, so `corpusReads` reads it, `holds legacyEarlyEnd` asserts the end, and `src/test/legacy-early-end.test.ts` replays `CancelSubscription` with the original key through the stand-in.
 
 ## Mutation evidence
 
