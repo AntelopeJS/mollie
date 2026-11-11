@@ -178,6 +178,8 @@ const mergeKeepsForeignKeys = fc.property(
     const wanted = changes;
     assert.ok(IsObject(before) && IsObject(merged) && IsObject(wanted));
     const ownBefore = IsObject(before[OWN]) ? before[OWN] : {};
+    const isForeign = !(OWN in before) && IsObject(before[CALLER]);
+    const marks: Record<string, JsonValue> = isForeign ? { foreign: true } : {};
     const ownAfter = merged[OWN];
     assert.ok(IsObject(ownAfter), "the merged own record is an object");
     assert.deepEqual(
@@ -187,7 +189,10 @@ const mergeKeepsForeignKeys = fc.property(
     for (const [key, value] of Object.entries(before)) {
       if (key !== OWN) assert.deepEqual(merged[key], value, `${key} changed`);
     }
-    assert.deepEqual(Entries(ownAfter), Entries({ ...ownBefore, ...wanted }));
+    assert.deepEqual(
+      Entries(ownAfter),
+      Entries({ ...ownBefore, ...marks, ...wanted }),
+    );
   },
 );
 
@@ -225,6 +230,11 @@ const mergeKeepsForeignValue = fc.property(
     assert.ok(
       Holds(merged, foreign),
       `the merge dropped ${JSON.stringify(foreign)}: ${JSON.stringify(merged)}`,
+    );
+    assert.deepEqual(
+      Entries(ReadCallerMetadata(merged)),
+      [],
+      "the merge gave the caller metadata",
     );
   },
 );
@@ -373,7 +383,7 @@ describe("[mollie] metadata round trip properties", function () {
   );
   holds(
     "mergeKeepsForeignKeys",
-    "a merge into a JSON object keeps every other key and every own field it does not change",
+    "a merge into a JSON object keeps every other key and every own field it does not change, and marks another writer's object that holds a metadata object",
     mergeKeepsForeignKeys,
   );
   holds(
@@ -381,14 +391,14 @@ describe("[mollie] metadata round trip properties", function () {
     "a merge into metadata the module wrote leaves the caller's metadata as it reads",
     mergeKeepsCallerView,
   );
-  finding(
+  holds(
     "mergeKeepsForeignCallerView",
     "a merge into another writer's JSON object leaves its string entries as the caller reads them",
     mergeKeepsForeignCallerView,
   );
-  finding(
+  holds(
     "mergeKeepsForeignValue",
-    "a merge into metadata that is not a JSON object keeps it",
+    "a merge into metadata that is not a JSON object keeps it, and the caller still reads none",
     mergeKeepsForeignValue,
   );
   holds(

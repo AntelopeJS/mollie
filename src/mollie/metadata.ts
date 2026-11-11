@@ -4,6 +4,8 @@ import type { JsonObject, JsonValue, MollieMetadata } from "./types";
 
 const OWN_KEY = "antelope";
 const CALLER_KEY = "metadata";
+const KEPT_KEY = "kept";
+const FOREIGN_KEY = "foreign";
 
 export function IsJsonObject(
   value: JsonValue | undefined,
@@ -19,19 +21,25 @@ export function IsJsonNumber(value: JsonValue | undefined): value is number {
   return typeof value === "number";
 }
 
-function parse(metadata: MollieMetadata | undefined): JsonObject {
+function objectOf(
+  metadata: MollieMetadata | undefined,
+): JsonObject | undefined {
   if (IsJsonObject(metadata)) {
     return metadata;
   }
   if (!IsJsonString(metadata)) {
-    return {};
+    return undefined;
   }
   try {
     const parsed = ParseJson(metadata);
-    return IsJsonObject(parsed) ? parsed : {};
+    return IsJsonObject(parsed) ? parsed : undefined;
   } catch {
-    return {};
+    return undefined;
   }
+}
+
+function parse(metadata: MollieMetadata | undefined): JsonObject {
+  return objectOf(metadata) ?? {};
 }
 
 function strings(value: JsonValue | undefined): Record<string, string> {
@@ -75,11 +83,23 @@ export function ReadOwn<T extends object>(
   return read;
 }
 
+function isForeign(own: JsonValue | undefined): boolean {
+  return IsJsonObject(own) && own[FOREIGN_KEY] === true;
+}
+
+/**
+ * The caller's metadata: the `metadata` object beside the module's own
+ * record, or, in metadata the module did not write, its string entries.
+ */
 export function ReadCallerMetadata(
   metadata: MollieMetadata | undefined,
 ): Record<string, string> {
   const parsed = parse(metadata);
-  if (OWN_KEY in parsed && IsJsonObject(parsed[CALLER_KEY])) {
+  if (
+    OWN_KEY in parsed &&
+    IsJsonObject(parsed[CALLER_KEY]) &&
+    !isForeign(parsed[OWN_KEY])
+  ) {
     return strings(parsed[CALLER_KEY]);
   }
   return strings(
@@ -96,11 +116,36 @@ export function WriteMetadata<T extends object>(
   return { [OWN_KEY]: own, [CALLER_KEY]: caller };
 }
 
+function ownBefore(
+  metadata: MollieMetadata | undefined,
+  parsed: JsonObject | undefined,
+): JsonObject {
+  if (parsed === undefined) {
+    return metadata === undefined || metadata === null
+      ? {}
+      : { [KEPT_KEY]: metadata };
+  }
+  if (!(OWN_KEY in parsed)) {
+    return IsJsonObject(parsed[CALLER_KEY]) ? { [FOREIGN_KEY]: true } : {};
+  }
+  const own = parsed[OWN_KEY];
+  return IsJsonObject(own) ? own : {};
+}
+
+/**
+ * Sets `changes` in the module's own record and leaves what the caller reads
+ * as it was. Metadata that is not an object is kept in the own record under
+ * `kept`. Another writer's object keeps its keys, and when it holds a
+ * `metadata` object of its own, the own record gets `foreign: true` so the
+ * caller still reads the object's string entries.
+ */
 export function MergeOwn<T extends object>(
   metadata: MollieMetadata | undefined,
   changes: T,
 ) {
-  const parsed = parse(metadata);
-  const own = IsJsonObject(parsed[OWN_KEY]) ? parsed[OWN_KEY] : {};
-  return { ...parsed, [OWN_KEY]: { ...own, ...changes } };
+  const parsed = objectOf(metadata);
+  return {
+    ...parsed,
+    [OWN_KEY]: { ...ownBefore(metadata, parsed), ...changes },
+  };
 }

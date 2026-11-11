@@ -36,11 +36,11 @@ The model is `src/test/support/metadata-model.ts`. The expected values are the g
 | --- | --- | --- | --- |
 | `callerRoundTrip` | interface `metadata` "Round-tripped opaque key/value pairs" | For any caller metadata (keys `antelope`, `metadata`, `antelopeSubscription`, `__proto__` and empty included) next to any own record, the JSON round trip reads it back unchanged through `ReadCallerMetadata`, `ToPayment`, `ToRefund` and `ToSubscription`. Empty metadata reads as absent. | holds |
 | `ownRoundTrip` | `ShownSubscription` TSDoc | An own subscription record reads back equal through `ReadOwnSubscription`. `ShownSubscription` returns it, except a refused one with no cancellation whose Mollie status is `canceled` or `completed`. A payment, a renewal and a first-period charge read back their reference, and a charge names its subscription through `SubscriptionOfPayment` without a request. | holds |
-| `mergeKeepsForeignKeys` | `ReadOwn` TSDoc, `docs/4.subscriptions.md` "keeps it as it is" | Merging into a JSON object keeps every key but `antelope` as it was, keeps every own field the change does not name, and sets the ones it names. | holds |
+| `mergeKeepsForeignKeys` | `MergeOwn` TSDoc, `docs/4.subscriptions.md` "Metadata another writer set keeps its keys" | Merging into a JSON object keeps every key but `antelope` as it was, keeps every own field the change does not name, and sets the ones it names. A merge into an object with no `antelope` key that holds a `metadata` object also sets `foreign: true`. | holds |
 | `mergeKeepsCallerView` | same | After a merge into metadata the module wrote, the caller reads the same metadata. | holds |
 | `foreignCallerView` | interface `metadata` "Round-tripped opaque key/value pairs"; `ReadCallerMetadata` reads what another writer left | Metadata with no `antelope` key (an object of any keys, one with a `metadata` object of its own, or the text of either) reads as its own string entries through `ReadCallerMetadata`, `ToPayment`, `ToRefund` and `ToSubscription`, and is not the module's. | holds |
-| `mergeKeepsForeignCallerView` | same | After a merge into another writer's JSON object, the caller still reads its string entries. | finding F2 |
-| `mergeKeepsForeignValue` | same; Mollie's `metadata` takes a string, a number, an object or a list of strings | A merge into metadata that is not a JSON object keeps that value. | finding F1 |
+| `mergeKeepsForeignCallerView` | `MergeOwn` TSDoc; `docs/4.subscriptions.md` "`GetCustomer` returns the same metadata before and after" | After a merge into another writer's JSON object, the caller still reads its string entries. | holds (F2, fixed in #62) |
+| `mergeKeepsForeignValue` | same; Mollie's `metadata` takes a string, a number, an object or a list of strings | A merge into metadata that is not a JSON object keeps that value, and the caller still reads no metadata. | holds (F1, fixed in #62) |
 | `readsNeverThrow` | `ReadOwn` TSDoc: "a field of another type is dropped" | For any JSON, including well-formed own records with one field of another type and cancellation marks with a valid key and one field of another type or an unknown timing, every reader returns its documented types without throwing. `AssertOwnTypes` (`support/metadata-types.ts`) checks every field of the own subscription it returns, `cancel.timing` included. Metadata with no own object reads as not the module's: no own subscription, an empty reference, no charged subscription. | holds |
 | `textRoundTrip` | `parse` in `metadata.ts`, unchanged since `ef5dfaf`; no TSDoc or doc states it | Metadata Mollie holds as the JSON text of what the module wrote reads as the object it holds: the caller's metadata, an own subscription record, a payment's reference and a charge's subscription. | holds |
 | `textWithoutObject` | same | A metadata string that is not the JSON text of an object (JSON of another type, or text that is not JSON) reads as no caller metadata, no own subscription, an empty reference and no charged subscription. | holds |
@@ -55,13 +55,14 @@ The model is `src/test/support/metadata-model.ts`. The expected values are the g
 
 ## The golden corpus
 
-`src/test/fixtures/metadata-corpus-payments.json` and `metadata-corpus-subscriptions.json` hold one fixture per stored shape. Each names `since`, the first commit that wrote it, `until`, the first commit that stopped (`null` while it is still written), and its `writer`. `seed` holds the records as Mollie would hold them, under fixed ids. `reads` holds what the version that wrote them read back. `ReadFixture` (`src/test/support/metadata-corpus.ts`) seeds the stand-in and reads through `GetPayment`, `GetRefund`, `GetCustomer` and `GetSubscription`. It also replays `RefundPayment` and `CapturePayment` under the stored key, or under an unknown key when none is stored, on a payment whose state refuses a new refund or capture. So only a replay resolves.
+`src/test/fixtures/metadata-corpus-payments.json`, `metadata-corpus-subscriptions.json` and `metadata-corpus-customers.json` hold one fixture per stored shape. Each names `since`, the first commit that wrote it, or `#<pull request>` for a shape written by a pull request that was not merged when the fixture was added, `until`, the first commit that stopped (`null` while it is still written), and its `writer`. `seed` holds the records as Mollie would hold them, under fixed ids. `reads` holds what the version that wrote them read back. `ReadFixture` (`src/test/support/metadata-corpus.ts`) seeds the stand-in and reads through `GetPayment`, `GetRefund`, `GetCustomer` and `GetSubscription`. It also replays `RefundPayment` and `CapturePayment` under the stored key, or under an unknown key when none is stored, on a payment whose state refuses a new refund or capture. So only a replay resolves.
 
 The shapes come from `git log -p` of `src/mollie/metadata.ts`, `src/implementations/subscriptions/records.ts` and every `WriteMetadata` and `MergeOwn` caller, from `ef5dfaf` to `c0f7ded`.
 
 - `ef5dfaf` wrote a payment `{reference}`, a first-period charge `{reference, subscription}`, a refund with `{}` or `{reason}`, a capture with no metadata, a customer `{}`, an early end as `{endedAt, endsAt, key}`, and a subscription `{reference, createKey, interval, intervalCount, start}` with `firstPayment`, `refused` and `cancel` merged in later.
 - `eedbca1`, 27 minutes later, added `key` to refunds and `{key}` to captures, and stored an early end as `[endedAt, keyHash]`, the first 8 hex digits of the key's SHA-256. It also kept a customer's foreign top-level keys visible. The reader has accepted the first release's object again since the fix of F4: it reads `{endedAt, key}` as an early end whose hash is the key's.
 - `c8e56ae` shows a refused subscription the caller cancelled, so `refused` with `cancel` is a shape the interface reads.
+- `#62` keeps a customer's metadata that is not an object under `antelope.kept`, and marks another writer's object that holds a `metadata` object with `antelope.foreign`, when it records an early end. The shape it replaces, an early end merged into such an object with no mark, reads as the nested object, as every version that wrote it read it.
 - `82a6eee`, `b1b17af`, `f5c6543`, `4266686`, `5d48627`, `2bf8046`, `8799bff` and `c0f7ded` changed how records are read and when marks are written, not the stored shapes.
 
 A writer change that stores a new format fails `corpusCoversWriters` and names the step. Add a fixture for the new format with `since` set to that change and `until` on the one it replaces. Never edit the `metadata` of an existing fixture: it is what Mollie holds for some merchant. A change that alters a fixture's `reads` on purpose updates `docs/` and says so.
@@ -71,7 +72,7 @@ A writer change that stores a new format fails `corpusCoversWriters` and names t
 1. Read the shrunk counterexample. Most are `[metadata, ...]` or `[own record, caller metadata, ...]`. A corpus failure prints the fixture's name, its `since` and what it read.
 2. Replay it through the named public function, or through the interface on the stand-in, before you judge. A failure in `metadata-model.ts` or `metadata-corpus.ts` is an oracle error until that replay shows the module wrong.
 3. A failing property is a product finding. Report the counterexample before you propose a fix, exclude inputs, skip the property or loosen the model. Do not fix covered code in the pull request that adds or changes this check: `antelopejs-verify formal` fails a new check that lands with a covered-code change.
-4. Fix a finding in its own pull request. Rename its `finding` to `holds`, delete its `pins` test, and move it under Fixed below. `formal` then reports it fixed against the base. A finding recorded as a fixture (`legacyEarlyEnd`) leaves the fixtures' `finding` field and the `finding` test of `metadata-corpus.test.ts` when it is fixed: add them back with the next such finding.
+4. Fix a finding in its own pull request. Rename its `finding` to `holds`, delete its `pins` test, and move it to `FIXED.md`. `formal` then reports it fixed against the base. A finding recorded as a fixture (`legacyEarlyEnd`) leaves the fixtures' `finding` field and the `finding` test of `metadata-corpus.test.ts` when it is fixed: add them back with the next such finding.
 
 ## Bounds and exclusions
 
@@ -90,12 +91,12 @@ This is randomized testing of real code, not an exhaustive proof. It does not co
 
 ## Coverage record
 
-Last code synchronization is `4f77d2e`, the F3 fix, and the review fix committed after it.
+Last code synchronization is `#62`, on top of the F3 fix (#63).
 
 | File | Covered functions and role |
 | --- | --- |
-| `src/mollie/metadata.ts` | `WriteMetadata`, `MergeOwn`, `ReadOwn`, `ReadCallerMetadata` and the private `parse` (its JSON-text reading included) and `strings`. |
-| `src/implementations/subscriptions/records.ts` | `ReadOwnSubscription` (its fallback to Mollie's interval, through `FromMollieInterval` in `calendar.ts`, and the `UnreadablePeriodError` it throws included), `ShownSubscription`, `KeyHash`, the `OWN_SUBSCRIPTION` and `OWN_CUSTOMER` guards, and through the interface `endedEarly`, `toEarlyEnd` (both stored shapes), `earlyEndOf` and `RecordEarlyEnd`. |
+| `src/mollie/metadata.ts` | `WriteMetadata`, `MergeOwn`, `ReadOwn`, `ReadCallerMetadata` and the private `objectOf` and `parse` (their JSON-text reading included), `strings`, `isForeign` and `ownBefore`. |
+| `src/implementations/subscriptions/records.ts` | `ReadOwnSubscription`, `ShownSubscription`, `KeyHash`, the `OWN_SUBSCRIPTION` and `OWN_CUSTOMER` guards, and through the interface `endedEarly`, `toEarlyEnd` (both stored shapes), `earlyEndOf` and `RecordEarlyEnd`. |
 | `src/implementations/shared/subscription-of-payment.ts` | `SubscriptionOfPayment` and its two guards. |
 | Writers, through `corpusCoversWriters` | `PaymentBody`, `CapturePayment` (`payments.ts`), `RefundPayment` (`refunds.ts`), `CreateCustomer` (`customers.ts`), `subscriptionBody`, `chargeFirstPeriod`, `updateOwn` (`creation.ts`), `cancelAtMollie` (`changes.ts`). These files are not in `covers`, so `formal` does not run this check for them, but `pnpm test` does. |
 | Readers, through the interface | `ToPayment`, `ToRefund` (`payment/mapping.ts`), `ToSubscription` (`subscriptions/mapping.ts`), refund and capture replays. |
@@ -115,29 +116,7 @@ Generator coverage at the default seed, over 300 samples each:
 
 ## Findings
 
-Two findings stand, F1 and F2. F3 and F4 are fixed, under Fixed below. Counterexamples are at seed `20261111`.
-
-### F1: `mergeKeepsForeignValue`, an early end erases a customer's metadata that is not an object
-
-`MergeOwn` reads metadata through `parse`, which turns anything that is not a JSON object, or a string holding one, into `{}`. So the first early end on a customer whose metadata is a string, a number or a list replaces it. `docs/4.subscriptions.md` says the customer's metadata is kept "as it is". A customer created outside the module, by the dashboard or another plugin, can hold such metadata. Mollie's specification allows it.
-
-```text
-Counterexample: [[""],{"firstPayment":"tr_AAAAAAAAAA"}]
-MergeOwn("crm-9", early end) = {"antelope":{"endedEarly":{"sub_corpusEnd02":[1779265800000,"4ad6bf3c"]}}}
-```
-
-`pins mergeKeepsForeignValue` reproduces it through `CancelSubscription` on the stand-in: a customer whose metadata is `"crm-9"` holds no `crm-9` after an early end.
-
-### F2: `mergeKeepsForeignCallerView`, an early end changes what a customer created elsewhere reads as
-
-`ReadCallerMetadata` reads the nested `metadata` object only when the `antelope` key is present. Metadata another writer left with a `metadata` object of its own reads as its string entries until the first early end adds `antelope`. From then on it reads as the nested object.
-
-```text
-Counterexample: [{["__proto__"]:"","metadata":{},"":{}},{"endedEarly":{}}]
-caller view before {"crm":"c-9"} after {"plan":"gold"}   for {"crm":"c-9","metadata":{"plan":"gold"}}
-```
-
-`pins mergeKeepsForeignCallerView` reproduces the second line through `GetCustomer`.
+No finding stands. Counterexamples are at seed `20261111`. F1 and F2 are in `FIXED.md`, and F3 and F4 are under Fixed below.
 
 ## Fixed
 
@@ -165,6 +144,8 @@ intervalCount -1: ToSubscription did not return within 3000 ms
 `ReadOwnSubscription` now keeps the stored interval and count only when `IsBillablePeriod` (`calendar.ts`) accepts them: a whole count from 1 to the interval's longest. Otherwise it reads the period from Mollie's own `interval` through `FromMollieInterval`, the one Mollie bills, so the subscription still reads, lists and cancels. `FromMollieInterval` returns a period only for a form Mollie documents that `IsBillablePeriod` accepts. When neither period is readable, `ReadOwnSubscription` throws `UnreadablePeriodError`, a `SubscriptionError` naming the subscription: `GetSubscription`, `CancelSubscription` and a replay of the creation reject with it, `ListSubscriptions` leaves the subscription out, and `CreateSubscription` finds an earlier creation by its stored key through `CreateKeyOf` without reading the period. `cancel.endsAt` is checked with `IsInstant` (`guards.ts`), which accepts integers from 0 to the start of 31 December 9999 UTC, so an end past what the calendar can date drops the mark like any mistyped field. `AddPeriods` throws a `RangeError` for a count that is not a whole number of at least 1, so the calendar refuses such a count instead of looping. `src/test/tampered-period.test.ts` drives counts 0, -1, 1.5, `"2"` and 53, the interval `"fortnight"`, ends of `1e300`, `8.64e15`, `8.64e15 - 1` and one past the last day of 9999, and eight Mollie intervals Mollie does not document through `GetSubscription`, `ListSubscriptions`, `CancelSubscription` and `CreateSubscription` on the stand-in, under a watchdog worker that kills the run when the event loop stays blocked 10 s. Its `pins` test is gone.
 
 A review of the first fix found two gaps. `IsInstant` accepted ends up to `8.64e15`, and an end of `8.64e15` or `8.64e15 - 1` on a subscription Mollie cancelled still threw `RangeError: Invalid time value` from every read and from `ListSubscriptions` for the whole customer. The fallback did not check Mollie's interval: `0 days` threw in the second period, `99999999999999999999 days` threw `Invalid time value`, `400 days` and `100 months` read past Mollie's maximums, and an unreadable one such as `3 fortnights` threw `RangeError` from every read and from `CreateSubscription` for that customer.
+
+`FIXED.md` records F1 and F2, fixed in #62.
 
 ## Mutation evidence
 
