@@ -128,11 +128,33 @@ function addMonths(
   return { year, month, day: Math.min(anchorDay, daysInMonth(year, month)) };
 }
 
+/**
+ * Whether Mollie can bill `period`: a whole count of at least one, no longer
+ * than Mollie's longest interval for its unit.
+ */
+export function IsBillablePeriod(period: Period): boolean {
+  const unit = UNIT_BY_INTERVAL[period.interval];
+  return (
+    Number.isInteger(period.count) &&
+    period.count >= 1 &&
+    period.count * unit.perInterval <= unit.maximum
+  );
+}
+
+/**
+ * The schedule date `times` periods after `anchor`. Throws a `RangeError` for
+ * a count that is not a whole number of at least one, which no schedule has.
+ */
 export function AddPeriods(
   anchor: CalendarDate,
   period: Period,
   times: number,
 ): CalendarDate {
+  if (!Number.isInteger(period.count) || period.count < 1) {
+    throw new RangeError(
+      `An interval count is a whole number of at least 1, not ${period.count}`,
+    );
+  }
   const total = period.count * times;
   const unitsByInterval: Record<SubscriptionInterval, () => CalendarDate> = {
     day: () => addDays(anchor, total),
@@ -210,12 +232,15 @@ function isSubscriptionInterval(
   return SUBSCRIPTION_INTERVALS.some((interval) => interval === value);
 }
 
-export function FromMollieInterval(interval: string): Period {
+/**
+ * The period Mollie bills as `interval`: `n days` as `day` × n, `n weeks` as
+ * `week` × n and `n months` as `month` × n. Undefined for a form Mollie does
+ * not document, or a period it cannot bill.
+ */
+export function FromMollieInterval(interval: string): Period | undefined {
   const match = MOLLIE_INTERVAL.exec(interval.trim());
   const unit = match?.[2].replace(/s$/, "");
-  if (!match || !isSubscriptionInterval(unit)) {
-    throw new RangeError(`Mollie interval "${interval}" is not understood`);
-  }
-  const count = Number.parseInt(match[1], BASE);
-  return { interval: unit, count };
+  if (!match || !isSubscriptionInterval(unit)) return undefined;
+  const period = { interval: unit, count: Number.parseInt(match[1], BASE) };
+  return IsBillablePeriod(period) ? period : undefined;
 }

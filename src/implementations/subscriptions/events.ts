@@ -6,6 +6,7 @@ import {
   SubscriptionNotFoundError,
 } from "@antelopejs/interface-subscriptions";
 
+import { UnreadablePeriodError } from "./errors";
 import { LoadRecord } from "./records";
 import { ToSubscription } from "./mapping";
 import type { Account } from "../../accounts";
@@ -64,7 +65,10 @@ async function currentState(
       await LoadRecord(account, charged.id, charged.mollie),
     );
   } catch (error) {
-    if (error instanceof SubscriptionNotFoundError) return undefined;
+    const isUnreadable =
+      error instanceof SubscriptionNotFoundError ||
+      error instanceof UnreadablePeriodError;
+    if (isUnreadable) return undefined;
     throw error;
   }
 }

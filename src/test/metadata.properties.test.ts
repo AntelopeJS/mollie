@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
-import { CANCELLATION_TIMINGS } from "@antelopejs/interface-subscriptions";
+import {
+  CANCELLATION_TIMINGS,
+  SubscriptionError,
+} from "@antelopejs/interface-subscriptions";
 import fc from "fast-check";
 
 import type { Account } from "../accounts";
@@ -46,6 +49,7 @@ import {
   OwnSubscriptionArb,
   PaymentWith,
   RefundWith,
+  StoresWritablePeriod,
   StringEntries,
   SubscriptionWith,
   TamperedOwnSubscriptionArb,
@@ -57,6 +61,10 @@ import {
   WidestSubscription,
 } from "./support/metadata-budget";
 import { AssertOwnTypes } from "./support/metadata-types";
+import {
+  IsDocumentedMollieInterval,
+  MollieIntervalArb,
+} from "./support/calendar-model";
 
 const DEFAULT_SEED = 20261111;
 const RUNS = 300;
@@ -250,14 +258,35 @@ const readsNeverThrow = fc.asyncProperty(
   },
 );
 
+function readOwnOrError(
+  mollie: MollieSubscription,
+): OwnSubscription | SubscriptionError | undefined {
+  try {
+    return ReadOwnSubscription(mollie);
+  } catch (error) {
+    assert.ok(error instanceof SubscriptionError, String(error));
+    return error;
+  }
+}
+
 const ownSubscriptionValues = fc.property(
   fc.oneof(AnyMetadataArb, TamperedOwnSubscriptionArb),
-  (metadata: JsonValue) => {
-    const own = ReadOwnSubscription(SubscriptionWith(metadata));
-    if (!own) return;
+  MollieIntervalArb,
+  (metadata: JsonValue, interval: string) => {
+    const read = readOwnOrError({ ...SubscriptionWith(metadata), interval });
+    if (read instanceof SubscriptionError) {
+      assert.ok(
+        !StoresWritablePeriod(metadata) &&
+          !IsDocumentedMollieInterval(interval),
+        `refused a subscription with a readable period: ${read.message}`,
+      );
+      assert.ok(read.message.includes(SUBSCRIPTION_ID), read.message);
+      return;
+    }
+    if (!read) return;
     assert.ok(
-      IsWritableOwnSubscription(own),
-      `the module reads an own record it never writes: ${JSON.stringify(own)}`,
+      IsWritableOwnSubscription(read),
+      `the module reads an own record it never writes: ${JSON.stringify(read)}`,
     );
   },
 );
@@ -367,7 +396,7 @@ describe("[mollie] metadata round trip properties", function () {
     "every metadata reader returns its documented types for any JSON, and a record without an own object is not the module's",
     readsNeverThrow,
   );
-  finding(
+  holds(
     "ownSubscriptionValues",
     "an own subscription record the module accepts has values the module writes",
     ownSubscriptionValues,
@@ -458,30 +487,6 @@ describe("[mollie] metadata generators and pinned findings", () => {
     assert.ok(counts.some((count) => IsNumberValue(count) && count <= 0));
     assert.ok(
       counts.some((count) => IsNumberValue(count) && !Number.isInteger(count)),
-    );
-  });
-
-  it("pins ownSubscriptionValues: interval counts 0 and -1 read as the module's, and 0 makes the period read throw", () => {
-    const tampered = (intervalCount: number) =>
-      SubscriptionWith(
-        Wire({
-          [OWN]: {
-            ...READ_OWN,
-            createKey: "create-1",
-            interval: "day",
-            intervalCount,
-          },
-          metadata: {},
-        }),
-      );
-    assert.equal(ReadOwnSubscription(tampered(-1))?.intervalCount, -1);
-    const mollie = tampered(0);
-    const own = ReadOwnSubscription(mollie);
-    assert.ok(own);
-    assert.equal(own.intervalCount, 0);
-    assert.throws(
-      () => ToSubscription({ id: SUBSCRIPTION_ID, mollie, own }, NOW),
-      { name: "RangeError", message: "Invalid time value" },
     );
   });
 

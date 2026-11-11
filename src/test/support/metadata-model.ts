@@ -42,6 +42,8 @@ const KEY_HASH_LENGTH = 8;
 const STARTS: readonly StartKind[] = ["anchor", "charged", "trial"];
 const PLAIN = { noNullPrototype: true };
 const LAST_INSTANT = Date.UTC(2100, 0, 1);
+const LAST_STORED_END = Date.UTC(9999, 11, 31);
+const LATEST_DATE = 8.64e15;
 
 /** Strings the read rules could mistake for the module's own or the interface's keys. */
 export const TRICKY_KEYS = [
@@ -177,20 +179,41 @@ export function ExpectedKeyHash(key: string): string {
     .slice(0, KEY_HASH_LENGTH);
 }
 
+function isWritablePeriod(
+  interval: JsonValue | undefined,
+  count: JsonValue | undefined,
+): boolean {
+  const known = SUBSCRIPTION_INTERVALS.find((each) => each === interval);
+  return (
+    known !== undefined &&
+    IsNumberValue(count) &&
+    Number.isInteger(count) &&
+    count >= 1 &&
+    count <= LONGEST[known]
+  );
+}
+
 /**
  * Whether the module could have written this own subscription record: an
  * interval and count the interface accepts within Mollie's longest interval,
- * a known start, and a cancellation end at a real instant.
+ * a known start, and a cancellation end from 1970 to the last day of 9999.
  */
 export function IsWritableOwnSubscription(own: OwnSubscription): boolean {
-  const isCount =
-    Number.isInteger(own.intervalCount) &&
-    own.intervalCount >= 1 &&
-    own.intervalCount <= LONGEST[own.interval];
   const endsAt = own.cancel?.endsAt;
   const isEnd =
-    endsAt === undefined || (Number.isInteger(endsAt) && endsAt >= 0);
-  return isCount && STARTS.includes(own.start) && isEnd;
+    endsAt === undefined ||
+    (Number.isInteger(endsAt) && endsAt >= 0 && endsAt <= LAST_STORED_END);
+  return (
+    isWritablePeriod(own.interval, own.intervalCount) &&
+    STARTS.includes(own.start) &&
+    isEnd
+  );
+}
+
+/** Whether the own record in `metadata` stores an interval and count the module writes. */
+export function StoresWritablePeriod(metadata: JsonValue): boolean {
+  const own = OwnObjectOf(metadata);
+  return own !== undefined && isWritablePeriod(own.interval, own.intervalCount);
 }
 
 function idArb(prefix: string): fc.Arbitrary<string> {
@@ -290,12 +313,18 @@ const OddNumberArb = fc.oneof(
   fc.double({ noNaN: true, noDefaultInfinity: true }),
 );
 
+const OddEndArb = fc.oneof(
+  OddNumberArb,
+  fc.integer({ min: LAST_STORED_END - 1, max: LATEST_DATE }),
+);
+
 /**
  * An own subscription record another writer changed: well-typed, with any
- * number as its interval count and cancellation end.
+ * number as its interval count and cancellation end, the instants past the
+ * last day of 9999 that a `Date` still holds included.
  */
 export const TamperedOwnSubscriptionArb: fc.Arbitrary<JsonValue> = fc
-  .tuple(OwnSubscriptionArb, OddNumberArb, OddNumberArb)
+  .tuple(OwnSubscriptionArb, OddNumberArb, OddEndArb)
   .map(([own, intervalCount, endsAt]) => {
     const tampered: OwnSubscription = { ...own, intervalCount };
     if (own.cancel) tampered.cancel = { ...own.cancel, endsAt };

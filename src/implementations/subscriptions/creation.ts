@@ -40,6 +40,7 @@ import {
 } from "./calendar";
 import {
   CompleteRecord,
+  CreateKeyOf,
   type OwnSubscription,
   ReadOwnSubscription,
   type StartKind,
@@ -132,8 +133,7 @@ async function existingFor(
     IsMollieSubscription,
   );
   return listed.find(
-    (subscription) =>
-      ReadOwnSubscription(subscription)?.createKey === creation.idempotencyKey,
+    (subscription) => CreateKeyOf(subscription) === creation.idempotencyKey,
   );
 }
 
