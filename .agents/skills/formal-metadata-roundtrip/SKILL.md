@@ -24,7 +24,7 @@ The corpus tests seed the stand-in's records directly, so they skip against Moll
 Each check prints on its own line:
 
 - `holds <name>` is a property that passes. A numbered `holds` line is a break.
-- `finding <name>` is a recorded finding. It passes only while the property still fails, and fails with `<name> now holds: record it as holds` once a fix makes it hold.
+- `finding <name>` is a recorded finding. It passes only while the property still fails, and fails with `<name> now holds: record it as holds` once a fix makes it hold. No finding stands now, so the `finding` helper is removed from `metadata.properties.test.ts`; bring it back from git history with the next finding.
 - `pins <name>` holds the exact wrong behaviour of a finding on a named input, or the numbers of a bound's edge. A fix fails a finding's pin, and the fix PR deletes it.
 - `generates` fails when a generator change loses a class of inputs the properties need.
 

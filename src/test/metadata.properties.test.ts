@@ -363,17 +363,6 @@ function holds<Ts extends unknown[]>(
   });
 }
 
-function finding<Ts extends unknown[]>(
-  name: string,
-  claim: string,
-  property: fc.IRawProperty<Ts>,
-) {
-  it(`finding ${name}: ${claim}`, async () => {
-    const details = await fc.check(property, PARAMETERS);
-    assert.ok(details.failed, `${name} now holds: record it as holds`);
-  });
-}
-
 describe("[mollie] metadata round trip properties", function () {
   this.timeout(SUITE_TIMEOUT_MS);
 
