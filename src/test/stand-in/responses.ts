@@ -13,6 +13,7 @@ const TITLES = {
   401: "Unauthorized Request",
   404: "Not Found",
   409: "Conflict",
+  410: "Gone",
   422: "Unprocessable Entity",
   503: "Service Unavailable",
 } satisfies Record<number, string>;
@@ -42,6 +43,10 @@ export class StandInError extends Error {
 
 export function NotFound(resource: string, id: string): StandInError {
   return new StandInError(404, `No ${resource} exists with token ${id}.`);
+}
+
+export function CustomerGone(): StandInError {
+  return new StandInError(410, "The customer is no longer available");
 }
 
 export function Unprocessable(detail: string, field?: string): StandInError {

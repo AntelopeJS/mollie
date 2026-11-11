@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { FromMollieAmount, ToMollieAmount } from "../mollie/amounts";
+import { MollieApiError } from "../mollie/errors";
 import { Lookup } from "../mollie/fields";
 import { IsText } from "../mollie/guards";
 import { IsJsonValue, ParseJson } from "../mollie/json";
@@ -211,6 +212,30 @@ describe("[mollie] lookups", () => {
     ]) {
       assert.equal(Lookup(table, inherited), undefined, inherited);
     }
+  });
+});
+
+describe("[mollie] error statuses", () => {
+  it("reads Mollie's 404 and its 410 for a deleted customer as not found, and no other refusal", () => {
+    const answers = new Map([
+      [404, true],
+      [410, true],
+      [401, false],
+      [409, false],
+      [422, false],
+      [503, false],
+    ]);
+    for (const [status, notFound] of answers) {
+      assert.equal(
+        new MollieApiError(status, {}).isNotFound,
+        notFound,
+        `${status}`,
+      );
+    }
+    assert.equal(
+      MollieApiError.unreachable(new Error("offline")).isNotFound,
+      false,
+    );
   });
 });
 

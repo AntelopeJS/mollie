@@ -2,9 +2,9 @@ import type { Check, Journey } from "@antelopejs/tooling-configs/verify";
 
 import { RETURN_URL, answered, call, callsTo, fresh, pick, same, savedMethod, settle, text, thrown, withSession, wire, type Session } from "./session.ts";
 
-/** Mollie answers a deleted customer with 410 Gone; the stand-in answers 404. */
+/** Mollie answers a deleted customer with 410 Gone, and so does the stand-in. */
 function goneAtMollie(answer: { status: number }): Check {
-  return { name: "Mollie no longer has it: 410 Gone, or 404", pass: answer.status === 410 || answer.status === 404, detail: `Mollie answered ${answer.status}` };
+  return { name: "Mollie no longer has it: 410 Gone", pass: answer.status === 410, detail: `Mollie answered ${answer.status}` };
 }
 
 const customerLifecycle: Journey = {

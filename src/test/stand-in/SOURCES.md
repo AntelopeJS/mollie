@@ -4,7 +4,7 @@ The stand-in is an HTTP server that answers the part of Mollie's API this module
 
 - **spec**: Mollie's OpenAPI specification, `github.com/mollie/openapi` `specs.yaml` at `10ce28b` (2026-10-02);
 - **doc**: a page on docs.mollie.com, named below by its path;
-- **observed**: a response from `api.mollie.com` itself, without a key, on 2026-10-02;
+- **observed**: a response from `api.mollie.com` itself, without a key, on 2026-10-02, or from test mode, with the date given;
 - **third-party**: another project's tests against Mollie's test mode;
 - **assumed**: nothing documents it; the first run against live Mollie checks it.
 
@@ -77,16 +77,16 @@ The stand-in is an HTTP server that answers the part of Mollie's API this module
 
 ## Customers and mandates
 
-| Behaviour                                                                 | Basis                                                                                      |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Create, read, update and delete a customer                                | spec                                                                                       |
-| A deleted customer reads as 404                                           | assumed                                                                                    |
-| Deleting a customer cancels its mandates and subscriptions                | spec ("All mandates and subscriptions created for this customer will be canceled as well") |
-| Mandates are listed under the customer, newest first, paginated           | spec, doc `reference/pagination`                                                           |
-| Only SEPA Direct Debit and PayPal mandates can be created through the API | spec (`create-mandate`); the stand-in creates SEPA ones only                               |
-| Revoking a mandate cancels every subscription that charges it             | spec ("all connected subscriptions will be canceled")                                      |
-| …and leaves it listed as `invalid`; revoking it again is 404              | assumed                                                                                    |
-| A customer's payments are listed under the customer                       | spec                                                                                       |
+| Behaviour                                                                                                                            | Basis                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Create, read, update and delete a customer                                                                                           | spec                                                                                       |
+| A deleted customer, and every call under it, answers 410 `Gone` `The customer is no longer available`; an unknown customer stays 404 | observed from Mollie 2026-11-10 (GET, PATCH, DELETE, mandates, payments, subscriptions)    |
+| Deleting a customer cancels its mandates and subscriptions                                                                           | spec ("All mandates and subscriptions created for this customer will be canceled as well") |
+| Mandates are listed under the customer, newest first, paginated                                                                      | spec, doc `reference/pagination`                                                           |
+| Only SEPA Direct Debit and PayPal mandates can be created through the API                                                            | spec (`create-mandate`); the stand-in creates SEPA ones only                               |
+| Revoking a mandate cancels every subscription that charges it                                                                        | spec ("all connected subscriptions will be canceled")                                      |
+| …and leaves it listed as `invalid`; revoking it again is 404                                                                         | assumed                                                                                    |
+| A customer's payments are listed under the customer                                                                                  | spec                                                                                       |
 
 ## Subscriptions
 

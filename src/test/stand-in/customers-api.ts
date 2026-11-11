@@ -1,6 +1,12 @@
 import { Page } from "./payments-api";
 import type { Request } from "./payments-api";
-import { NO_CONTENT, NotFound, Ok, Unprocessable } from "./responses";
+import {
+  CustomerGone,
+  NO_CONTENT,
+  NotFound,
+  Ok,
+  Unprocessable,
+} from "./responses";
 import {
   type Account,
   NewId,
@@ -17,9 +23,8 @@ import type {
 
 export function CustomerOf(account: Account, id: string): MollieCustomer {
   const customer = account.customers.get(id);
-  if (!customer || account.deletedCustomers.has(id)) {
-    throw NotFound("customer", id);
-  }
+  if (!customer) throw NotFound("customer", id);
+  if (account.deletedCustomers.has(id)) throw CustomerGone();
   return customer;
 }
 
