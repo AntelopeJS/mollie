@@ -7,9 +7,11 @@ import {
   RefundPayment,
 } from "@antelopejs/interface-payment";
 import {
+  CANCELLATION_TIMINGS,
   CancelSubscription,
   CreateSubscription,
   GetSubscription,
+  SubscriptionError,
   SubscriptionPaymentError,
   type SubscriptionRequest,
 } from "@antelopejs/interface-subscriptions";
@@ -39,13 +41,17 @@ import {
   SeedFixture,
   SeededRecords,
 } from "./support/metadata-corpus";
+import { WidestSubscription } from "./support/metadata-budget";
 import {
+  Bytes,
+  CALLER_BYTES,
   CallerArb,
   ExpectedKeyHash,
   ForeignCallerArb,
   InstantArb,
   KeyArb,
   ObjectOf,
+  OwnBytes,
   StringEntries,
   Wire,
 } from "./support/metadata-model";
@@ -401,5 +407,57 @@ describe("[mollie] metadata written by earlier versions", function () {
   it("holds foreignInterfaceView: GetPayment and GetCustomer read another writer's metadata, with no `antelope` key, as its string entries", async () => {
     const details = await fc.check(foreignInterfaceView, PARAMETERS);
     assert.ok(!details.failed, fc.defaultReportMessage(details));
+  });
+});
+
+const PINNED_CALLER_BYTES = 700;
+const METADATA_REFUSAL =
+  "The metadata storage is currently limited to 1024 bytes";
+
+describe("[mollie] metadata pins", function () {
+  this.timeout(TEST_TIMEOUT);
+
+  it("pins laterWritesFit: the documented budget at its edge, 600 caller bytes and the widest keys, ends at 1024 bytes after a period-end cancellation", () => {
+    const { caller, canceled } = WidestSubscription();
+    assert.deepEqual(
+      [Bytes(caller), OwnBytes(canceled), Bytes(canceled)],
+      [CALLER_BYTES, 398, 1023],
+    );
+  });
+
+  it("pins subscriptionWritesFit: a subscription created with 700 bytes of caller metadata cannot be cancelled now or at the period end, and Mollie keeps billing it", async function () {
+    RequireStandIn(this);
+    const payer = await NewPayer();
+    const metadata = {
+      pad: "x".repeat(PINNED_CALLER_BYTES - Bytes({ pad: "" })),
+    };
+    assert.equal(Bytes(metadata), PINNED_CALLER_BYTES);
+    const created = await CreateSubscription(
+      request(payer, { metadata }),
+      Key(),
+    );
+    assert.deepEqual(created.metadata, metadata);
+    const refusals: string[] = [];
+    for (const timing of CANCELLATION_TIMINGS) {
+      const error = await Rejected(
+        CancelSubscription(created.id, Key(), timing),
+        SubscriptionError,
+      );
+      refusals.push(`${timing}: ${error.message}`);
+    }
+    assert.deepEqual(refusals, [
+      `now: ${METADATA_REFUSAL}`,
+      `period_end: ${METADATA_REFUSAL}`,
+    ]);
+    const read = await GetSubscription(created.id);
+    const child = created.id.split(":")[1] ?? "";
+    assert.deepEqual(
+      [
+        read.status,
+        read.cancelAtPeriodEnd,
+        PrimaryAccount().subscriptions.get(child)?.status,
+      ],
+      ["active", false, "active"],
+    );
   });
 });

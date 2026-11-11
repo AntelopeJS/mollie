@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import fc from "fast-check";
 
 import { MergeOwn, WriteMetadata } from "../../mollie/metadata";
+import type { JsonValue } from "../../mollie/types";
 import {
   Bytes,
   CALLER_BYTES,
+  CallerArb,
   CallerWithinBudgetArb,
   EarlyEndArb,
   IdArb,
@@ -14,6 +16,7 @@ import {
   MOLLIE_METADATA_BYTES,
   OWN_BYTES,
   OwnBytes,
+  OwnObjectOf,
   OwnSubscriptionArb,
   Wire,
 } from "./metadata-model";
@@ -95,6 +98,67 @@ export const laterWritesFit = fc.property(
         Bytes(written) <= MOLLIE_METADATA_BYTES,
         `${Bytes(caller)} caller bytes and ${OwnBytes(written)} own bytes make ${Bytes(written)}: ${JSON.stringify(written)}`,
       );
+    }
+  },
+);
+
+/**
+ * The longest cancellation key the subscription's metadata must keep room for,
+ * as UTF-8 bytes of its JSON text without the quotes. The interface bounds no
+ * idempotency key, and the cancellation key is only known when the caller
+ * cancels, so creation can keep room for a key of some size only. A UUID takes
+ * 36 bytes.
+ */
+const CANCEL_KEY_BYTES = 64;
+
+/** A cancellation key of exactly `CANCEL_KEY_BYTES`, most of it escaped in JSON. */
+const WIDEST_CANCEL_KEY = `${"\u0000".repeat(10)}xxxx`;
+
+const CancelKeyArb = fc.oneof(
+  KeyArb.filter((key) => Bytes(key) - 2 <= CANCEL_KEY_BYTES),
+  fc.constant(WIDEST_CANCEL_KEY),
+);
+
+/** Caller metadata of any size up to what Mollie accepts with an own record beside it. */
+const CallerOfAnySizeArb = fc
+  .tuple(CallerArb, fc.integer({ min: 0, max: MOLLIE_METADATA_BYTES }))
+  .map(([base, pad]) => ({ ...base, pad: "x".repeat(pad) }));
+
+/** Whether `CreateSubscription` sends the metadata to Mollie and Mollie stores it. */
+function isCreated(created: JsonValue): boolean {
+  return Bytes(created) <= MOLLIE_METADATA_BYTES;
+}
+
+/**
+ * Every subscription `CreateSubscription` creates can be cancelled: the
+ * module's later writes to its metadata (the first charge or the refusal,
+ * then the cancellation mark, now or at the period end, with a key of up to
+ * `CANCEL_KEY_BYTES`) stay within Mollie's 1,024 bytes, whatever caller
+ * metadata the creation accepted. An early end after `period_end` writes to
+ * the customer, not the subscription.
+ */
+export const subscriptionWritesFit = fc.property(
+  CreatedOwnArb,
+  CallerOfAnySizeArb,
+  fc.tuple(IdArb.payment, CancelKeyArb, InstantArb),
+  (own, caller, [payment, key, endsAt]) => {
+    const created = Wire(WriteMetadata(own, caller));
+    fc.pre(isCreated(created));
+    const cancels = [
+      { timing: "now", key },
+      { timing: "period_end", key, endsAt },
+    ];
+    for (const mark of [{ firstPayment: payment }, { refused: payment }]) {
+      const marked = Wire(MergeOwn(created, mark));
+      for (const written of [
+        marked,
+        ...cancels.map((cancel) => Wire(MergeOwn(marked, { cancel }))),
+      ]) {
+        assert.ok(
+          Bytes(written) <= MOLLIE_METADATA_BYTES,
+          `created at ${Bytes(created)} bytes with ${Bytes(caller)} caller bytes, written at ${Bytes(written)}: ${JSON.stringify(OwnObjectOf(written))}`,
+        );
+      }
     }
   },
 );
