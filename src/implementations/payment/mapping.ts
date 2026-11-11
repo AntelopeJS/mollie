@@ -188,13 +188,19 @@ export function HasRefunds(payment: MolliePayment): boolean {
  * `succeeded` refunds. `Payment.amountRefunded` is "how much has been refunded
  * so far. Zero until a refund settles", so a `queued`, `pending`, `processing`,
  * `failed` or `canceled` refund is not counted. Mollie's own `amountRefunded`
- * is not read. It moves when a refund settles, but it can trail the refund's
- * status, and the sum of the settled refunds is the contract at every read.
+ * moves when a refund settles, but it can trail the refund's status, so it is
+ * read only when the refunds could not be (`null`), rather than failing the
+ * read of a payment that exists.
  */
 function refundedAmount(
   payment: MolliePayment,
-  refunds: readonly MollieRefund[],
+  refunds: readonly MollieRefund[] | null,
 ): Payment["amountRefunded"] {
+  if (refunds === null) {
+    return payment.amountRefunded
+      ? FromMollieAmount(payment.amountRefunded)
+      : ZeroAmount(payment.amount.currency);
+  }
   const value = refunds
     .filter((refund) => REFUND_STATUS_BY_MOLLIE[refund.status] === "succeeded")
     .reduce(
@@ -207,12 +213,13 @@ function refundedAmount(
 /**
  * The payment as the interface reports it. Pass the payment's capture when it
  * has been read, so that one Mollie has not applied yet shows, and its refunds
- * when it has any (`HasRefunds`), for the refunded amount.
+ * when it has any (`HasRefunds`), for the refunded amount, or `null` when
+ * listing them failed.
  */
 export function ToPayment(
   payment: MolliePayment,
   capture?: MollieCapture,
-  refunds: readonly MollieRefund[] = [],
+  refunds: readonly MollieRefund[] | null = [],
 ): Payment {
   const status = ToPaymentStatus(payment, capture);
   const metadata = ReadCallerMetadata(payment.metadata);

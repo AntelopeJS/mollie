@@ -76,7 +76,7 @@ function buildEvent(
   payment: MolliePayment,
   type: PaymentEventType,
   subscription: string | undefined,
-  refunds: readonly MollieRefund[],
+  refunds: readonly MollieRefund[] | null,
 ): PaymentEvent {
   const at = STATUS_TIME[payment.status](payment) ?? payment.createdAt;
   return {

@@ -96,12 +96,17 @@ export async function ListRefunds(
   );
 }
 
-/** The refunds that make up the payment's refunded amount: none are read for a payment without one. */
+/**
+ * The refunds that make up the payment's refunded amount: none are read for a
+ * payment without one, and `null` when Mollie fails to list them, so a payment
+ * that was read is still returned.
+ */
 export async function RefundsOf(
   account: Account,
   payment: MolliePayment,
-): Promise<MollieRefund[]> {
-  return HasRefunds(payment) ? ListRefunds(account, payment.id) : [];
+): Promise<MollieRefund[] | null> {
+  if (!HasRefunds(payment)) return [];
+  return ListRefunds(account, payment.id).catch(() => null);
 }
 
 export function MarkSubscriptionCharge(

@@ -4,6 +4,7 @@ import {
   InvalidPaymentStateError,
   RefundPayment,
   type Refund,
+  VerifyWebhook,
 } from "@antelopejs/interface-payment";
 
 import {
@@ -12,12 +13,14 @@ import {
   PaidPayment,
   PrimaryAccount,
   RequireStandIn,
+  StandIn,
   SetRefundStatus,
   TEST_TIMEOUT,
 } from "./support/helpers";
 
 const EUR = (value: number) => ({ value, currency: "EUR" });
 const MOLLIE_PAGE = 250;
+const REFUND_LIST = /^\/v2\/payments\/[^/]+\/refunds$/;
 
 function refundRequests(): number {
   return PrimaryAccount().requests.filter((request) =>
@@ -52,6 +55,22 @@ describe("[mollie] the refunded amount of a payment", function () {
     assert.deepEqual((await GetPayment(id)).amountRefunded, EUR(1200));
     MollieReports(id, "amountRefunded", "0.00");
     assert.deepEqual((await GetPayment(id)).amountRefunded, EUR(1200));
+  });
+
+  it("still reads a payment whose refunds Mollie fails to list, with Mollie's own refunded amount", async () => {
+    const id = await PaidPayment();
+    await refund(id, 500);
+    MollieReports(id, "amountRefunded", "5.00");
+    StandIn().faults.push({ method: "GET", path: REFUND_LIST, status: 503 });
+    const read = await GetPayment(id);
+    assert.equal(read.status, "succeeded");
+    assert.deepEqual(read.amountRefunded, EUR(500));
+    StandIn().faults.push({ method: "GET", path: REFUND_LIST, status: 503 });
+    const event = await VerifyWebhook({
+      body: Buffer.from(`id=${id}`),
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+    assert.deepEqual(event?.payment?.amountRefunded, EUR(500));
   });
 
   it("reads a settled refund on a payment whose amountRemaining is above its amount, and asks for none before there is one", async () => {
