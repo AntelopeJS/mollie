@@ -92,7 +92,7 @@ The module raises only `payment.*` events. A classic delivery names a payment, n
 
 Subscriptions are Mollie's own. Mollie holds the schedule and creates every renewal payment. [Subscriptions](./docs/4.subscriptions.md) has the full mapping. In short:
 
-- **`CreateSubscription` charges the first period.** It charges a payment that carries `antelopeSubscription`, and Mollie's own schedule starts one period later. Mollie reports a declined charge after the call returns, so the subscription is created `active` and goes `past_due` if that charge fails. Nothing retries that first charge.
+- **`CreateSubscription` charges the first period.** It charges a payment whose metadata names the subscription under `antelope.subscription`, and Mollie's own schedule starts one period later. Mollie reports a declined charge after the call returns, so the subscription is created `active` and goes `past_due` if that charge fails. Nothing retries that first charge.
 - **Mollie schedules by calendar date.** The module rounds a trial end or a billing anchor up to the start of the next day in Europe/Amsterdam, and reports that time. A period runs from one such midnight to the next.
 - **Mollie owns the retries.** Mollie retries a failed renewal up to five times, then cancels the subscription. The module reports it `canceled` with `endReason: "payment_failed"`.
 - **Cancelling at period end stops Mollie at once.** The module reports the subscription as running until the end of the period it paid for. Mollie raises nothing when that period ends, so neither does this module.
