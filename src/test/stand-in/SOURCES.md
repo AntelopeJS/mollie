@@ -146,6 +146,13 @@ The stand-in is an HTTP server that answers the part of Mollie's API this module
 | A renewal (test control) is a `recurring` payment carrying `subscriptionId`, the subscription's mandate and `webhookUrl`, and moves `nextPaymentDate` on by one interval | doc `docs/recurring-payments` ("How do webhooks for subscriptions work?")                        |
 | …carrying the subscription's metadata                                                                                                                                    | spec (subscription `metadata`: "…automatically forwarded to the payments generated for it")      |
 
+## Metadata
+
+| Behaviour                                                                                                                                                   | Basis                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A request whose `metadata` is over 1,024 bytes of JSON text, on any resource, is refused with 422 `The metadata storage is currently limited to 1024 bytes` | spec (`metadata`: "You can use up to approximately 1kB", `github.com/mollie/openapi` `10ce28b`); observed from Mollie 2026-11-11 in test mode (`PATCH /customers/{id}`: a string of 1,000 bytes as JSON accepted, 1,096, 1,100, 1,500 and 2,100 refused with that 422 and wording) |
+| The edge is exactly 1,024, counted as UTF-8 bytes of the JSON text, and the 422 names the field `metadata`                                                  | assumed; the probe did not try the edge, bytes against characters, or read `field`                                                                                                                                                                                                 |
+
 ## Test controls that are not Mollie
 
 These exist only so the tests can make time pass or force an outcome. The module never calls them.

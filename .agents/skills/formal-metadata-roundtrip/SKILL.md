@@ -40,7 +40,9 @@ The model is `src/test/support/metadata-model.ts`. The expected values are the g
 | `mergeKeepsCallerView` | same | After a merge into metadata the module wrote, the caller reads the same metadata. | holds |
 | `foreignCallerView` | interface `metadata` "Round-tripped opaque key/value pairs"; `ReadCallerMetadata` reads what another writer left | Metadata with no `antelope` key (an object of any keys, one with a `metadata` object of its own, or the text of either) reads as its own string entries through `ReadCallerMetadata`, `ToPayment`, `ToRefund` and `ToSubscription`, and is not the module's. | holds |
 | `mergeKeepsForeignCallerView` | `MergeOwn` TSDoc; `docs/4.subscriptions.md` "`GetCustomer` returns the same metadata before and after" | After a merge into another writer's JSON object, the caller still reads its string entries. | holds (F2, fixed in #62) |
-| `mergeKeepsForeignValue` | same; Mollie's `metadata` takes a string, a number, an object or a list of strings | A merge into metadata that is not a JSON object keeps that value, and the caller still reads no metadata. | holds (F1, fixed in #62) |
+| `mergeKeepsForeignValue` | same; Mollie's `metadata` takes a string, a number, an object or a list of strings | A merge into a string, whether or not it holds a JSON object, or into a number or a list, keeps that value as it is, and the caller reads what it read before. | holds (F1, fixed in #62) |
+| `mergeKeepsOwnText` | `textRoundTrip`'s rule, after a merge | A merge into the JSON text of what the module wrote keeps the text, and the caller's metadata and the own subscription record read as before, with the change added. | holds |
+| `mergeIsSizeChecked` | `docs/4.subscriptions.md` "Cancelling": the module rejects an early end past 1,024 bytes | `FitsMetadataLimit` agrees with the UTF-8 bytes of the merged JSON text against 1,024, for strings of one to four bytes per character, JSON object text and objects sized around the limit, the `foreign` mark included. | holds |
 | `readsNeverThrow` | `ReadOwn` TSDoc: "a field of another type is dropped" | For any JSON, including well-formed own records with one field of another type and cancellation marks with a valid key and one field of another type or an unknown timing, every reader returns its documented types without throwing. `AssertOwnTypes` (`support/metadata-types.ts`) checks every field of the own subscription it returns, `cancel.timing` included. Metadata with no own object reads as not the module's: no own subscription, an empty reference, no charged subscription. | holds |
 | `textRoundTrip` | `parse` in `metadata.ts`, unchanged since `ef5dfaf`; no TSDoc or doc states it | Metadata Mollie holds as the JSON text of what the module wrote reads as the object it holds: the caller's metadata, an own subscription record, a payment's reference and a charge's subscription. | holds |
 | `textWithoutObject` | same | A metadata string that is not the JSON text of an object (JSON of another type, or text that is not JSON) reads as no caller metadata, no own subscription, an empty reference and no charged subscription. | holds |
@@ -78,14 +80,14 @@ A writer change that stores a new format fails `corpusCoversWriters` and names t
 
 This is randomized testing of real code, not an exhaustive proof. It does not cover:
 
-- What Mollie does with metadata beyond a JSON round trip. Whether it keeps key order, accepts NUL or lone surrogates, counts its 1 kB in bytes or characters, and refuses or truncates above it is not observed. The stand-in enforces no size. `laterWritesFit` counts UTF-8 bytes of the JSON text.
+- What Mollie does with metadata beyond a JSON round trip. Whether it keeps key order, accepts NUL or lone surrogates, counts its 1 kB in bytes or characters, and refuses or truncates above it is not observed. The stand-in refuses a request whose `metadata` is over 1,024 bytes, (`SOURCES.md`). `laterWritesFit` counts UTF-8 bytes of the JSON text.
 - Subscription metadata past the documented budget. The module checks no size at creation, then adds `firstPayment` (31 bytes) and a cancellation mark (35 bytes plus the key for `now`, 65 plus the key at the period end). A subscription Mollie accepted at 1,024 bytes grows to 1,055 with the first charge and 1,128 with a cancellation at the period end, and the cancellation PATCH that `cancelAtPeriodEnd` sends before its DELETE may then fail. `docs/4.subscriptions.md` says Mollie does not document what it does beyond the budget, so this is a bound, not a finding, until Mollie's behaviour is observed.
 - The one byte past 1,024 at the budget's joint edge. 400 own bytes, 600 caller bytes and the 25 bytes of the two wrapper keys make 1,025. The widest keys make an own record of 398 bytes and 1,023 in all (`pins laterWritesFit`). The docs say "about", so the byte is not asserted.
 - Inputs the interfaces never pass: caller metadata values that are not strings, and own records the module never writes, such as `firstPayment` with `refused`. The generators produce such combinations anyway, as a superset.
 - Two writers merging into the same metadata at once. `formal-subscription-lifecycle` owns that race.
 - Period bounds. The corpus asserts status, end and the marks, not `currentPeriodStart` or `currentPeriodEnd`. `formal-amsterdam-calendar` owns those.
 - `CreateCheckoutSession`. `checkout.ts` writes the payment format through the same `WriteMetadata` call as `CreatePayment`, and `corpusCoversWriters` does not drive it.
-- The customer's early ends past Mollie's limit. One early end adds 43 bytes, each later one 44, so 22 fit a customer with no other metadata (1,011 bytes) and the 23rd makes 1,055. `docs/4.subscriptions.md` documents this, so it is a bound, not a finding. `earlyEndsFit` asserts the documented twenty.
+- The customer's early ends past Mollie's limit. One early end adds 43 bytes, each later one 44, so 22 fit a customer with no other metadata (1,011 bytes) and the 23rd makes 1,055. The module rejects the one that passes 1,024 bytes and sends nothing (`mergeIsSizeChecked`, `early-end-customer-metadata.test.ts`). Mollie's test mode refused 1,096 bytes with 422 and accepted 1,000. `earlyEndsFit` asserts the documented twenty.
 - Metadata the module writes as a string. It writes objects only. `textRoundTrip` and `textWithoutObject` cover JSON text another writer left.
 - Long references and keys. With an empty reference and empty keys, the largest own subscription record is 183 bytes, and the whole metadata with no caller entries 210. The 400 bytes `docs/4.subscriptions.md` gives the own record hold while the reference, the creation key and the cancellation key add up to at most 217 bytes.
 
@@ -95,8 +97,8 @@ Last code synchronization is `#62`, on top of the F3 fix (#63).
 
 | File | Covered functions and role |
 | --- | --- |
-| `src/mollie/metadata.ts` | `WriteMetadata`, `MergeOwn`, `ReadOwn`, `ReadCallerMetadata` and the private `objectOf` and `parse` (their JSON-text reading included), `strings`, `isForeign` and `ownBefore`. |
-| `src/implementations/subscriptions/records.ts` | `ReadOwnSubscription`, `ShownSubscription`, `KeyHash`, the `OWN_SUBSCRIPTION` and `OWN_CUSTOMER` guards, and through the interface `endedEarly`, `toEarlyEnd` (both stored shapes), `earlyEndOf` and `RecordEarlyEnd`. |
+| `src/mollie/metadata.ts` | `WriteMetadata`, `MergeOwn`, `ReadOwn`, `ReadCallerMetadata` and `FitsMetadataLimit` and the private `parse` (its JSON-text reading included), `strings`, `keptText`, `ownOf`, `isForeign` and `ownBefore`. |
+| `src/implementations/subscriptions/records.ts` | `ReadOwnSubscription`, `ShownSubscription`, `KeyHash`, the `OWN_SUBSCRIPTION` and `OWN_CUSTOMER` guards, and through the interface `endedEarly`, `toEarlyEnd` (both stored shapes), `earlyEndOf` and `RecordEarlyEnd`, size refusal included. |
 | `src/implementations/shared/subscription-of-payment.ts` | `SubscriptionOfPayment` and its two guards. |
 | Writers, through `corpusCoversWriters` | `PaymentBody`, `CapturePayment` (`payments.ts`), `RefundPayment` (`refunds.ts`), `CreateCustomer` (`customers.ts`), `subscriptionBody`, `chargeFirstPeriod`, `updateOwn` (`creation.ts`), `cancelAtMollie` (`changes.ts`). These files are not in `covers`, so `formal` does not run this check for them, but `pnpm test` does. |
 | Readers, through the interface | `ToPayment`, `ToRefund` (`payment/mapping.ts`), `ToSubscription` (`subscriptions/mapping.ts`), refund and capture replays. |
@@ -120,32 +122,8 @@ No finding stands. Counterexamples are at seed `20261111`. F1 and F2 are in `FIX
 
 ## Fixed
 
-### F4: `legacyEarlyEnd`, the first release's early end no longer read
+`FIXED.md` records the four findings this check found, F1 to F4, and how each was fixed: F1 and F2 in #62, F3 in #63, F4 in #61.
 
-`ef5dfaf` stored an early end as `{endedAt, endsAt, key}`. `eedbca1` changed it to `[endedAt, keyHash]`, and `toEarlyEnd` read only the list. A subscription ended early under `ef5dfaf` read as still running until its period end. The format lived 27 minutes on `main`, and no version reached npm.
-
-```text
-recorded: {"status":"canceled","cancelAtPeriodEnd":false,"endedAt":1779265800000, ...}
-read before the fix: {"status":"active","cancelAtPeriodEnd":true,"endedAt":null, ...}
-```
-
-`toEarlyEnd` (`records.ts`) now also reads `{endedAt, key}` as an early end named by `KeyHash(key)`. The first release compared the raw key, today's code compares hashes, and the hash of the stored key matches the replay of the same key under both. The read writes nothing back. The fixture lost its `finding` mark, so `corpusReads` reads it, `holds legacyEarlyEnd` asserts the end, and `src/test/legacy-early-end.test.ts` replays `CancelSubscription` with the original key through the stand-in.
-
-### F3: `ownSubscriptionValues`, a tampered interval count threw or hung a subscription read
-
-Found when this check landed (#60) and fixed in the pull request that turned it into `holds ownSubscriptionValues`. `OWN_SUBSCRIPTION` checked `intervalCount` and `cancel.endsAt` with `IsCount`, which accepts any number. A subscription in its second period whose metadata said `"intervalCount":0` read as the module's, and `ToSubscription` threw `RangeError: Invalid time value`, so `GetSubscription` rejected, and so did `ListSubscriptions` for every subscription of that customer. With `-1`, `PeriodStartBefore` (`calendar.ts`) counted forward forever and blocked the event loop. A count stored as text, or an interval the interface does not know, hid a subscription Mollie still billed. A cancellation end past any date threw the same `RangeError` once Mollie cancelled the subscription. Anything holding the API key can write that metadata, the case `ReadOwn`'s TSDoc names.
-
-```text
-Counterexample: [{"antelope":{"reference":"antelope","createKey":" ","interval":"day","intervalCount":0,"start":"anchor"},"metadata":{}}]
-intervalCount 0: threw Invalid time value
-intervalCount -1: ToSubscription did not return within 3000 ms
-```
-
-`ReadOwnSubscription` now keeps the stored interval and count only when `IsBillablePeriod` (`calendar.ts`) accepts them: a whole count from 1 to the interval's longest. Otherwise it reads the period from Mollie's own `interval` through `FromMollieInterval`, the one Mollie bills, so the subscription still reads, lists and cancels. `FromMollieInterval` returns a period only for a form Mollie documents that `IsBillablePeriod` accepts. When neither period is readable, `ReadOwnSubscription` throws `UnreadablePeriodError`, a `SubscriptionError` naming the subscription: `GetSubscription`, `CancelSubscription` and a replay of the creation reject with it, `ListSubscriptions` leaves the subscription out, and `CreateSubscription` finds an earlier creation by its stored key through `CreateKeyOf` without reading the period. `cancel.endsAt` is checked with `IsInstant` (`guards.ts`), which accepts integers from 0 to the start of 31 December 9999 UTC, so an end past what the calendar can date drops the mark like any mistyped field. `AddPeriods` throws a `RangeError` for a count that is not a whole number of at least 1, so the calendar refuses such a count instead of looping. `src/test/tampered-period.test.ts` drives counts 0, -1, 1.5, `"2"` and 53, the interval `"fortnight"`, ends of `1e300`, `8.64e15`, `8.64e15 - 1` and one past the last day of 9999, and eight Mollie intervals Mollie does not document through `GetSubscription`, `ListSubscriptions`, `CancelSubscription` and `CreateSubscription` on the stand-in, under a watchdog worker that kills the run when the event loop stays blocked 10 s. Its `pins` test is gone.
-
-A review of the first fix found two gaps. `IsInstant` accepted ends up to `8.64e15`, and an end of `8.64e15` or `8.64e15 - 1` on a subscription Mollie cancelled still threw `RangeError: Invalid time value` from every read and from `ListSubscriptions` for the whole customer. The fallback did not check Mollie's interval: `0 days` threw in the second period, `99999999999999999999 days` threw `Invalid time value`, `400 days` and `100 months` read past Mollie's maximums, and an unreadable one such as `3 fortnights` threw `RangeError` from every read and from `CreateSubscription` for that customer.
-
-`FIXED.md` records F1 and F2, fixed in #62.
 
 ## Mutation evidence
 

@@ -42,6 +42,7 @@ import {
   NonObjectArb,
   NonObjectTextArb,
   ObjectOf,
+  ObjectTextArb,
   OWN,
   OwnBytes,
   OwnObjectOf,
@@ -60,6 +61,11 @@ import {
   laterWritesFit,
   WidestSubscription,
 } from "./support/metadata-budget";
+import {
+  AssertMergeInputs,
+  mergeIsSizeChecked,
+  mergeKeepsOwnText,
+} from "./support/metadata-merge";
 import { AssertOwnTypes } from "./support/metadata-types";
 import {
   IsDocumentedMollieInterval,
@@ -223,7 +229,7 @@ const mergeKeepsForeignCallerView = fc.property(
 );
 
 const mergeKeepsForeignValue = fc.property(
-  NonObjectArb,
+  fc.oneof(NonObjectArb, ObjectTextArb),
   ChangesArb,
   (foreign, changes) => {
     const merged = Wire(MergeOwn(foreign, changes));
@@ -233,8 +239,8 @@ const mergeKeepsForeignValue = fc.property(
     );
     assert.deepEqual(
       Entries(ReadCallerMetadata(merged)),
-      [],
-      "the merge gave the caller metadata",
+      Entries(ReadCallerMetadata(foreign)),
+      "the merge changed what the caller reads",
     );
   },
 );
@@ -398,8 +404,18 @@ describe("[mollie] metadata round trip properties", function () {
   );
   holds(
     "mergeKeepsForeignValue",
-    "a merge into metadata that is not a JSON object keeps it, and the caller still reads none",
+    "a merge into a string, whether or not it holds a JSON object, or into any other metadata that is not an object, keeps it as it is, and the caller reads what it read",
     mergeKeepsForeignValue,
+  );
+  holds(
+    "mergeKeepsOwnText",
+    "a merge into the JSON text of the module's own record keeps the text, and the caller and the own record read as before",
+    mergeKeepsOwnText,
+  );
+  holds(
+    "mergeIsSizeChecked",
+    "whatever metadata an early end is merged into, the module's size check agrees with the UTF-8 bytes of the merged JSON text against Mollie's 1 kB",
+    mergeIsSizeChecked,
   );
   holds(
     "readsNeverThrow",
@@ -482,6 +498,7 @@ describe("[mollie] metadata generators and pinned findings", () => {
       "no other writer's metadata with a metadata object of its own",
     );
     assert.ok(foreign.some((value) => IsTextValue(value)));
+    AssertMergeInputs(PARAMETERS);
     assert.ok(
       foreign.every((value) => {
         const object = ObjectOf(value);

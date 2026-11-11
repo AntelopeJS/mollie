@@ -133,6 +133,21 @@ function parseRequestBody(raw: string): payments.Request["body"] {
   return IsJsonObject(parsed) ? parsed : {};
 }
 
+const METADATA_BYTES = 1024;
+
+function assertMetadataFits(body: payments.Request["body"]): void {
+  if (
+    body.metadata !== undefined &&
+    Buffer.byteLength(JSON.stringify(body.metadata), "utf8") > METADATA_BYTES
+  ) {
+    throw new StandInError(
+      422,
+      "The metadata storage is currently limited to 1024 bytes",
+      "metadata",
+    );
+  }
+}
+
 function send(response: ServerResponse, result: StandInResponse): void {
   const isText = isTextBody(result.body);
   const isJson = !isText && result.body !== undefined;
@@ -385,14 +400,16 @@ export class MollieStandIn {
         `No route for ${message.method} ${url.pathname}`,
       );
     const body = parseRequestBody(raw);
-    const run = () =>
-      route.candidate.handle({
+    const run = () => {
+      assertMetadataFits(body);
+      return route.candidate.handle({
         account,
         hooks: this.hooks,
         params: route.match?.slice(1) ?? [],
         query: url.searchParams,
         body,
       });
+    };
     const key = message.headers["idempotency-key"];
     account.requests.push({
       method: message.method ?? "",
