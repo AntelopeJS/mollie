@@ -16,12 +16,17 @@ import { LifecycleEvent, Raise } from "./events";
 import { DefinedFields } from "../../mollie/fields";
 import type { MollieSubscription } from "../../mollie/types";
 import { IsMollieId, SubscriptionId } from "../../mollie/ids";
-import { SubscriptionAccount, TranslatingSubscription } from "./errors";
+import {
+  SubscriptionAccount,
+  TranslatingSubscription,
+  UnreadablePeriodError,
+} from "./errors";
 import {
   type CancelMark,
   CompleteRecord,
   LoadRecord,
   KeyHash,
+  type OwnSubscription,
   RecordEarlyEnd,
   ShownSubscription,
   SubscriptionPath,
@@ -53,6 +58,20 @@ async function listed(
   }
 }
 
+/**
+ * The module's metadata of a listed subscription, or undefined when the list
+ * leaves it out: one the interface does not show, or one whose period cannot
+ * be read, which `GetSubscription` reports by id instead of failing the list.
+ */
+function listedOwn(mollie: MollieSubscription): OwnSubscription | undefined {
+  try {
+    return ShownSubscription(mollie);
+  } catch (error) {
+    if (error instanceof UnreadablePeriodError) return undefined;
+    throw error;
+  }
+}
+
 export async function ListSubscriptions(
   customer: string,
   provider?: string,
@@ -62,7 +81,7 @@ export async function ListSubscriptions(
   return TranslatingSubscription(customer, async () => {
     const records = await Promise.all(
       (await listed(account, customer)).flatMap((mollie) => {
-        const own = ShownSubscription(mollie);
+        const own = listedOwn(mollie);
         if (!own) return [];
         const id = SubscriptionId(customer, mollie.id);
         return [CompleteRecord(account, id, mollie, own)];

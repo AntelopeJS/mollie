@@ -232,12 +232,15 @@ function isSubscriptionInterval(
   return SUBSCRIPTION_INTERVALS.some((interval) => interval === value);
 }
 
-export function FromMollieInterval(interval: string): Period {
+/**
+ * The period Mollie bills as `interval`: `n days` as `day` × n, `n weeks` as
+ * `week` × n and `n months` as `month` × n. Undefined for a form Mollie does
+ * not document, or a period it cannot bill.
+ */
+export function FromMollieInterval(interval: string): Period | undefined {
   const match = MOLLIE_INTERVAL.exec(interval.trim());
   const unit = match?.[2].replace(/s$/, "");
-  if (!match || !isSubscriptionInterval(unit)) {
-    throw new RangeError(`Mollie interval "${interval}" is not understood`);
-  }
-  const count = Number.parseInt(match[1], BASE);
-  return { interval: unit, count };
+  if (!match || !isSubscriptionInterval(unit)) return undefined;
+  const period = { interval: unit, count: Number.parseInt(match[1], BASE) };
+  return IsBillablePeriod(period) ? period : undefined;
 }

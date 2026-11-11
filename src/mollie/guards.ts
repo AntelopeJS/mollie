@@ -15,15 +15,19 @@ export function IsCount(value: unknown): value is number {
   return typeof value === "number";
 }
 
-const LATEST_INSTANT = 8.64e15;
+const LAST_DAY_OF_9999 = Date.UTC(9999, 11, 31);
 
-/** A whole number of milliseconds since the epoch, not before it, that a `Date` can hold. */
+/**
+ * A whole number of milliseconds from the epoch to the start of 31 December
+ * 9999 UTC: an instant every time zone dates from 1970 to 9999, so a period
+ * counted from it, formatted as `YYYY-MM-DD`, stays within what a `Date` holds.
+ */
 export function IsInstant(value: unknown): value is number {
   return (
     typeof value === "number" &&
     Number.isInteger(value) &&
     value >= 0 &&
-    value <= LATEST_INSTANT
+    value <= LAST_DAY_OF_9999
   );
 }
 

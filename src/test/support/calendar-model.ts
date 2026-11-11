@@ -21,6 +21,27 @@ const FEBRUARY = 2;
 const GREGORIAN_CYCLE = 400;
 const CENTURY = 100;
 const LEAP_CYCLE = 4;
+const DOCUMENTED_INTERVAL = /^(\d+) (day|days|week|weeks|month|months)$/;
+const LONGEST_MOLLIE = new Map([
+  ["day", 365],
+  ["week", 52],
+  ["month", 12],
+]);
+
+/**
+ * Intervals Mollie never sends: a count of 0, past its maximum or past any
+ * number, and units or forms its documentation does not list.
+ */
+export const UNDOCUMENTED_MOLLIE_INTERVALS = [
+  "0 days",
+  "00 weeks",
+  "99999999999999999999 days",
+  "400 days",
+  "100 months",
+  "3 fortnights",
+  "1 year",
+  "",
+] as const;
 const LONG_MONTHS = new Set([1, 3, 5, 7, 8, 10, 12]);
 const SHORT_MONTHS = new Set([4, 6, 9, 11]);
 
@@ -279,4 +300,37 @@ export const AnyCountArb = fc.oneof(
       ]),
     )
     .filter((count) => count >= 1),
+);
+
+/**
+ * Whether Mollie bills `interval` in a form its documentation lists: `n days`,
+ * `n weeks` or `n months`, from 1 to 365 days, 52 weeks or 12 months.
+ */
+export function IsDocumentedMollieInterval(interval: string): boolean {
+  const match = DOCUMENTED_INTERVAL.exec(interval);
+  if (!match) return false;
+  const count = Number(match[1]);
+  return (
+    count >= 1 && count <= (LONGEST_MOLLIE.get(match[2].replace(/s$/, "")) ?? 0)
+  );
+}
+
+/** The interval Mollie reports for a subscription: mostly a documented one, sometimes one Mollie never sends. */
+export const MollieIntervalArb: fc.Arbitrary<string> = fc.oneof(
+  {
+    weight: 3,
+    arbitrary: fc
+      .constantFrom(
+        ...[...LONGEST_MOLLIE].map(([unit, longest]) => ({
+          unit,
+          longest,
+        })),
+      )
+      .chain(({ unit, longest }) =>
+        fc
+          .integer({ min: 1, max: longest })
+          .map((count) => `${count} ${unit}${count === 1 ? "" : "s"}`),
+      ),
+  },
+  { weight: 1, arbitrary: fc.constantFrom(...UNDOCUMENTED_MOLLIE_INTERVALS) },
 );

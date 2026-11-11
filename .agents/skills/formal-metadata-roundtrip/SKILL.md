@@ -44,7 +44,7 @@ The model is `src/test/support/metadata-model.ts`. The expected values are the g
 | `readsNeverThrow` | `ReadOwn` TSDoc: "a field of another type is dropped" | For any JSON, including well-formed own records with one field of another type and cancellation marks with a valid key and one field of another type or an unknown timing, every reader returns its documented types without throwing. `AssertOwnTypes` (`support/metadata-types.ts`) checks every field of the own subscription it returns, `cancel.timing` included. Metadata with no own object reads as not the module's: no own subscription, an empty reference, no charged subscription. | holds |
 | `textRoundTrip` | `parse` in `metadata.ts`, unchanged since `ef5dfaf`; no TSDoc or doc states it | Metadata Mollie holds as the JSON text of what the module wrote reads as the object it holds: the caller's metadata, an own subscription record, a payment's reference and a charge's subscription. | holds |
 | `textWithoutObject` | same | A metadata string that is not the JSON text of an object (JSON of another type, or text that is not JSON) reads as no caller metadata, no own subscription, an empty reference and no charged subscription. | holds |
-| `ownSubscriptionValues` | same, and the interval table of `docs/4.subscriptions.md` | An own subscription record the module accepts has values it could have written: an integer count from 1 to the interval's longest, and a cancellation end that is a non-negative integer. | holds (F3 fixed) |
+| `ownSubscriptionValues` | same, the interval table of `docs/4.subscriptions.md`, and the forms of Mollie's `interval` it documents | With Mollie's `interval` drawn from documented forms and ones Mollie never sends, an own subscription record the module accepts has values it could have written: an integer count from 1 to the interval's longest, and a cancellation end that is an integer from 0 to the start of 31 December 9999 UTC. A read rejects only with a `SubscriptionError` naming the subscription, and only when neither the stored period nor Mollie's interval is one the module writes. | holds (F3 fixed) |
 | `laterWritesFit` | `docs/4.subscriptions.md` "Metadata": about 1 kB per subscription, an own record of up to about 400 bytes, about 600 bytes for the caller's `metadata` | Caller metadata of at most 600 bytes (the JSON text, padded to exactly 600 half the time) next to an own record of at most 400 bytes stays within 1,024 bytes after the first charge or the refusal and then a cancellation now or at the period end. Nothing beyond the budget is generated. | holds |
 | `earlyEndsFit` | `docs/4.subscriptions.md` "Cancelling": "room for about twenty" early ends | Twenty early ends fit a customer with no other metadata. | holds |
 | `corpusReads` | the golden corpus | Every shape written since `ef5dfaf` reads through the interfaces as the version that wrote it read it. | holds |
@@ -90,12 +90,12 @@ This is randomized testing of real code, not an exhaustive proof. It does not co
 
 ## Coverage record
 
-Last code synchronization is `a1a0f3e`, the F3 fix.
+Last code synchronization is `4f77d2e`, the F3 fix, and the review fix committed after it.
 
 | File | Covered functions and role |
 | --- | --- |
 | `src/mollie/metadata.ts` | `WriteMetadata`, `MergeOwn`, `ReadOwn`, `ReadCallerMetadata` and the private `parse` (its JSON-text reading included) and `strings`. |
-| `src/implementations/subscriptions/records.ts` | `ReadOwnSubscription` (its fallback to Mollie's interval included), `ShownSubscription`, `KeyHash`, the `OWN_SUBSCRIPTION` and `OWN_CUSTOMER` guards, and through the interface `endedEarly`, `toEarlyEnd` (both stored shapes), `earlyEndOf` and `RecordEarlyEnd`. |
+| `src/implementations/subscriptions/records.ts` | `ReadOwnSubscription` (its fallback to Mollie's interval, through `FromMollieInterval` in `calendar.ts`, and the `UnreadablePeriodError` it throws included), `ShownSubscription`, `KeyHash`, the `OWN_SUBSCRIPTION` and `OWN_CUSTOMER` guards, and through the interface `endedEarly`, `toEarlyEnd` (both stored shapes), `earlyEndOf` and `RecordEarlyEnd`. |
 | `src/implementations/shared/subscription-of-payment.ts` | `SubscriptionOfPayment` and its two guards. |
 | Writers, through `corpusCoversWriters` | `PaymentBody`, `CapturePayment` (`payments.ts`), `RefundPayment` (`refunds.ts`), `CreateCustomer` (`customers.ts`), `subscriptionBody`, `chargeFirstPeriod`, `updateOwn` (`creation.ts`), `cancelAtMollie` (`changes.ts`). These files are not in `covers`, so `formal` does not run this check for them, but `pnpm test` does. |
 | Readers, through the interface | `ToPayment`, `ToRefund` (`payment/mapping.ts`), `ToSubscription` (`subscriptions/mapping.ts`), refund and capture replays. |
@@ -110,7 +110,8 @@ Generator coverage at the default seed, over 300 samples each:
 - Metadata another writer left has a `metadata` object of its own 149 times and is JSON text 138 times, and 71 nested objects hold a string entry. 209 non-object texts are JSON of another type.
 - The caller metadata of `laterWritesFit` is exactly 600 bytes 105 times and never more.
 - Own records are 43 payments, 45 charges, 49 captures, 44 refunds, 79 customers and 40 subscriptions.
-- Tampered subscription records have a count of 0 or less 151 times and a non-integer count 82 times.
+- Tampered subscription records have a count of 0 or less 151 times and a non-integer count 82 times. 249 hold a cancellation end, 137 of them an integer past the last day of 9999 that a `Date` still holds.
+- Mollie's interval is a form Mollie does not document 69 times and a documented one 231 times.
 
 ## Findings
 
@@ -161,7 +162,9 @@ intervalCount 0: threw Invalid time value
 intervalCount -1: ToSubscription did not return within 3000 ms
 ```
 
-`ReadOwnSubscription` now keeps the stored interval and count only when `IsBillablePeriod` (`calendar.ts`) accepts them: a whole count from 1 to the interval's longest. Otherwise it reads the period from Mollie's own `interval` through `FromMollieInterval`, the one Mollie bills, so the subscription still reads, lists and cancels. `cancel.endsAt` is checked with `IsInstant` (`guards.ts`), so an end a `Date` cannot hold drops the mark like any mistyped field. `AddPeriods` throws a `RangeError` for a count that is not a whole number of at least 1, so the calendar refuses such a count instead of looping. `src/test/tampered-period.test.ts` drives counts 0, -1, 1.5, `"2"` and 53, the interval `"fortnight"` and an end of `1e300` through `GetSubscription`, `ListSubscriptions` and `CancelSubscription` on the stand-in, under a watchdog worker that kills the run when the event loop stays blocked 10 s. Its `pins` test is gone.
+`ReadOwnSubscription` now keeps the stored interval and count only when `IsBillablePeriod` (`calendar.ts`) accepts them: a whole count from 1 to the interval's longest. Otherwise it reads the period from Mollie's own `interval` through `FromMollieInterval`, the one Mollie bills, so the subscription still reads, lists and cancels. `FromMollieInterval` returns a period only for a form Mollie documents that `IsBillablePeriod` accepts. When neither period is readable, `ReadOwnSubscription` throws `UnreadablePeriodError`, a `SubscriptionError` naming the subscription: `GetSubscription`, `CancelSubscription` and a replay of the creation reject with it, `ListSubscriptions` leaves the subscription out, and `CreateSubscription` finds an earlier creation by its stored key through `CreateKeyOf` without reading the period. `cancel.endsAt` is checked with `IsInstant` (`guards.ts`), which accepts integers from 0 to the start of 31 December 9999 UTC, so an end past what the calendar can date drops the mark like any mistyped field. `AddPeriods` throws a `RangeError` for a count that is not a whole number of at least 1, so the calendar refuses such a count instead of looping. `src/test/tampered-period.test.ts` drives counts 0, -1, 1.5, `"2"` and 53, the interval `"fortnight"`, ends of `1e300`, `8.64e15`, `8.64e15 - 1` and one past the last day of 9999, and eight Mollie intervals Mollie does not document through `GetSubscription`, `ListSubscriptions`, `CancelSubscription` and `CreateSubscription` on the stand-in, under a watchdog worker that kills the run when the event loop stays blocked 10 s. Its `pins` test is gone.
+
+A review of the first fix found two gaps. `IsInstant` accepted ends up to `8.64e15`, and an end of `8.64e15` or `8.64e15 - 1` on a subscription Mollie cancelled still threw `RangeError: Invalid time value` from every read and from `ListSubscriptions` for the whole customer. The fallback did not check Mollie's interval: `0 days` threw in the second period, `99999999999999999999 days` threw `Invalid time value`, `400 days` and `100 months` read past Mollie's maximums, and an unreadable one such as `3 fortnights` threw `RangeError` from every read and from `CreateSubscription` for that customer.
 
 ## Mutation evidence
 

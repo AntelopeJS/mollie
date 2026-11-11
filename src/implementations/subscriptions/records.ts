@@ -16,10 +16,10 @@ import {
 import type { Account } from "../../accounts";
 import { MollieApiError } from "../../mollie/errors";
 import { IsJsonValue } from "../../mollie/json";
-import { TranslatingSubscription } from "./errors";
+import { TranslatingSubscription, UnreadablePeriodError } from "./errors";
 import { FromMollieInterval, IsBillablePeriod, type Period } from "./calendar";
 import { DefinedFields } from "../../mollie/fields";
-import { ParseSubscriptionId } from "../../mollie/ids";
+import { ParseSubscriptionId, SubscriptionId } from "../../mollie/ids";
 import {
   type Guard,
   IsCount,
@@ -139,26 +139,41 @@ function storedPeriod(own: Partial<OwnSubscription>): Period | undefined {
   return IsBillablePeriod(period) ? period : undefined;
 }
 
+type OwnFieldsRead = Partial<OwnSubscription> &
+  Pick<OwnSubscription, "reference" | "start">;
+
+function ownFields(mollie: MollieSubscription): OwnFieldsRead | undefined {
+  const own = ReadOwn(mollie.metadata, OWN_SUBSCRIPTION);
+  if (own?.reference === undefined || own.start === undefined) return undefined;
+  return { ...own, reference: own.reference, start: own.start };
+}
+
+/** The idempotency key `CreateSubscription` stored on a subscription of this module, read without its period. */
+export function CreateKeyOf(mollie: MollieSubscription): string | undefined {
+  return ownFields(mollie)?.createKey;
+}
+
 /**
  * The module's record of a subscription, or undefined when its metadata holds
  * none. Anything holding the API key can change that metadata, so an interval
  * and count the module could not have written read as the interval Mollie
- * bills: `n months` reads as `month` × n. Throws a `RangeError` only when
- * Mollie's interval is also not one of the forms Mollie documents.
+ * bills: `n months` reads as `month` × n. Throws `UnreadablePeriodError`, a
+ * `SubscriptionError` naming the subscription, when Mollie's interval is not
+ * a form Mollie documents or a period it can bill either.
  */
 export function ReadOwnSubscription(
   mollie: MollieSubscription,
 ): OwnSubscription | undefined {
-  const own = ReadOwn(mollie.metadata, OWN_SUBSCRIPTION);
-  if (own?.reference === undefined || own.start === undefined) return undefined;
+  const own = ownFields(mollie);
+  if (!own) return undefined;
   const period = storedPeriod(own) ?? FromMollieInterval(mollie.interval);
-  return {
-    ...own,
-    reference: own.reference,
-    interval: period.interval,
-    intervalCount: period.count,
-    start: own.start,
-  };
+  if (!period) {
+    throw new UnreadablePeriodError(
+      SubscriptionId(mollie.customerId, mollie.id),
+      mollie.interval,
+    );
+  }
+  return { ...own, interval: period.interval, intervalCount: period.count };
 }
 
 /**

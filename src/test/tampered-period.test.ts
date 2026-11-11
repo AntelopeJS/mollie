@@ -8,6 +8,9 @@ import {
   ListSubscriptions,
   SUBSCRIPTION_INTERVALS,
   type Subscription,
+  SubscriptionError,
+  SubscriptionNotFoundError,
+  type SubscriptionRequest,
 } from "@antelopejs/interface-subscriptions";
 
 import {
@@ -21,6 +24,7 @@ import { IsJsonObject } from "../mollie/metadata";
 import { IsMollieSubscription } from "../mollie/resources";
 import type { JsonObject } from "../mollie/types";
 import { RenewSubscription } from "./stand-in/subscriptions-api";
+import { UNDOCUMENTED_MOLLIE_INTERVALS } from "./support/calendar-model";
 import { CurrentHarness } from "./support/harness";
 import {
   Key,
@@ -38,7 +42,13 @@ import { NewPayer, type Payer } from "./support/payers";
 const BLOCKED_LIMIT_MS = 10_000;
 const BEAT_MS = 100;
 const HOUR_MS = 60 * 60 * 1000;
-const PAST_ANY_DATE = 1e300;
+const LAST_DAY_OF_9999 = Date.UTC(9999, 11, 31);
+const DROPPED_ENDS = [
+  { name: "past any date", endsAt: 1e300 },
+  { name: "the latest a Date holds", endsAt: 8.64e15 },
+  { name: "just before the latest a Date holds", endsAt: 8.64e15 - 1 },
+  { name: "past the last day of 9999", endsAt: LAST_DAY_OF_9999 + 1 },
+];
 
 const WATCHDOG = `
 const { workerData } = require("node:worker_threads");
@@ -118,28 +128,51 @@ async function listed(
   return all.find((subscription) => subscription.id === id);
 }
 
+function requestFor(payer: Payer): SubscriptionRequest {
+  return {
+    reference: Reference(),
+    customer: payer.customer,
+    paymentMethod: payer.paymentMethod,
+    amount: { value: 1900, currency: "EUR" },
+    interval: "week",
+    intervalCount: 2,
+  };
+}
+
 async function create(payer: Payer): Promise<Subscription> {
-  return CreateSubscription(
-    {
-      reference: Reference(),
-      customer: payer.customer,
-      paymentMethod: payer.paymentMethod,
-      amount: { value: 1900, currency: "EUR" },
-      interval: "week",
-      intervalCount: 2,
-    },
-    Key(),
+  return CreateSubscription(requestFor(payer), Key());
+}
+
+function heldByMollie(id: string) {
+  const mollie = PrimaryAccount().subscriptions.get(
+    ParseSubscriptionId(id)?.child ?? "",
   );
+  assert.ok(mollie);
+  return mollie;
+}
+
+function heldFor(payer: Payer): number {
+  return [...PrimaryAccount().subscriptions.values()].filter(
+    (mollie) => mollie.customerId === payer.customer,
+  ).length;
+}
+
+async function cancelAtMollieWithEnd(
+  id: string,
+  endsAt: number,
+): Promise<void> {
+  await tamper(id, (stored) => ({
+    ...stored,
+    cancel: { timing: "period_end", key: Key(), endsAt },
+  }));
+  await CurrentHarness().client.execute({ method: "DELETE", path: pathOf(id) });
 }
 
 async function inSecondPeriod(created: Subscription): Promise<number> {
-  const parsed = ParseSubscriptionId(created.id);
-  const mollie = PrimaryAccount().subscriptions.get(parsed?.child ?? "");
-  assert.ok(mollie);
   const renewal = RenewSubscription(
     PrimaryAccount(),
     StandIn().paymentHooks,
-    mollie,
+    heldByMollie(created.id),
   );
   await SettledPayment(renewal.id);
   return created.currentPeriodEnd - Date.now() + HOUR_MS;
@@ -222,23 +255,76 @@ describe("[mollie] subscriptions whose own record another writer changed", funct
     });
   }
 
-  it("reads and lists a subscription Mollie cancelled whose stored period end is past any date, as ended", async () => {
-    const created = await create(payer);
-    await tamper(created.id, (stored) => ({
-      ...stored,
-      cancel: { timing: "period_end", key: Key(), endsAt: PAST_ANY_DATE },
-    }));
-    await CurrentHarness().client.execute({
-      method: "DELETE",
-      path: pathOf(created.id),
+  for (const { name, endsAt } of DROPPED_ENDS) {
+    it(`reads and lists a subscription Mollie cancelled whose stored period end is ${name}, as ended`, async () => {
+      const created = await create(payer);
+      await cancelAtMollieWithEnd(created.id, endsAt);
+
+      const read = await GetSubscription(created.id);
+      assert.equal(read.status, "canceled");
+      assert.equal((await listed(payer, created.id))?.status, "canceled");
+      await Rejected(
+        CancelSubscription(created.id, Key(), "now"),
+        InvalidSubscriptionStateError,
+      );
     });
+  }
+
+  it("keeps a stored period end on the last day of 9999", async () => {
+    const created = await create(payer);
+    await cancelAtMollieWithEnd(created.id, LAST_DAY_OF_9999);
 
     const read = await GetSubscription(created.id);
-    assert.equal(read.status, "canceled");
-    assert.equal((await listed(payer, created.id))?.status, "canceled");
-    await Rejected(
-      CancelSubscription(created.id, Key(), "now"),
-      InvalidSubscriptionStateError,
-    );
+    assert.equal(read.cancelAtPeriodEnd, true);
+    assert.equal(read.currentPeriodEnd, LAST_DAY_OF_9999);
   });
+});
+
+describe("[mollie] a subscription whose stored period and Mollie's interval are both unreadable", function () {
+  this.timeout(TEST_TIMEOUT);
+
+  let payer: Payer;
+  let other: Subscription;
+  let stopWatching: () => Promise<void> = async () => undefined;
+
+  before(async function () {
+    RequireStandIn(this);
+    stopWatching = watchEventLoop(BLOCKED_LIMIT_MS);
+    payer = await NewPayer();
+    other = await create(payer);
+  });
+
+  after(async () => {
+    await stopWatching();
+  });
+
+  for (const interval of UNDOCUMENTED_MOLLIE_INTERVALS) {
+    it(`refuses to read, cancel or replay it with a SubscriptionError naming it when Mollie bills it every "${interval}", and still lists and creates the customer's others`, async () => {
+      const request = requestFor(payer);
+      const key = Key();
+      const broken = await CreateSubscription(request, key);
+      await tamper(broken.id, (stored) => ({ ...stored, intervalCount: 0 }));
+      heldByMollie(broken.id).interval = interval;
+      const held = heldFor(payer);
+
+      for (const call of [
+        () => GetSubscription(broken.id),
+        () => CancelSubscription(broken.id, Key(), "now"),
+        () => Within(2 * HOUR_MS, () => CreateSubscription(request, key)),
+      ]) {
+        const error = await Rejected(call(), SubscriptionError);
+        assert.ok(!(error instanceof SubscriptionNotFoundError), error.message);
+        assert.ok(error.message.includes(broken.id), error.message);
+      }
+      assert.equal(heldByMollie(broken.id).status, "active");
+      assert.equal(heldFor(payer), held);
+
+      const another = await create(payer);
+      const ids = (await ListSubscriptions(payer.customer)).map(
+        (subscription) => subscription.id,
+      );
+      assert.ok(ids.includes(other.id) && ids.includes(another.id));
+      assert.ok(!ids.includes(broken.id));
+    });
+  }
 });
