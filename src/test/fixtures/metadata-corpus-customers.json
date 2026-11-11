@@ -1,0 +1,178 @@
+{
+  "source": "Customer metadata the module wrote over metadata another writer left, from git log -p of src/mollie/metadata.ts and src/implementations/subscriptions/records.ts. since is the first commit, or the pull request, that wrote the shape, until the first that stopped (null: still written). reads is what the version that wrote it read back.",
+  "fixtures": [
+    {
+      "name": "early-end-over-a-metadata-object-another-writer-left",
+      "since": "eedbca1",
+      "until": "#62",
+      "writer": "subscriptions/records.ts RecordEarlyEnd over another writer's object that holds a metadata object, before the merge marked it foreign",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusEnd04",
+          "metadata": {
+            "crm": "c-9",
+            "metadata": {
+              "plan": "gold"
+            },
+            "antelope": {
+              "endedEarly": {
+                "sub_corpusEnd04": [1779265800000, "76af0399"]
+              }
+            }
+          }
+        },
+        "subscription": {
+          "id": "sub_corpusEnd04",
+          "status": "canceled",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-14",
+              "createKey": "corpus-create-14",
+              "interval": "month",
+              "intervalCount": 1,
+              "start": "anchor",
+              "cancel": {
+                "timing": "period_end",
+                "key": "corpus-cancel-14",
+                "endsAt": 4102444800000
+              }
+            },
+            "metadata": {}
+          }
+        }
+      },
+      "reads": {
+        "customer": {
+          "metadata": {
+            "plan": "gold"
+          }
+        },
+        "subscription": {
+          "reference": "sub-ref-14",
+          "interval": "month",
+          "intervalCount": 1,
+          "status": "canceled",
+          "cancelAtPeriodEnd": false,
+          "endedAt": 1779265800000,
+          "trialEnd": null,
+          "latestPayment": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "name": "early-end-over-a-marked-metadata-object-another-writer-left",
+      "since": "#62",
+      "until": null,
+      "writer": "subscriptions/records.ts RecordEarlyEnd over another writer's object that holds a metadata object",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusEnd05",
+          "metadata": {
+            "crm": "c-9",
+            "metadata": {
+              "plan": "gold"
+            },
+            "antelope": {
+              "foreign": true,
+              "endedEarly": {
+                "sub_corpusEnd05": [1779265800000, "32ebec5c"]
+              }
+            }
+          }
+        },
+        "subscription": {
+          "id": "sub_corpusEnd05",
+          "status": "canceled",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-15",
+              "createKey": "corpus-create-15",
+              "interval": "month",
+              "intervalCount": 1,
+              "start": "anchor",
+              "cancel": {
+                "timing": "period_end",
+                "key": "corpus-cancel-15",
+                "endsAt": 4102444800000
+              }
+            },
+            "metadata": {}
+          }
+        }
+      },
+      "reads": {
+        "customer": {
+          "metadata": {
+            "crm": "c-9"
+          }
+        },
+        "subscription": {
+          "reference": "sub-ref-15",
+          "interval": "month",
+          "intervalCount": 1,
+          "status": "canceled",
+          "cancelAtPeriodEnd": false,
+          "endedAt": 1779265800000,
+          "trialEnd": null,
+          "latestPayment": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "name": "early-end-over-metadata-that-is-not-an-object",
+      "since": "#62",
+      "until": null,
+      "writer": "subscriptions/records.ts RecordEarlyEnd over a string, a number or a list another writer left",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusEnd06",
+          "metadata": {
+            "antelope": {
+              "kept": "crm-9",
+              "endedEarly": {
+                "sub_corpusEnd06": [1779265800000, "a1a822e8"]
+              }
+            }
+          }
+        },
+        "subscription": {
+          "id": "sub_corpusEnd06",
+          "status": "canceled",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-16",
+              "createKey": "corpus-create-16",
+              "interval": "month",
+              "intervalCount": 1,
+              "start": "anchor",
+              "cancel": {
+                "timing": "period_end",
+                "key": "corpus-cancel-16",
+                "endsAt": 4102444800000
+              }
+            },
+            "metadata": {}
+          }
+        }
+      },
+      "reads": {
+        "customer": {
+          "metadata": null
+        },
+        "subscription": {
+          "reference": "sub-ref-16",
+          "interval": "month",
+          "intervalCount": 1,
+          "status": "canceled",
+          "cancelAtPeriodEnd": false,
+          "endedAt": 1779265800000,
+          "trialEnd": null,
+          "latestPayment": null,
+          "metadata": null
+        }
+      }
+    }
+  ]
+}

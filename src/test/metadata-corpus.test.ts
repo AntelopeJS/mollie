@@ -4,7 +4,6 @@ import { isDeepStrictEqual } from "node:util";
 import {
   CapturePayment,
   CreatePayment,
-  GetCustomer,
   RefundPayment,
 } from "@antelopejs/interface-payment";
 import {
@@ -19,6 +18,7 @@ import fc from "fast-check";
 import { ParsePaymentMethodId, SubscriptionId } from "../mollie/ids";
 import { MergeOwn, WriteMetadata } from "../mollie/metadata";
 import type { JsonValue } from "../mollie/types";
+import customerCorpus from "./fixtures/metadata-corpus-customers.json";
 import paymentCorpus from "./fixtures/metadata-corpus-payments.json";
 import subscriptionCorpus from "./fixtures/metadata-corpus-subscriptions.json";
 import { CurrentHarness } from "./support/harness";
@@ -53,7 +53,10 @@ import { NewPayer, type Payer } from "./support/payers";
 import "./support/relay";
 
 function fixturesOf(
-  corpus: typeof paymentCorpus | typeof subscriptionCorpus,
+  corpus:
+    | typeof paymentCorpus
+    | typeof subscriptionCorpus
+    | typeof customerCorpus,
 ): Fixture[] {
   if (!IsCorpus(corpus)) throw new TypeError("a corpus fixture is malformed");
   return corpus.fixtures;
@@ -62,6 +65,7 @@ function fixturesOf(
 const FIXTURES = [
   ...fixturesOf(paymentCorpus),
   ...fixturesOf(subscriptionCorpus),
+  ...fixturesOf(customerCorpus),
 ];
 const DEFAULT_SEED = 20261111;
 const KEYED_RUNS = 100;
@@ -397,39 +401,5 @@ describe("[mollie] metadata written by earlier versions", function () {
   it("holds foreignInterfaceView: GetPayment and GetCustomer read another writer's metadata, with no `antelope` key, as its string entries", async () => {
     const details = await fc.check(foreignInterfaceView, PARAMETERS);
     assert.ok(!details.failed, fc.defaultReportMessage(details));
-  });
-
-  it("pins mergeKeepsForeignValue: an early end erases a customer's metadata that is a string", async () => {
-    const payer = await NewPayer();
-    await CurrentHarness().client.execute({
-      method: "PATCH",
-      path: `/customers/${payer.customer}`,
-      body: { metadata: "crm-9" },
-    });
-    assert.equal(customerMetadata(payer.customer), "crm-9");
-    const subscription = await CreateSubscription(request(payer), Key());
-    await CancelSubscription(subscription.id, Key(), "period_end");
-    await CancelSubscription(subscription.id, Key(), "now");
-    const stored = customerMetadata(payer.customer);
-    assert.equal(JSON.stringify(stored).includes("crm-9"), false);
-    assert.equal((await GetCustomer(payer.customer)).metadata, undefined);
-  });
-
-  it("pins mergeKeepsForeignCallerView: an early end swaps a customer's metadata for the object under its metadata key", async () => {
-    const payer = await NewPayer();
-    await CurrentHarness().client.execute({
-      method: "PATCH",
-      path: `/customers/${payer.customer}`,
-      body: { metadata: { crm: "c-9", metadata: { plan: "gold" } } },
-    });
-    assert.deepEqual((await GetCustomer(payer.customer)).metadata, {
-      crm: "c-9",
-    });
-    const subscription = await CreateSubscription(request(payer), Key());
-    await CancelSubscription(subscription.id, Key(), "period_end");
-    await CancelSubscription(subscription.id, Key(), "now");
-    assert.deepEqual((await GetCustomer(payer.customer)).metadata, {
-      plan: "gold",
-    });
   });
 });

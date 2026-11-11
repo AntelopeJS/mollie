@@ -9,6 +9,7 @@ import {
   CANCELLATION_TIMINGS,
   type CancellationTiming,
   SUBSCRIPTION_INTERVALS,
+  SubscriptionError,
   type SubscriptionInterval,
   SubscriptionNotFoundError,
 } from "@antelopejs/interface-subscriptions";
@@ -30,7 +31,12 @@ import {
   Optional,
   RecordOf,
 } from "../../mollie/guards";
-import { MergeOwn, type OwnFields, ReadOwn } from "../../mollie/metadata";
+import {
+  FitsMetadataLimit,
+  MergeOwn,
+  type OwnFields,
+  ReadOwn,
+} from "../../mollie/metadata";
 import type {
   JsonValue,
   MollieCustomer,
@@ -315,7 +321,9 @@ async function oneAtATime(
 }
 
 /**
- * Adds the subscription's early end to its customer's metadata. The write
+ * Adds the subscription's early end to its customer's metadata, or rejects
+ * with a `SubscriptionError`, sending nothing, when the metadata that would
+ * result is past Mollie's limit. The write
  * carries every early end the read before it found, and Mollie has no
  * conditional update, so two early ends written from one earlier read would
  * erase each other. Within this process, each customer's early ends are read
@@ -333,10 +341,16 @@ export async function RecordEarlyEnd(
       ...endedEarly(customer),
       [record.mollie.id]: [earlyEnd.endedAt, earlyEnd.keyHash],
     };
+    const metadata = MergeOwn(customer.metadata, { endedEarly: merged });
+    if (!FitsMetadataLimit(metadata)) {
+      throw new SubscriptionError(
+        `There is no room to record the early end of subscription ${record.mollie.id} in the metadata of customer ${customer.id}: Mollie keeps about 1 kB of metadata per customer, and the customer's own metadata and the early ends already recorded fill it`,
+      );
+    }
     await account.client.execute({
       method: "PATCH",
       path: `/customers/${customer.id}`,
-      body: { metadata: MergeOwn(customer.metadata, { endedEarly: merged }) },
+      body: { metadata },
     });
   });
 }

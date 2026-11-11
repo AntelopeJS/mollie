@@ -398,6 +398,11 @@ export const ForeignCallerArb: fc.Arbitrary<JsonValue> = fc.oneof(
   ForeignWithCallerArb.map((object) => JSON.stringify(object)),
 );
 
+/** The JSON text of an object another writer left, with or without a `metadata` object of its own. */
+export const ObjectTextArb: fc.Arbitrary<string> = fc
+  .oneof(ForeignObjectArb, ForeignWithCallerArb)
+  .map((object) => JSON.stringify(object));
+
 /** Metadata Mollie accepts that is not a JSON object: a string, a number or a list of strings. */
 export const NonObjectArb: fc.Arbitrary<JsonValue> = fc.oneof(
   KeyArb,
