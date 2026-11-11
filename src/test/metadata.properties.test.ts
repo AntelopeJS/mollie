@@ -24,9 +24,7 @@ import {
 import type { JsonValue, MollieSubscription } from "../mollie/types";
 import {
   AnyMetadataArb,
-  Bytes,
   CALLER,
-  CALLER_BYTES,
   CallerArb,
   ChangesArb,
   Entries,
@@ -44,7 +42,6 @@ import {
   ObjectOf,
   ObjectTextArb,
   OWN,
-  OwnBytes,
   OwnObjectOf,
   OwnRecordArb,
   OwnSubscriptionArb,
@@ -59,7 +56,7 @@ import {
 import {
   earlyEndsFit,
   laterWritesFit,
-  WidestSubscription,
+  subscriptionWritesFit,
 } from "./support/metadata-budget";
 import {
   AssertMergeInputs,
@@ -363,6 +360,17 @@ function holds<Ts extends unknown[]>(
   });
 }
 
+function finding<Ts extends unknown[]>(
+  name: string,
+  claim: string,
+  property: fc.IRawProperty<Ts>,
+) {
+  it(`finding ${name}: ${claim}`, async () => {
+    const details = await fc.check(property, PARAMETERS);
+    assert.ok(details.failed, `${name} now holds: record it as holds`);
+  });
+}
+
 describe("[mollie] metadata round trip properties", function () {
   this.timeout(SUITE_TIMEOUT_MS);
 
@@ -441,9 +449,14 @@ describe("[mollie] metadata round trip properties", function () {
     "twenty early ends fit a customer's 1 kB",
     earlyEndsFit,
   );
+  finding(
+    "subscriptionWritesFit",
+    "for every caller metadata CreateSubscription accepts, the first charge or the refusal and then a cancellation now or at the period end, with a key of up to 64 bytes, stay within Mollie's 1 kB",
+    subscriptionWritesFit,
+  );
 });
 
-describe("[mollie] metadata generators and pinned findings", () => {
+describe("[mollie] metadata generators", () => {
   it("generates the module's key names as caller keys, foreign own records, metadata that is not an object and impossible counts", () => {
     const hasKey = (record: JsonValue, key: string) =>
       IsObject(record) && Object.prototype.hasOwnProperty.call(record, key);
@@ -503,14 +516,6 @@ describe("[mollie] metadata generators and pinned findings", () => {
     assert.ok(counts.some((count) => IsNumberValue(count) && count <= 0));
     assert.ok(
       counts.some((count) => IsNumberValue(count) && !Number.isInteger(count)),
-    );
-  });
-
-  it("pins laterWritesFit: the documented budget at its edge, 600 caller bytes and the widest keys, ends at 1024 bytes after a period-end cancellation", () => {
-    const { caller, canceled } = WidestSubscription();
-    assert.deepEqual(
-      [Bytes(caller), OwnBytes(canceled), Bytes(canceled)],
-      [CALLER_BYTES, 398, 1023],
     );
   });
 });
