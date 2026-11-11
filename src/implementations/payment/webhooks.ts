@@ -6,15 +6,19 @@ import {
   type WebhookRequest,
 } from "@antelopejs/interface-payment";
 
-import { Translating } from "./errors";
+import { InTurnOrder, Translating } from "./errors";
 import { ToEpochMillis, ToPayment } from "./mapping";
 import { AwaitSavedMethod } from "./saved-method";
 import { IsMollieId } from "../../mollie/ids";
 import { type Account, GetAccount } from "../../accounts";
 import { DispatchChargeEvents } from "../subscriptions/events";
-import { MarkSubscriptionCharge, ReadPayment } from "./payments";
+import { MarkSubscriptionCharge, ReadPayment, RefundsOf } from "./payments";
 import { SubscriptionOfPayment } from "../shared/subscription-of-payment";
-import type { MolliePayment, MolliePaymentStatus } from "../../mollie/types";
+import type {
+  MolliePayment,
+  MolliePaymentStatus,
+  MollieRefund,
+} from "../../mollie/types";
 
 const ID_FIELD = "id";
 
@@ -72,13 +76,17 @@ function buildEvent(
   payment: MolliePayment,
   type: PaymentEventType,
   subscription: string | undefined,
+  refunds: readonly MollieRefund[],
 ): PaymentEvent {
   const at = STATUS_TIME[payment.status](payment) ?? payment.createdAt;
   return {
     id: `${payment.id}:${payment.status}`,
     type,
     createdAt: ToEpochMillis(at),
-    payment: MarkSubscriptionCharge(ToPayment(payment), subscription),
+    payment: MarkSubscriptionCharge(
+      ToPayment(payment, undefined, refunds),
+      subscription,
+    ),
   };
 }
 
@@ -92,8 +100,11 @@ export async function VerifyWebhook(
   if (!type) return undefined;
   await AwaitSavedMethod(account, payment);
   return Translating(payment.id, "payment", async () => {
-    const charged = await SubscriptionOfPayment(account, payment);
+    const [charged, refunds] = await InTurnOrder(
+      SubscriptionOfPayment(account, payment),
+      RefundsOf(account, payment),
+    );
     await DispatchChargeEvents(account, payment, charged);
-    return buildEvent(payment, type, charged?.id);
+    return buildEvent(payment, type, charged?.id, refunds);
   });
 }

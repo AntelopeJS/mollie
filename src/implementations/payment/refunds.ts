@@ -6,7 +6,7 @@ import {
   type RefundRequest,
 } from "@antelopejs/interface-payment";
 
-import { ReadPayment } from "./payments";
+import { ListRefunds, ReadPayment } from "./payments";
 import { GetAccount } from "../../accounts";
 import type { Account } from "../../accounts";
 import { IsMollieId, ParseRefundId } from "../../mollie/ids";
@@ -19,7 +19,6 @@ import type { MolliePayment, MollieRefund } from "../../mollie/types";
 import { FromMollieAmount, ToMollieAmount } from "../../mollie/amounts";
 
 const REFUND_ENTITY = "refund";
-const REFUND_PAGE = "?limit=250";
 
 interface OwnRefund {
   key: string;
@@ -59,11 +58,7 @@ async function earlierRefund(
   paymentId: string,
   idempotencyKey: string,
 ): Promise<MollieRefund | undefined> {
-  const refunds = await account.client.list(
-    `/payments/${paymentId}/refunds${REFUND_PAGE}`,
-    "refunds",
-    IsMollieRefund,
-  );
+  const refunds = await ListRefunds(account, paymentId);
   return refunds.find(
     (refund) => ReadOwn(refund.metadata, OWN_REFUND)?.key === idempotencyKey,
   );

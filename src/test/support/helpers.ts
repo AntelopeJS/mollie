@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { GetPayment, type Payment } from "@antelopejs/interface-payment";
+import {
+  CreatePayment,
+  GetPayment,
+  type Payment,
+} from "@antelopejs/interface-payment";
 
 import { CurrentHarness } from "./harness";
+import { GetAccount } from "../../accounts";
+import { ParseRefundId } from "../../mollie/ids";
+import { FromMollieAmount } from "../../mollie/amounts";
+import { ListRefunds } from "../../implementations/payment/payments";
+import type { MollieRefund } from "../../mollie/types";
+import { ReportAmount, ReviseRefund } from "../stand-in/payments-api";
 import type { Account } from "../stand-in/state";
 import type { MollieStandIn } from "../stand-in/server";
 
@@ -34,6 +44,48 @@ export function StandIn(): MollieStandIn {
 
 export function PrimaryAccount(): Account {
   return StandIn().account(CurrentHarness().target.apiKey);
+}
+
+export function SetRefundStatus(
+  refundId: string,
+  status: MollieRefund["status"],
+): void {
+  const parsed = ParseRefundId(refundId);
+  const refund = parsed && PrimaryAccount().refunds.get(parsed.child);
+  if (!refund) throw new Error(`The stand-in has no refund ${refundId}`);
+  ReviseRefund(PrimaryAccount(), refund, status);
+}
+
+export function MollieReports(
+  paymentId: string,
+  field: Parameters<typeof ReportAmount>[2],
+  value: string | undefined,
+): void {
+  ReportAmount(PrimaryAccount(), paymentId, field, value);
+}
+
+/** The total of the refunds Mollie holds on a payment, whatever their status. */
+export async function HeldRefundTotal(paymentId: string): Promise<number> {
+  const refunds = await ListRefunds(GetAccount(), paymentId);
+  return refunds.reduce(
+    (total, refund) => total + FromMollieAmount(refund.amount).value,
+    0,
+  );
+}
+
+export async function PaidPayment(): Promise<string> {
+  const payment = await CreatePayment(
+    {
+      amount: { value: 2500, currency: "EUR" },
+      reference: Reference(),
+      paymentMethod: CurrentHarness().chargeable,
+      offSession: true,
+    },
+    Key(),
+  );
+  const settled = await SettledPayment(payment.id);
+  assert.equal(settled.status, "succeeded");
+  return payment.id;
 }
 
 export function RequireStandIn(context: Mocha.Context): void {

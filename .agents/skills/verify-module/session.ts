@@ -30,7 +30,6 @@ const TEST_MODE_LIMITS = new Map([
   ["charge-paid-at-creation", "Mollie's test mode answers an off-session card charge `paid` in the creating call, so a charge on a saved card is never `pending` and is never declined afterwards"],
   ["no-hold-on-saved-card", "Mollie's test mode answers an off-session `captureMode: manual` charge with HTTP 503 yet creates it, and its test page offers no state to authorize it with"],
   ["open-payment-not-cancelable", "no method the test account offers leaves an open payment cancelable: Mollie answers 422 to cancelling one"],
-  ["refund-not-counted", "Mollie's test mode leaves the payment's `amountRefunded` at 0.00 after a refund, whether the refund reads `pending` or `refunded`"],
 ] as const);
 
 /** A Mollie test-mode limitation a journey's claim runs into. */

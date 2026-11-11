@@ -1,7 +1,11 @@
 import { IsText } from "../../mollie/guards";
 import { MollieApiError } from "../../mollie/errors";
 import { setTimeout as delay } from "node:timers/promises";
-import { IsMollieCapture, IsMolliePayment } from "../../mollie/resources";
+import {
+  IsMollieCapture,
+  IsMolliePayment,
+  IsMollieRefund,
+} from "../../mollie/resources";
 import { SUBSCRIPTION_METADATA_KEY } from "@antelopejs/interface-subscriptions";
 import {
   type Amount,
@@ -13,7 +17,7 @@ import {
 
 import { IsMollieId } from "../../mollie/ids";
 import { DefinedFields } from "../../mollie/fields";
-import { ToPayment, ToPaymentStatus } from "./mapping";
+import { HasRefunds, ToPayment, ToPaymentStatus } from "./mapping";
 import { AwaitSavedMethod } from "./saved-method";
 import { type Account, GetAccount } from "../../accounts";
 import {
@@ -29,6 +33,7 @@ import { SubscriptionOfPayment } from "../shared/subscription-of-payment";
 import type {
   MollieCapture,
   MolliePayment,
+  MollieRefund,
   MollieSequenceType,
 } from "../../mollie/types";
 import {
@@ -42,6 +47,7 @@ import {
 const PAYMENT_ENTITY = "payment";
 const MANUAL = "manual";
 const CAPTURE_PAGE = "?limit=250";
+const REFUND_PAGE = "?limit=250";
 const SETTLE_POLL_MS = 250;
 const UNPROCESSABLE = 422;
 const CAPTURE_FAILED = "capture_failed";
@@ -77,6 +83,25 @@ function PaymentBody(
       webhookUrl: account.webhookUrl,
     }),
   };
+}
+
+export async function ListRefunds(
+  account: Account,
+  paymentId: string,
+): Promise<MollieRefund[]> {
+  return account.client.list(
+    `/payments/${paymentId}/refunds${REFUND_PAGE}`,
+    "refunds",
+    IsMollieRefund,
+  );
+}
+
+/** The refunds that make up the payment's refunded amount: none are read for a payment without one. */
+export async function RefundsOf(
+  account: Account,
+  payment: MolliePayment,
+): Promise<MollieRefund[]> {
+  return HasRefunds(payment) ? ListRefunds(account, payment.id) : [];
 }
 
 export function MarkSubscriptionCharge(
@@ -155,9 +180,13 @@ export async function GetPayment(
       payment.status === "authorized"
         ? liveCapture(await readCaptures(account, id))
         : undefined;
+    const [charged, refunds] = await InTurnOrder(
+      SubscriptionOfPayment(account, payment),
+      RefundsOf(account, payment),
+    );
     return MarkSubscriptionCharge(
-      ToPayment(payment, capture),
-      (await SubscriptionOfPayment(account, payment))?.id,
+      ToPayment(payment, capture, refunds),
+      charged?.id,
     );
   });
 }
@@ -347,7 +376,11 @@ async function followCapture(
     current = next;
   }
   if (current.capture.status === "failed") throw captureFailed(current);
-  return ToPayment(current.payment, current.capture);
+  return ToPayment(
+    current.payment,
+    current.capture,
+    await RefundsOf(account, current.payment),
+  );
 }
 
 export async function CapturePayment(

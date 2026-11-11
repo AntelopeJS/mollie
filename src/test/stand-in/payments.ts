@@ -157,6 +157,10 @@ function recurringLinks(hooks: PaymentHooks, token: string, method: string) {
   };
 }
 
+export function RefundsLink(hooks: PaymentHooks, paymentId: string) {
+  return link(`${hooks.baseUrl}/v2/payments/${paymentId}/refunds`);
+}
+
 export function PaymentLinks(
   hooks: PaymentHooks,
   payment: MolliePayment,

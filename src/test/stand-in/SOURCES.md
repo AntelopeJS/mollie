@@ -105,13 +105,17 @@ The stand-in is an HTTP server that answers the part of Mollie's API this module
 
 ## Refunds
 
-| Behaviour                                                                                                  | Basis                               |
-| ---------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `amount` is required; only a paid payment, at most `amountRemaining` (422 `amount`)                        | spec, doc `reference/create-refund` |
-| A refund is created `pending`                                                                              | spec (`get-refund` example)         |
-| …and counts towards `amountRefunded` (and out of `amountRemaining`) from creation                          | assumed                             |
-| A refund is read under its payment                                                                         | spec                                |
-| A payment's refunds and captures are listed under it, and a capture keeps the metadata it was created with | spec                                |
+| Behaviour                                                                                                  | Basis                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `amount` is required; only a paid payment, at most `amountRemaining` (422 `amount`)                        | spec, doc `reference/create-refund`                                                                                      |
+| A refund is answered `pending` by the creating call, and reads `refunded` from the next read on            | spec (`get-refund` example); the settling is observed (live, 2026-11-10, test mode: `refunded` or `pending` for minutes) |
+| …and comes out of `amountRemaining` from creation, and goes back when it ends `failed` or `canceled`       | observed (live, 2026-11-10: `amountRemaining` drops with the refund); the return on `failed` and `canceled` is assumed   |
+| …and moves the payment's `amountRefunded` once it reads `refunded`, not while it is `pending`              | observed (live, 2026-11-11, test mode: `0.00` with a `pending` refund, then `1.00`, `25.00` once `refunded`)             |
+| …`amountRefunded` may trail the refund's status for a moment; a test sets it with `ReportAmount`           | observed (live, 2026-11-10: `0.00` beside a refund read `refunded`)                                                      |
+| A payment links `refunds` from its first refund (any status) on, and not before                            | observed (live, 2026-11-11: 17 of 250 payments, all with refunds; none of 232 without the link had any)                  |
+| `amountRemaining` is not bounded by `amount`: a paid `first` card payment may report more than its amount  | observed (live, 2026-11-11: 2× on 19 payments, 19.00 → 56.00 on one); only a test sets it, with `ReportAmount`           |
+| A refund is read under its payment                                                                         | spec                                                                                                                     |
+| A payment's refunds and captures are listed under it, and a capture keeps the metadata it was created with | spec                                                                                                                     |
 
 ## Customers and mandates
 

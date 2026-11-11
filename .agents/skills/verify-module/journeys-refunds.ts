@@ -9,6 +9,16 @@ async function refundsAtProvider(session: Session, id: string): Promise<Json> {
   return refunds.map((refund) => text(pick(refund, "amount", "value"))).sort((left, right) => Number(left) - Number(right));
 }
 
+/** The total, in cents, of the refunds Mollie reports `refunded` on a payment, read with the account's key and not through the module. */
+async function settledAtProvider(session: Session, id: string): Promise<number> {
+  const refunds = pick((await wire(session, "GET", `/v2/payments/${id}/refunds`)).json, "_embedded", "refunds");
+  if (!Array.isArray(refunds)) return Number.NaN;
+  const cents: number[] = refunds
+    .filter((refund) => pick(refund, "status") === "refunded")
+    .map((refund) => Math.round(Number(text(pick(refund, "amount", "value"))) * 100));
+  return cents.reduce((total, amount) => total + amount, 0);
+}
+
 const refundFlow: Journey = {
   title: "a partial refund, then a refund with no amount that takes what is left, are recorded at Mollie and read back; a refund of one cent more than remains is refused, and so is a third",
   entryPoint: "`RefundPayment`, `GetRefund` and `GetPayment` through core on a paid payment",
@@ -47,7 +57,7 @@ const refundFlow: Journey = {
 };
 
 const refundSettled: Journey = {
-  title: "once Mollie settles the refunds of a payment, the payment reports the refunded total, as Mollie does",
+  title: "the payment reports the total of the refunds Mollie reports refunded, and a refund still pending is not in it",
   entryPoint: "`RefundPayment` in part, then of what is left, then `GetPayment`, through core on a paid payment",
   async run(context) {
     await withSession(
@@ -56,15 +66,17 @@ const refundSettled: Journey = {
         const id = await paidPayment(session, "paid payment");
         const partial = await call(session, "RefundPayment 5.00", "RefundPayment", [{ payment: id, amount: { value: 500, currency: "EUR" } }, fresh("refund"), null]);
         const rest = await call(session, "RefundPayment of what is left", "RefundPayment", [{ payment: id }, fresh("refund"), null]);
+        const settledBefore = await settledAtProvider(session, id);
         const payment = await call(session, "GetPayment", "GetPayment", [id, null]);
+        const settledAfter = await settledAtProvider(session, id);
+        const reported = pick(payment.value, "amountRefunded", "value");
         context.expect(payment.folder, [
           answered(partial),
           answered(rest),
-          same("the payment reports 25.00 refunded", pick(payment.value, "amountRefunded", "value"), 2500),
-          same("Mollie itself reports 25.00 refunded", pick(await paymentAtProvider(session, id), "amountRefunded", "value"), "25.00"),
+          same("the payment reports what Mollie reports refunded, 0.00 while both refunds are pending and 25.00 once they are", [settledBefore, settledAfter].includes(Number(reported)), true),
+          same("Mollie holds the refunds of 5.00 and 20.00 and nothing is left to refund", [await refundsAtProvider(session, id), pick(await paymentAtProvider(session, id), "amountRemaining", "value")], [["5.00", "20.00"], "0.00"]),
         ]);
       },
-      { standIn: "refund-not-counted" },
     );
   },
 };
