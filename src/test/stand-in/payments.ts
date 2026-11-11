@@ -6,6 +6,7 @@ import type {
   JsonObject,
   JsonValue,
   MollieAmount,
+  MollieCapture,
   MollieMandate,
   MolliePayment,
   MolliePaymentStatus,
@@ -14,6 +15,8 @@ import type {
 export interface PaymentHooks {
   baseUrl: string;
   notify(account: Account, payment: MolliePayment): void;
+  /** Called with each capture created `pending`; decides when it settles. */
+  captured(account: Account, capture: MollieCapture): void;
 }
 
 export type Body = JsonObject;

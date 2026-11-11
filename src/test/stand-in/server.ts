@@ -16,7 +16,7 @@ import { DefinedFields, Lookup } from "../../mollie/fields";
 import * as subscriptions from "./subscriptions-api";
 import { ParseJson } from "../../mollie/json";
 import { IsJsonObject } from "../../mollie/metadata";
-import type { MolliePayment } from "../../mollie/types";
+import type { MollieCapture, MolliePayment } from "../../mollie/types";
 import { type PaymentHooks, Transition } from "./payments";
 import {
   type Account,
@@ -39,6 +39,7 @@ export type WebhookReceiver = (url: string, body: string) => Promise<void>;
 
 const ID = "([A-Za-z0-9_]+)";
 const IDEMPOTENCY_WINDOW_MS = 60 * 60 * 1000;
+const CAPTURE_DELAY_MS = 100;
 const BEARER = /^Bearer ((?:test|live)_[A-Za-z0-9]{30})$/;
 const JSON_TYPE = { "Content-Type": "application/hal+json" };
 
@@ -153,12 +154,21 @@ export class MollieStandIn {
   outage: number | undefined;
   /** Requests that answer a status once each, matched by method and path, before any route runs. */
   readonly faults: { method: string; path: RegExp; status: number }[] = [];
+  /** Work that runs once each just before a matching request is handled, as another caller acting in between. */
+  readonly interceptions: {
+    method: string;
+    path: RegExp;
+    run: (account: Account) => void;
+  }[] = [];
+  /** How long a capture stays `pending` before it succeeds; `undefined` holds every capture until `settleCaptures`. */
+  captureDelayMs: number | undefined = CAPTURE_DELAY_MS;
   private receiver: WebhookReceiver | undefined;
   private server: Server | undefined;
   private baseUrl = "";
   private readonly hooks: PaymentHooks = {
     baseUrl: "",
     notify: (account, payment) => this.notify(account, payment),
+    captured: (account, capture) => this.schedule(account, capture),
   };
 
   constructor(apiKeys: string[]) {
@@ -213,6 +223,22 @@ export class MollieStandIn {
     status: MolliePayment["status"],
   ): void {
     Transition(this.account(apiKey), this.hooks, payment, status);
+  }
+
+  /** Settles every pending capture of the account, as Mollie does once it has processed them. */
+  settleCaptures(apiKey: string): void {
+    const account = this.account(apiKey);
+    for (const capture of account.captures.values()) {
+      payments.SettleCapture(account, this.hooks, capture);
+    }
+  }
+
+  private schedule(account: Account, capture: MollieCapture): void {
+    if (this.captureDelayMs === undefined) return;
+    setTimeout(
+      () => payments.SettleCapture(account, this.hooks, capture),
+      this.captureDelayMs,
+    ).unref();
   }
 
   private notify(_account: Account, payment: MolliePayment): void {
@@ -313,6 +339,14 @@ export class MollieStandIn {
     if (fault !== -1) {
       const [{ status }] = this.faults.splice(fault, 1);
       throw new StandInError(status, "The service is temporarily unavailable");
+    }
+    const interception = this.interceptions.findIndex(
+      (entry) =>
+        entry.method === message.method && entry.path.test(url.pathname),
+    );
+    if (interception !== -1) {
+      const [{ run }] = this.interceptions.splice(interception, 1);
+      run(account);
     }
     const route = API_ROUTES.map((candidate) => ({
       candidate,

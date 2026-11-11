@@ -5,7 +5,7 @@ import { IsJsonNumber, IsJsonString } from "../../mollie/metadata";
 import type {
   JsonObject,
   JsonValue,
-  MollieAmount,
+  MollieCapture,
   MollieCustomer,
   MollieMandate,
   MolliePayment,
@@ -55,7 +55,7 @@ export type StandInBody =
   | MollieCustomer
   | MollieMandate
   | MollieSubscription
-  | Capture
+  | MollieCapture
   | ListBody
   | ErrorBody;
 
@@ -79,17 +79,6 @@ interface LoggedRequest {
   idempotencyKey?: string;
 }
 
-export interface Capture {
-  resource: "capture";
-  id: string;
-  mode: "test";
-  amount: MollieAmount;
-  status: "succeeded";
-  paymentId: string;
-  metadata: JsonValue;
-  createdAt: string;
-}
-
 export interface Account {
   payments: Map<string, MolliePayment>;
   refunds: Map<string, MollieRefund>;
@@ -101,7 +90,7 @@ export interface Account {
   tokens: Map<string, string>;
   declinesAtCreation: Set<string>;
   requests: LoggedRequest[];
-  captures: Map<string, Capture>;
+  captures: Map<string, MollieCapture>;
 }
 
 const ID_ALPHABET =

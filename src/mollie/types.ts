@@ -92,6 +92,19 @@ export interface MollieRefund {
   createdAt: string;
 }
 
+export type MollieCaptureStatus = "pending" | "succeeded" | "failed";
+
+export interface MollieCapture {
+  resource: "capture";
+  id: string;
+  mode: "live" | "test";
+  amount?: MollieAmount | null;
+  status: MollieCaptureStatus;
+  paymentId: string;
+  metadata?: MollieMetadata;
+  createdAt: string;
+}
+
 export interface MollieCustomer {
   resource: "customer";
   id: string;

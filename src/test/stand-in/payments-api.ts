@@ -1,6 +1,7 @@
 import { NotFound, Ok, Unprocessable } from "./responses";
 import type {
   MollieAmount,
+  MollieCapture,
   MolliePayment,
   MollieRefund,
 } from "../../mollie/types";
@@ -14,7 +15,6 @@ import {
 } from "./payments";
 import {
   type Account,
-  type Capture,
   NewId,
   Text,
   NewestFirst,
@@ -114,7 +114,7 @@ export function CancelPayment(request: Request): StandInResponse {
   return Ok(payment);
 }
 
-function settleCapture(payment: MolliePayment, captured: string): void {
+function payCaptured(payment: MolliePayment, captured: string): void {
   payment.status = "paid";
   payment.paidAt = NowIso();
   Object.assign(payment, {
@@ -127,10 +127,21 @@ function settleCapture(payment: MolliePayment, captured: string): void {
   });
 }
 
+function capturesOf(account: Account, paymentId: string): MollieCapture[] {
+  return [...account.captures.values()].filter(
+    (capture) => capture.paymentId === paymentId,
+  );
+}
+
 export function CreateCapture(request: Request): StandInResponse {
   const payment = PaymentOf(request.account, request.params[0]);
   if (payment.status !== "authorized") {
     throw Unprocessable("The payment is not authorized", "paymentId");
+  }
+  if (capturesOf(request.account, payment.id).length > 0) {
+    throw Unprocessable(
+      "The pre-authorized payment has a capture marked as final",
+    );
   }
   const amount = request.body.amount
     ? ReadAmount(request.body.amount, "amount")
@@ -141,28 +152,42 @@ export function CreateCapture(request: Request): StandInResponse {
       "amount",
     );
   }
-  settleCapture(payment, amount.value);
-  const capture: Capture = {
+  const capture: MollieCapture = {
     resource: "capture",
     id: NewId("cpt"),
     mode: "test",
     amount,
-    status: "succeeded",
+    status: "pending",
     paymentId: payment.id,
     metadata: request.body.metadata ?? null,
     createdAt: NowIso(),
   };
   request.account.captures.set(capture.id, capture);
-  request.hooks.notify(request.account, payment);
+  request.hooks.captured(request.account, capture);
   return Ok(capture, 201);
+}
+
+/** What Mollie does once it has processed a pending capture. */
+export function SettleCapture(
+  account: Account,
+  hooks: PaymentHooks,
+  capture: MollieCapture,
+): void {
+  if (capture.status !== "pending") return;
+  const payment = PaymentOf(account, capture.paymentId);
+  if (payment.status !== "authorized") {
+    capture.status = "failed";
+    return;
+  }
+  capture.status = "succeeded";
+  payCaptured(payment, (capture.amount ?? payment.amount).value);
+  hooks.notify(account, payment);
 }
 
 export function ListCaptures(request: Request): StandInResponse {
   const paymentId = request.params[0];
   PaymentOf(request.account, paymentId);
-  const captures = [...request.account.captures.values()].filter(
-    (capture) => capture.paymentId === paymentId,
-  );
+  const captures = capturesOf(request.account, paymentId);
   return Page(
     captures,
     request.query,

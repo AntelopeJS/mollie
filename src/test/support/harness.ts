@@ -33,9 +33,11 @@ export interface ModuleConfig {
   apiUrl?: string;
   webhookUrl?: string;
   accounts?: Record<string, AccountConfig>;
+  settleTimeoutMs?: number;
 }
 
 const STAND_IN_PAYER_INTERVAL_MS = 50;
+const STAND_IN_SETTLE_TIMEOUT_MS = 1_000;
 const LIVE_PAYER_INTERVAL_MS = 1_000;
 const SETTLE_TIMEOUT_MS = 60_000;
 const SETTLE_POLL_MS = 100;
@@ -216,6 +218,7 @@ export function ModuleConfigFor(harness: Harness): ModuleConfig {
       accounts: target.secondApiKey
         ? { [SECOND_ACCOUNT]: { apiKey: target.secondApiKey } }
         : undefined,
+      settleTimeoutMs: target.standIn ? STAND_IN_SETTLE_TIMEOUT_MS : undefined,
     }),
   };
 }
