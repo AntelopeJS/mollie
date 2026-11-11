@@ -76,6 +76,30 @@ const config: VerifyConfig = {
       passing: /(?<=^holds +(?:\w+, )*)(\w+)(?=,| \()/gm,
       behaviour: { kind: "emit" },
     },
+    {
+      name: "formal-metadata-roundtrip",
+      covers: [
+        "src/mollie/metadata.ts",
+        "src/implementations/subscriptions/records.ts",
+        "src/implementations/shared/subscription-of-payment.ts",
+      ],
+      files: [
+        ".agents/skills/formal-metadata-roundtrip/**",
+        "src/test/metadata.properties.test.ts",
+        "src/test/metadata-corpus.test.ts",
+        "src/test/support/metadata-model.ts",
+        "src/test/support/metadata-corpus.ts",
+        "src/test/fixtures/metadata-corpus-*.json",
+      ],
+      command: [
+        "sh",
+        "-c",
+        "pnpm run build >/dev/null && pnpm exec ajs module test . -f dist/test/metadata.properties.test.js -f dist/test/metadata-corpus.test.js",
+      ],
+      violation: /^\s*(?:\d+\) (?:holds|finding)|[✔✓] finding) (\w+)/gm,
+      passing: /^\s*[✔✓] holds (\w+)/gm,
+      behaviour: { kind: "emit" },
+    },
   ],
   moduleConfig() {
     return { apiKey: PRIMARY_KEY };

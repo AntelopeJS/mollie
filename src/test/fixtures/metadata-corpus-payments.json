@@ -1,0 +1,330 @@
+{
+  "source": "Metadata each version of the module wrote since ef5dfaf, from git log -p of src/mollie/metadata.ts, src/implementations/subscriptions/records.ts and every WriteMetadata and MergeOwn caller. since is the first commit that wrote the shape, until the first that stopped (null: still written). reads is what the version that wrote it read back.",
+  "fixtures": [
+    {
+      "name": "payment",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "payment/payments.ts PaymentBody, payment/checkout.ts",
+      "seed": {
+        "payments": [
+          {
+            "id": "tr_corpusPay01",
+            "metadata": {
+              "antelope": {
+                "reference": "order-1001"
+              },
+              "metadata": {
+                "plan": "gold",
+                "antelope": "a caller value"
+              }
+            }
+          }
+        ]
+      },
+      "reads": {
+        "payment": {
+          "id": "tr_corpusPay01",
+          "reference": "order-1001",
+          "metadata": {
+            "plan": "gold",
+            "antelope": "a caller value"
+          }
+        }
+      }
+    },
+    {
+      "name": "payment-without-caller-metadata",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "payment/payments.ts PaymentBody",
+      "seed": {
+        "payments": [
+          {
+            "id": "tr_corpusPay02",
+            "metadata": {
+              "antelope": {
+                "reference": "order-1002"
+              },
+              "metadata": {}
+            }
+          }
+        ]
+      },
+      "reads": {
+        "payment": {
+          "id": "tr_corpusPay02",
+          "reference": "order-1002",
+          "metadata": null
+        }
+      }
+    },
+    {
+      "name": "first-period-charge",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "subscriptions/creation.ts chargeFirstPeriod",
+      "seed": {
+        "payments": [
+          {
+            "id": "tr_corpusChg01",
+            "metadata": {
+              "antelope": {
+                "reference": "sub-ref-1",
+                "subscription": "cst_corpusChg01:sub_corpusChg01"
+              },
+              "metadata": {}
+            }
+          }
+        ]
+      },
+      "reads": {
+        "payment": {
+          "id": "tr_corpusChg01",
+          "reference": "sub-ref-1",
+          "metadata": {
+            "antelopeSubscription": "cst_corpusChg01:sub_corpusChg01"
+          }
+        }
+      }
+    },
+    {
+      "name": "refund-first-release",
+      "since": "ef5dfaf",
+      "until": "eedbca1",
+      "writer": "payment/refunds.ts RefundPayment",
+      "seed": {
+        "payments": [
+          {
+            "id": "tr_corpusRef01",
+            "status": "open",
+            "metadata": {
+              "antelope": {
+                "reference": "order-2001"
+              },
+              "metadata": {}
+            }
+          }
+        ],
+        "refund": {
+          "id": "re_corpusRef01",
+          "paymentId": "tr_corpusRef01",
+          "metadata": {
+            "antelope": {},
+            "metadata": {
+              "ticket": "T-1"
+            }
+          }
+        }
+      },
+      "reads": {
+        "refund": {
+          "metadata": {
+            "ticket": "T-1"
+          },
+          "replayKey": null
+        }
+      }
+    },
+    {
+      "name": "refund-first-release-with-reason",
+      "since": "ef5dfaf",
+      "until": "eedbca1",
+      "writer": "payment/refunds.ts RefundPayment",
+      "seed": {
+        "payments": [
+          {
+            "id": "tr_corpusRef02",
+            "status": "open",
+            "metadata": {
+              "antelope": {
+                "reference": "order-2002"
+              },
+              "metadata": {}
+            }
+          }
+        ],
+        "refund": {
+          "id": "re_corpusRef02",
+          "paymentId": "tr_corpusRef02",
+          "metadata": {
+            "antelope": {
+              "reason": "requested_by_customer"
+            },
+            "metadata": {}
+          }
+        }
+      },
+      "reads": {
+        "refund": {
+          "metadata": null,
+          "replayKey": null
+        }
+      }
+    },
+    {
+      "name": "refund",
+      "since": "eedbca1",
+      "until": null,
+      "writer": "payment/refunds.ts RefundPayment",
+      "seed": {
+        "payments": [
+          {
+            "id": "tr_corpusRef03",
+            "status": "open",
+            "metadata": {
+              "antelope": {
+                "reference": "order-2003"
+              },
+              "metadata": {}
+            }
+          }
+        ],
+        "refund": {
+          "id": "re_corpusRef03",
+          "paymentId": "tr_corpusRef03",
+          "metadata": {
+            "antelope": {
+              "key": "corpus-refund-3"
+            },
+            "metadata": {
+              "ticket": "T-3"
+            }
+          }
+        }
+      },
+      "reads": {
+        "refund": {
+          "metadata": {
+            "ticket": "T-3"
+          },
+          "replayKey": "corpus-refund-3"
+        }
+      }
+    },
+    {
+      "name": "refund-with-reason",
+      "since": "eedbca1",
+      "until": null,
+      "writer": "payment/refunds.ts RefundPayment",
+      "seed": {
+        "payments": [
+          {
+            "id": "tr_corpusRef04",
+            "status": "open",
+            "metadata": {
+              "antelope": {
+                "reference": "order-2004"
+              },
+              "metadata": {}
+            }
+          }
+        ],
+        "refund": {
+          "id": "re_corpusRef04",
+          "paymentId": "tr_corpusRef04",
+          "metadata": {
+            "antelope": {
+              "key": "corpus-refund-4",
+              "reason": "requested_by_customer"
+            },
+            "metadata": {}
+          }
+        }
+      },
+      "reads": {
+        "refund": {
+          "metadata": null,
+          "replayKey": "corpus-refund-4"
+        }
+      }
+    },
+    {
+      "name": "capture-first-release",
+      "since": "ef5dfaf",
+      "until": "eedbca1",
+      "writer": "payment/payments.ts CapturePayment, which sent no metadata",
+      "seed": {
+        "payments": [
+          {
+            "id": "tr_corpusCap01",
+            "metadata": {
+              "antelope": {
+                "reference": "order-3001"
+              },
+              "metadata": {}
+            }
+          }
+        ],
+        "capture": {
+          "id": "cpt_corpusCap01",
+          "paymentId": "tr_corpusCap01",
+          "metadata": null
+        }
+      },
+      "reads": {
+        "capture": {
+          "replayKey": null
+        }
+      }
+    },
+    {
+      "name": "capture",
+      "since": "eedbca1",
+      "until": null,
+      "writer": "payment/payments.ts CapturePayment",
+      "seed": {
+        "payments": [
+          {
+            "id": "tr_corpusCap02",
+            "metadata": {
+              "antelope": {
+                "reference": "order-3002"
+              },
+              "metadata": {}
+            }
+          }
+        ],
+        "capture": {
+          "id": "cpt_corpusCap02",
+          "paymentId": "tr_corpusCap02",
+          "metadata": {
+            "antelope": {
+              "key": "corpus-capture-2"
+            },
+            "metadata": {}
+          }
+        }
+      },
+      "reads": {
+        "capture": {
+          "replayKey": "corpus-capture-2"
+        }
+      }
+    },
+    {
+      "name": "customer",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "payment/customers.ts CreateCustomer",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusCus01",
+          "metadata": {
+            "antelope": {},
+            "metadata": {
+              "crm": "c-77"
+            }
+          }
+        }
+      },
+      "reads": {
+        "customer": {
+          "metadata": {
+            "crm": "c-77"
+          }
+        }
+      }
+    }
+  ]
+}

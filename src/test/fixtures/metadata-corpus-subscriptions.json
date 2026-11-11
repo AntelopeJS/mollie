@@ -1,0 +1,599 @@
+{
+  "source": "Metadata each version of the module wrote since ef5dfaf, from git log -p of src/mollie/metadata.ts, src/implementations/subscriptions/records.ts and every WriteMetadata and MergeOwn caller. since is the first commit that wrote the shape, until the first that stopped (null: still written). reads is what the version that wrote it read back.",
+  "fixtures": [
+    {
+      "name": "renewal-payment",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "subscriptions/creation.ts subscriptionBody, forwarded by Mollie to each renewal",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusRen01",
+          "metadata": null
+        },
+        "subscription": {
+          "id": "sub_corpusRen01",
+          "status": "active",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-2",
+              "createKey": "corpus-create-2",
+              "interval": "month",
+              "intervalCount": 1,
+              "start": "charged",
+              "firstPayment": "tr_corpusRen00"
+            },
+            "metadata": {
+              "plan": "gold"
+            }
+          }
+        },
+        "payments": [
+          {
+            "id": "tr_corpusRen01",
+            "customerId": "cst_corpusRen01",
+            "subscriptionId": "sub_corpusRen01",
+            "metadata": {
+              "antelope": {
+                "reference": "sub-ref-2",
+                "createKey": "corpus-create-2",
+                "interval": "month",
+                "intervalCount": 1,
+                "start": "charged",
+                "firstPayment": "tr_corpusRen00"
+              },
+              "metadata": {
+                "plan": "gold"
+              }
+            }
+          }
+        ]
+      },
+      "reads": {
+        "payment": {
+          "id": "tr_corpusRen01",
+          "reference": "sub-ref-2",
+          "metadata": {
+            "plan": "gold",
+            "antelopeSubscription": "cst_corpusRen01:sub_corpusRen01"
+          }
+        }
+      }
+    },
+    {
+      "name": "early-end-first-release",
+      "since": "ef5dfaf",
+      "until": "eedbca1",
+      "writer": "subscriptions/records.ts RecordEarlyEnd",
+      "finding": "legacyEarlyEnd",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusEnd01",
+          "metadata": {
+            "antelope": {
+              "endedEarly": {
+                "sub_corpusEnd01": {
+                  "endedAt": 1779265800000,
+                  "endsAt": 4102444800000,
+                  "key": "corpus-cancel-now-1"
+                }
+              }
+            },
+            "metadata": {}
+          }
+        },
+        "subscription": {
+          "id": "sub_corpusEnd01",
+          "status": "canceled",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-11",
+              "createKey": "corpus-create-11",
+              "interval": "month",
+              "intervalCount": 1,
+              "start": "anchor",
+              "cancel": {
+                "timing": "period_end",
+                "key": "corpus-cancel-11",
+                "endsAt": 4102444800000
+              }
+            },
+            "metadata": {}
+          }
+        }
+      },
+      "reads": {
+        "customer": {
+          "metadata": null
+        },
+        "subscription": {
+          "reference": "sub-ref-11",
+          "interval": "month",
+          "intervalCount": 1,
+          "status": "canceled",
+          "cancelAtPeriodEnd": false,
+          "endedAt": 1779265800000,
+          "trialEnd": null,
+          "latestPayment": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "name": "early-end",
+      "since": "eedbca1",
+      "until": null,
+      "writer": "subscriptions/records.ts RecordEarlyEnd",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusEnd02",
+          "metadata": {
+            "antelope": {
+              "endedEarly": {
+                "sub_corpusEnd02": [1779265800000, "4ad6bf3c"]
+              }
+            },
+            "metadata": {
+              "crm": "c-78"
+            }
+          }
+        },
+        "subscription": {
+          "id": "sub_corpusEnd02",
+          "status": "canceled",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-12",
+              "createKey": "corpus-create-12",
+              "interval": "month",
+              "intervalCount": 1,
+              "start": "charged",
+              "firstPayment": "tr_corpusEnd02",
+              "cancel": {
+                "timing": "period_end",
+                "key": "corpus-cancel-12",
+                "endsAt": 4102444800000
+              }
+            },
+            "metadata": {}
+          }
+        },
+        "payments": [
+          {
+            "id": "tr_corpusEnd02",
+            "customerId": "cst_corpusEnd02",
+            "metadata": {
+              "antelope": {
+                "reference": "sub-ref-12",
+                "subscription": "cst_corpusEnd02:sub_corpusEnd02"
+              },
+              "metadata": {}
+            }
+          }
+        ]
+      },
+      "reads": {
+        "customer": {
+          "metadata": {
+            "crm": "c-78"
+          }
+        },
+        "subscription": {
+          "reference": "sub-ref-12",
+          "interval": "month",
+          "intervalCount": 1,
+          "status": "canceled",
+          "cancelAtPeriodEnd": false,
+          "endedAt": 1779265800000,
+          "trialEnd": null,
+          "latestPayment": "tr_corpusEnd02",
+          "metadata": null
+        }
+      }
+    },
+    {
+      "name": "early-end-on-a-customer-created-elsewhere",
+      "since": "eedbca1",
+      "until": null,
+      "writer": "subscriptions/records.ts RecordEarlyEnd over metadata another writer left",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusEnd03",
+          "metadata": {
+            "crm": "c-9",
+            "antelope": {
+              "endedEarly": {
+                "sub_corpusEnd03": [1779265800000, "fa2a8194"]
+              }
+            }
+          }
+        },
+        "subscription": {
+          "id": "sub_corpusEnd03",
+          "status": "canceled",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-13",
+              "createKey": "corpus-create-13",
+              "interval": "week",
+              "intervalCount": 2,
+              "start": "anchor",
+              "cancel": {
+                "timing": "period_end",
+                "key": "corpus-cancel-13",
+                "endsAt": 4102444800000
+              }
+            },
+            "metadata": {
+              "seat": "4"
+            }
+          }
+        }
+      },
+      "reads": {
+        "customer": {
+          "metadata": {
+            "crm": "c-9"
+          }
+        },
+        "subscription": {
+          "reference": "sub-ref-13",
+          "interval": "week",
+          "intervalCount": 2,
+          "status": "canceled",
+          "cancelAtPeriodEnd": false,
+          "endedAt": 1779265800000,
+          "trialEnd": null,
+          "latestPayment": null,
+          "metadata": {
+            "seat": "4"
+          }
+        }
+      }
+    },
+    {
+      "name": "subscription-anchor",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "subscriptions/creation.ts subscriptionBody",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusSub01",
+          "metadata": null
+        },
+        "subscription": {
+          "id": "sub_corpusSub01",
+          "status": "active",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-21",
+              "createKey": "corpus-create-21",
+              "interval": "month",
+              "intervalCount": 3,
+              "start": "anchor"
+            },
+            "metadata": {
+              "plan": "gold",
+              "metadata": "nested"
+            }
+          }
+        }
+      },
+      "reads": {
+        "subscription": {
+          "reference": "sub-ref-21",
+          "interval": "month",
+          "intervalCount": 3,
+          "status": "active",
+          "cancelAtPeriodEnd": false,
+          "endedAt": null,
+          "trialEnd": null,
+          "latestPayment": null,
+          "metadata": {
+            "plan": "gold",
+            "metadata": "nested"
+          }
+        }
+      }
+    },
+    {
+      "name": "subscription-trial",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "subscriptions/creation.ts subscriptionBody",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusSub02",
+          "metadata": null
+        },
+        "subscription": {
+          "id": "sub_corpusSub02",
+          "status": "active",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-22",
+              "createKey": "corpus-create-22",
+              "interval": "year",
+              "intervalCount": 1,
+              "start": "trial"
+            },
+            "metadata": {}
+          }
+        }
+      },
+      "reads": {
+        "subscription": {
+          "reference": "sub-ref-22",
+          "interval": "year",
+          "intervalCount": 1,
+          "status": "active",
+          "cancelAtPeriodEnd": false,
+          "endedAt": null,
+          "trialEnd": 1768431600000,
+          "latestPayment": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "name": "subscription-charged",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "subscriptions/creation.ts subscriptionBody, then updateOwn with firstPayment",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusSub03",
+          "metadata": null
+        },
+        "subscription": {
+          "id": "sub_corpusSub03",
+          "status": "active",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-23",
+              "createKey": "corpus-create-23",
+              "interval": "day",
+              "intervalCount": 30,
+              "start": "charged",
+              "firstPayment": "tr_corpusSub03"
+            },
+            "metadata": {
+              "plan": "silver"
+            }
+          }
+        },
+        "payments": [
+          {
+            "id": "tr_corpusSub03",
+            "customerId": "cst_corpusSub03",
+            "metadata": {
+              "antelope": {
+                "reference": "sub-ref-23",
+                "subscription": "cst_corpusSub03:sub_corpusSub03"
+              },
+              "metadata": {}
+            }
+          }
+        ]
+      },
+      "reads": {
+        "subscription": {
+          "reference": "sub-ref-23",
+          "interval": "day",
+          "intervalCount": 30,
+          "status": "active",
+          "cancelAtPeriodEnd": false,
+          "endedAt": null,
+          "trialEnd": null,
+          "latestPayment": "tr_corpusSub03",
+          "metadata": {
+            "plan": "silver"
+          }
+        }
+      }
+    },
+    {
+      "name": "subscription-refused",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "subscriptions/creation.ts updateOwn with refused, then a cancel at Mollie",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusSub04",
+          "metadata": null
+        },
+        "subscription": {
+          "id": "sub_corpusSub04",
+          "status": "canceled",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-24",
+              "createKey": "corpus-create-24",
+              "interval": "month",
+              "intervalCount": 1,
+              "start": "charged",
+              "refused": "tr_corpusSub04"
+            },
+            "metadata": {}
+          }
+        },
+        "payments": [
+          {
+            "id": "tr_corpusSub04",
+            "status": "failed",
+            "customerId": "cst_corpusSub04",
+            "metadata": {
+              "antelope": {
+                "reference": "sub-ref-24",
+                "subscription": "cst_corpusSub04:sub_corpusSub04"
+              },
+              "metadata": {}
+            }
+          }
+        ]
+      },
+      "reads": {
+        "subscription": null
+      }
+    },
+    {
+      "name": "subscription-refused-then-canceled",
+      "since": "c8e56ae",
+      "until": null,
+      "writer": "subscriptions/changes.ts cancelAtMollie on a refused subscription Mollie still billed",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusSub05",
+          "metadata": null
+        },
+        "subscription": {
+          "id": "sub_corpusSub05",
+          "status": "canceled",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-25",
+              "createKey": "corpus-create-25",
+              "interval": "month",
+              "intervalCount": 1,
+              "start": "charged",
+              "refused": "tr_corpusSub05",
+              "cancel": {
+                "timing": "now",
+                "key": "corpus-cancel-25"
+              }
+            },
+            "metadata": {}
+          }
+        },
+        "payments": [
+          {
+            "id": "tr_corpusSub05",
+            "status": "failed",
+            "customerId": "cst_corpusSub05",
+            "metadata": {
+              "antelope": {
+                "reference": "sub-ref-25",
+                "subscription": "cst_corpusSub05:sub_corpusSub05"
+              },
+              "metadata": {}
+            }
+          }
+        ]
+      },
+      "reads": {
+        "subscription": {
+          "reference": "sub-ref-25",
+          "interval": "month",
+          "intervalCount": 1,
+          "status": "canceled",
+          "cancelAtPeriodEnd": false,
+          "endedAt": 1780308000000,
+          "trialEnd": null,
+          "latestPayment": "tr_corpusSub05",
+          "metadata": null
+        }
+      }
+    },
+    {
+      "name": "subscription-canceled-now",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "subscriptions/changes.ts cancelAtMollie",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusSub06",
+          "metadata": null
+        },
+        "subscription": {
+          "id": "sub_corpusSub06",
+          "status": "canceled",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-26",
+              "createKey": "corpus-create-26",
+              "interval": "month",
+              "intervalCount": 1,
+              "start": "anchor",
+              "cancel": {
+                "timing": "now",
+                "key": "corpus-cancel-26"
+              }
+            },
+            "metadata": {}
+          }
+        }
+      },
+      "reads": {
+        "subscription": {
+          "reference": "sub-ref-26",
+          "interval": "month",
+          "intervalCount": 1,
+          "status": "canceled",
+          "cancelAtPeriodEnd": false,
+          "endedAt": 1780308000000,
+          "trialEnd": null,
+          "latestPayment": null,
+          "metadata": null
+        }
+      }
+    },
+    {
+      "name": "subscription-canceled-at-period-end",
+      "since": "ef5dfaf",
+      "until": null,
+      "writer": "subscriptions/changes.ts cancelAtMollie",
+      "seed": {
+        "customer": {
+          "id": "cst_corpusSub07",
+          "metadata": null
+        },
+        "subscription": {
+          "id": "sub_corpusSub07",
+          "status": "canceled",
+          "metadata": {
+            "antelope": {
+              "reference": "sub-ref-27",
+              "createKey": "corpus-create-27",
+              "interval": "month",
+              "intervalCount": 1,
+              "start": "charged",
+              "firstPayment": "tr_corpusSub07",
+              "cancel": {
+                "timing": "period_end",
+                "key": "corpus-cancel-27",
+                "endsAt": 4102444800000
+              }
+            },
+            "metadata": {}
+          }
+        },
+        "payments": [
+          {
+            "id": "tr_corpusSub07",
+            "customerId": "cst_corpusSub07",
+            "metadata": {
+              "antelope": {
+                "reference": "sub-ref-27",
+                "subscription": "cst_corpusSub07:sub_corpusSub07"
+              },
+              "metadata": {}
+            }
+          }
+        ]
+      },
+      "reads": {
+        "subscription": {
+          "reference": "sub-ref-27",
+          "interval": "month",
+          "intervalCount": 1,
+          "status": "active",
+          "cancelAtPeriodEnd": true,
+          "endedAt": null,
+          "trialEnd": null,
+          "latestPayment": "tr_corpusSub07",
+          "metadata": null
+        }
+      }
+    }
+  ]
+}
