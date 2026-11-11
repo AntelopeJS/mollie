@@ -111,8 +111,8 @@ Writing == {y \in Calls : pc[y] = "patchCustomer"}
 
 ReadCustomer(x) ==
   /\ pc[x] = "readCustomer"
-  /\ Writing = {}                                    \* records.ts:229-248, 263
-  /\ copy' = [copy EXCEPT ![x] = ended]              \* records.ts:264
+  /\ Writing = {}                                    \* records.ts:246-265, 280
+  /\ copy' = [copy EXCEPT ![x] = ended]              \* records.ts:281
   /\ Go(x, "patchCustomer")
   /\ UNCHANGED <<status, mark, ended>>
 
@@ -120,7 +120,7 @@ ReadCustomer(x) ==
 (* this subscription's early end. Then it reads the subscription back.    *)
 PatchCustomer(x) ==
   /\ pc[x] = "patchCustomer"
-  /\ ended' = [copy[x] EXCEPT ![x[1]] = KeyOf(x)]    \* records.ts:265-273
+  /\ ended' = [copy[x] EXCEPT ![x[1]] = KeyOf(x)]    \* records.ts:282-290
   /\ copy' = [copy EXCEPT ![x] = NoCopy]
   /\ \E lost \in BOOLEAN : Answer(x, IF lost THEN "error" ELSE "endedEarly")
   /\ UNCHANGED <<status, mark>>

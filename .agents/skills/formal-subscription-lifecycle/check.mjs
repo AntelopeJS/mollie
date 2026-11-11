@@ -18,8 +18,7 @@ const dir = path.dirname(fileURLToPath(import.meta.url));
 
 /** Rules main breaks in the creation spec, with the states in TLC's shortest counterexample. */
 const CREATION_FINDINGS = {
-  NoHiddenActiveSubscription: 7,
-  CreatedIsListed: 12,
+  CreatedIsListed: 13,
 };
 
 /** Rules main breaks in the cancellation spec. */
