@@ -14,6 +14,7 @@ import {
 import { IsMollieId } from "../../mollie/ids";
 import { DefinedFields } from "../../mollie/fields";
 import { ToPayment, ToPaymentStatus } from "./mapping";
+import { AwaitSavedMethod } from "./saved-method";
 import { type Account, GetAccount } from "../../accounts";
 import {
   type Entity,
@@ -148,6 +149,7 @@ export async function GetPayment(
 ): Promise<Payment> {
   const account = GetAccount(provider);
   const payment = await ReadPayment(account, id);
+  await AwaitSavedMethod(account, payment);
   return Translating(id, PAYMENT_ENTITY, async () => {
     const capture =
       payment.status === "authorized"

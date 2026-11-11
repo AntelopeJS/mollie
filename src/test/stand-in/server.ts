@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { text } from "node:stream/consumers";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   type IncomingMessage,
   type Server,
@@ -166,6 +167,8 @@ export class MollieStandIn {
   captureDelayMs: number | undefined = CAPTURE_DELAY_MS;
   /** How a capture settles: `failed` as Mollie rejects a capture of an expired authorization. */
   captureOutcome: payments.CaptureOutcome = "succeeded";
+  /** Requests held for `ms` before any route runs, every time, matched by method and path. */
+  readonly latencies: { method: string; path: RegExp; ms: number }[] = [];
   private receiver: WebhookReceiver | undefined;
   private server: Server | undefined;
   private baseUrl = "";
@@ -281,6 +284,11 @@ export class MollieStandIn {
     const url = new URL(message.url ?? "/", this.baseUrl);
     const raw = await text(message);
     await this.lag(message, url);
+    const latency = this.latencies.find(
+      (entry) =>
+        entry.method === message.method && entry.path.test(url.pathname),
+    );
+    if (latency) await delay(latency.ms, undefined, { ref: false });
     try {
       const result = url.pathname.startsWith("/v2/")
         ? this.api(message, url, raw)

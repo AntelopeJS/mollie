@@ -91,7 +91,12 @@ export interface Account {
   declinesAtCreation: Set<string>;
   requests: LoggedRequest[];
   captures: Map<string, MollieCapture>;
+  /** How long a first payment's mandate stays `pending` after the payment is paid, by mandate method. A method with no entry is `valid` at once. */
+  mandateLagMs: Map<MollieMandate["method"], number>;
 }
+
+/** Within the 250 to 570 ms measured against Mollie's test mode for a card. */
+export const CARD_MANDATE_LAG_MS = 400;
 
 const ID_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -110,6 +115,7 @@ export function NewAccount(): Account {
     declinesAtCreation: new Set(),
     requests: [],
     captures: new Map(),
+    mandateLagMs: new Map([["creditcard", CARD_MANDATE_LAG_MS]]),
   };
 }
 

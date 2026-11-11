@@ -8,6 +8,7 @@ import {
 
 import { Translating } from "./errors";
 import { ToEpochMillis, ToPayment } from "./mapping";
+import { AwaitSavedMethod } from "./saved-method";
 import { IsMollieId } from "../../mollie/ids";
 import { type Account, GetAccount } from "../../accounts";
 import { DispatchChargeEvents } from "../subscriptions/events";
@@ -89,6 +90,7 @@ export async function VerifyWebhook(
   const payment = await confirmedPayment(account, namedPayment(request));
   const type = EVENT_BY_STATUS[payment.status];
   if (!type) return undefined;
+  await AwaitSavedMethod(account, payment);
   return Translating(payment.id, "payment", async () => {
     const charged = await SubscriptionOfPayment(account, payment);
     await DispatchChargeEvents(account, payment, charged);

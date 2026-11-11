@@ -294,11 +294,12 @@ function createMandate(
   paymentMethod: string,
 ): void {
   const method = mandateMethodOf(paymentMethod);
+  const lag = account.mandateLagMs.get(method);
   const mandate: MollieMandate = {
     resource: "mandate",
     id: NewId("mdt"),
     method,
-    status: "valid",
+    status: lag === undefined ? "valid" : "pending",
     scopes: ["customer-not-present", "customer-present"],
     details:
       method === "creditcard"
@@ -309,6 +310,13 @@ function createMandate(
   };
   account.mandates.set(mandate.id, mandate);
   payment.mandateId = mandate.id;
+  if (lag !== undefined) validateLater(mandate, lag);
+}
+
+function validateLater(mandate: MollieMandate, lagMs: number): void {
+  setTimeout(() => {
+    if (mandate.status === "pending") mandate.status = "valid";
+  }, lagMs).unref();
 }
 
 type Transition = (account: Account, payment: MolliePayment) => void;
