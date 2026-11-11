@@ -10,9 +10,11 @@ import { PaymentMethodId } from "../../mollie/ids";
 import { MollieStandIn } from "../stand-in/server";
 import type { AccountConfig } from "../../accounts";
 import { DefinedFields } from "../../mollie/fields";
+import { BrowserCheckout } from "./browser-checkout";
+import { HttpCheckout } from "./http-checkout";
 import { type PayerPolicy, TestPayer } from "./payer";
 import { SelectTarget, type TestTarget } from "./target";
-import type { MolliePayment } from "../../mollie/types";
+import type { MollieMandate, MolliePayment } from "../../mollie/types";
 
 export interface Harness {
   target: TestTarget;
@@ -72,6 +74,23 @@ async function waitForStatus(
   return payment;
 }
 
+async function validMandate(
+  client: MollieClient,
+  customerId: string,
+): Promise<MollieMandate | undefined> {
+  const deadline = Date.now() + SETTLE_TIMEOUT_MS;
+  for (;;) {
+    const mandates = await client.list(
+      `/customers/${customerId}/mandates`,
+      "mandates",
+      IsMollieMandate,
+    );
+    const valid = mandates.find((candidate) => candidate.status === "valid");
+    if (valid || Date.now() >= deadline) return valid;
+    await delay(SETTLE_POLL_MS);
+  }
+}
+
 async function ProvisionCardMandate(
   client: MollieClient,
   label: string,
@@ -108,12 +127,7 @@ async function ProvisionCardMandate(
       `Provisioning the ${label} card: first payment ${first.id} is ${settled.status}`,
     );
   }
-  const mandates = await client.list(
-    `/customers/${customer.id}/mandates`,
-    "mandates",
-    IsMollieMandate,
-  );
-  const mandate = mandates.find((candidate) => candidate.status === "valid");
+  const mandate = await validMandate(client, customer.id);
   if (!mandate)
     throw new Error(`Provisioning the ${label} card left no valid mandate`);
   return PaymentMethodId(customer.id, mandate.id);
@@ -139,6 +153,7 @@ export async function StartHarness(
   const payer = new TestPayer(
     client,
     policy,
+    target.standIn ? new HttpCheckout() : new BrowserCheckout(),
     target.standIn ? STAND_IN_PAYER_INTERVAL_MS : LIVE_PAYER_INTERVAL_MS,
   );
   payer.start();
