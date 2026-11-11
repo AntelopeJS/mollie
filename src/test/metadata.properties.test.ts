@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { SUBSCRIPTION_INTERVALS } from "@antelopejs/interface-subscriptions";
+import { CANCELLATION_TIMINGS } from "@antelopejs/interface-subscriptions";
 import fc from "fast-check";
 
 import type { Account } from "../accounts";
@@ -22,21 +22,25 @@ import type { JsonValue, MollieSubscription } from "../mollie/types";
 import {
   AnyMetadataArb,
   Bytes,
+  CALLER,
+  CALLER_BYTES,
   CallerArb,
   ChangesArb,
   Entries,
+  ForeignCallerArb,
   ForeignObjectArb,
   Holds,
-  IdArb,
   IsObject,
   IsNumberValue,
   IsTextValue,
   IsWritableOwnSubscription,
   KeyArb,
-  MOLLIE_METADATA_BYTES,
   MOLLIE_SUBSCRIPTION_STATUSES,
   NonObjectArb,
+  NonObjectTextArb,
+  ObjectOf,
   OWN,
+  OwnBytes,
   OwnObjectOf,
   OwnRecordArb,
   OwnSubscriptionArb,
@@ -47,12 +51,17 @@ import {
   TamperedOwnSubscriptionArb,
   Wire,
 } from "./support/metadata-model";
+import {
+  earlyEndsFit,
+  laterWritesFit,
+  WidestSubscription,
+} from "./support/metadata-budget";
+import { AssertOwnTypes } from "./support/metadata-types";
 
 const DEFAULT_SEED = 20261111;
 const RUNS = 300;
 const SUITE_TIMEOUT_MS = 60_000;
 const NOW = Date.parse("2026-11-11T12:00:00Z");
-const STARTS = ["anchor", "charged", "trial"];
 const SUBSCRIPTION_ID = "cst_property01:sub_property01";
 const READ_OWN: OwnSubscription = {
   reference: "property",
@@ -72,6 +81,7 @@ const OFFLINE: Account = {
     apiKey: `test_${"x".repeat(30)}`,
     apiUrl: "http://127.0.0.1:9",
   }),
+  settleTimeoutMs: 0,
 };
 
 function isEnded(status: MollieSubscription["status"]): boolean {
@@ -211,17 +221,6 @@ const mergeKeepsForeignValue = fc.property(
   },
 );
 
-function assertOwnTypes(own: OwnSubscription): void {
-  assert.ok(IsTextValue(own.reference));
-  assert.ok(SUBSCRIPTION_INTERVALS.includes(own.interval));
-  assert.ok(IsNumberValue(own.intervalCount));
-  assert.ok(STARTS.includes(own.start));
-  for (const text of [own.createKey, own.firstPayment, own.refused]) {
-    assert.ok(text === undefined || IsTextValue(text));
-  }
-  assert.ok(own.cancel === undefined || IsTextValue(own.cancel.key));
-}
-
 const readsNeverThrow = fc.asyncProperty(
   AnyMetadataArb,
   fc.constantFrom(...MOLLIE_SUBSCRIPTION_STATUSES),
@@ -234,7 +233,7 @@ const readsNeverThrow = fc.asyncProperty(
     assert.deepEqual(Entries(refund.metadata ?? {}), Entries(caller));
     const mollie = SubscriptionWith(metadata, status);
     const own = ReadOwnSubscription(mollie);
-    if (own) assertOwnTypes(own);
+    if (own) AssertOwnTypes(own);
     const shown = ShownSubscription(mollie);
     if (shown !== undefined) assert.deepEqual(shown, own);
     const charged = await SubscriptionOfPayment(OFFLINE, PaymentWith(metadata));
@@ -263,38 +262,50 @@ const ownSubscriptionValues = fc.property(
   },
 );
 
-const CREATED_OWN = OwnSubscriptionArb.map(
-  ({ reference, createKey, interval, intervalCount, start }) => ({
-    reference,
-    createKey,
-    interval,
-    intervalCount,
-    start,
-  }),
-);
+const foreignCallerView = fc.property(ForeignCallerArb, (foreign) => {
+  const object = ObjectOf(foreign);
+  assert.ok(object, "another writer's metadata is a JSON object");
+  const caller = StringEntries(object);
+  assert.deepEqual(Entries(ReadCallerMetadata(foreign)), Entries(caller));
+  assertCaller(ToPayment(PaymentWith(foreign)).metadata, caller);
+  assertCaller(ToRefund(RefundWith(foreign)).metadata, caller);
+  const mollie = SubscriptionWith(foreign);
+  assert.equal(ReadOwnSubscription(mollie), undefined);
+  const record = { id: SUBSCRIPTION_ID, mollie, own: READ_OWN };
+  assertCaller(ToSubscription(record, NOW).metadata, caller);
+});
 
-const laterWritesFit = fc.property(
-  CREATED_OWN,
-  fc.integer({ min: 0, max: MOLLIE_METADATA_BYTES }),
-  fc.tuple(IdArb.payment, KeyArb, fc.integer({ min: 0, max: 4102444800000 })),
-  (own, padding, [firstPayment, key, endsAt]) => {
-    const created = Wire(WriteMetadata(own, { note: "x".repeat(padding) }));
-    fc.pre(Bytes(created) <= MOLLIE_METADATA_BYTES);
-    const charged = Wire(MergeOwn(created, { firstPayment }));
-    const canceled = Wire(
-      MergeOwn(charged, { cancel: { timing: "period_end", key, endsAt } }),
+const textRoundTrip = fc.asyncProperty(
+  OwnSubscriptionArb,
+  CallerArb,
+  fc.tuple(KeyArb, KeyArb),
+  async (own, caller, [reference, subscription]) => {
+    const text = JSON.stringify(WriteMetadata(own, caller));
+    assert.deepEqual(Entries(ReadCallerMetadata(text)), Entries(caller));
+    assertCaller(ToPayment(PaymentWith(text)).metadata, caller);
+    assertCaller(ToRefund(RefundWith(text)).metadata, caller);
+    assert.deepEqual(ReadOwnSubscription(SubscriptionWith(text)), own);
+    const charge = PaymentWith(
+      JSON.stringify(WriteMetadata({ reference, subscription }, caller)),
     );
-    for (const [step, written] of [
-      ["the first charge", charged],
-      ["the cancellation", canceled],
-    ] as const) {
-      assert.ok(
-        Bytes(written) <= MOLLIE_METADATA_BYTES,
-        `Mollie accepted ${Bytes(created)} bytes at creation, ${step} writes ${Bytes(written)}`,
-      );
-    }
+    assert.equal(ToPayment(charge).reference, reference);
+    assert.deepEqual(await SubscriptionOfPayment(OFFLINE, charge), {
+      id: subscription,
+    });
   },
 );
+
+const textWithoutObject = fc.asyncProperty(NonObjectTextArb, async (text) => {
+  assert.deepEqual(Entries(ReadCallerMetadata(text)), []);
+  assert.equal(ReadOwnSubscription(SubscriptionWith(text)), undefined);
+  const payment = ToPayment(PaymentWith(text));
+  assert.equal(payment.reference, "");
+  assert.equal(payment.metadata, undefined);
+  assert.equal(
+    await SubscriptionOfPayment(OFFLINE, PaymentWith(text)),
+    undefined,
+  );
+});
 
 function holds<Ts extends unknown[]>(
   name: string,
@@ -361,10 +372,30 @@ describe("[mollie] metadata round trip properties", function () {
     "an own subscription record the module accepts has values the module writes",
     ownSubscriptionValues,
   );
-  finding(
+  holds(
+    "foreignCallerView",
+    "metadata with no `antelope` key, one with a `metadata` object of its own and the text of either included, reads as its own string entries",
+    foreignCallerView,
+  );
+  holds(
+    "textRoundTrip",
+    "metadata Mollie holds as the JSON text of what the module wrote reads as the object",
+    textRoundTrip,
+  );
+  holds(
+    "textWithoutObject",
+    "a metadata string that is not the JSON text of an object reads as no metadata and not the module's",
+    textWithoutObject,
+  );
+  holds(
     "laterWritesFit",
-    "metadata Mollie accepted at creation still fits after the module records the first charge and a cancellation",
+    "caller metadata within the documented 600 bytes and an own record within 400 stay within Mollie's 1 kB after the first charge, the refusal and a cancellation",
     laterWritesFit,
+  );
+  holds(
+    "earlyEndsFit",
+    "twenty early ends fit a customer's 1 kB",
+    earlyEndsFit,
   );
 });
 
@@ -394,6 +425,32 @@ describe("[mollie] metadata generators and pinned findings", () => {
     assert.ok(
       metadata.some((value) => Array.isArray(value)),
       "no list metadata",
+    );
+    const marks = metadata.map((value) => OwnObjectOf(value)?.cancel);
+    assert.ok(
+      marks.some(
+        (mark) =>
+          IsObject(mark) &&
+          IsTextValue(mark.key) &&
+          IsTextValue(mark.timing) &&
+          !CANCELLATION_TIMINGS.some((timing) => timing === mark.timing),
+      ),
+      "no cancellation mark with a valid key and an unknown timing",
+    );
+    const foreign = fc.sample(ForeignCallerArb, PARAMETERS);
+    assert.ok(
+      foreign.some((value) => IsObject(ObjectOf(value)?.[CALLER])),
+      "no other writer's metadata with a metadata object of its own",
+    );
+    assert.ok(foreign.some((value) => IsTextValue(value)));
+    assert.ok(
+      foreign.every((value) => {
+        const object = ObjectOf(value);
+        return (
+          object !== undefined &&
+          !Object.prototype.hasOwnProperty.call(object, OWN)
+        );
+      }),
     );
     const counts = fc
       .sample(TamperedOwnSubscriptionArb, PARAMETERS)
@@ -428,28 +485,11 @@ describe("[mollie] metadata generators and pinned findings", () => {
     );
   });
 
-  it("pins laterWritesFit: 1024 bytes at creation grow to 1055 with the first charge and 1128 with a cancellation", () => {
-    const own = {
-      reference: "order-1",
-      createKey: "create-1",
-      interval: "month",
-      intervalCount: 1,
-      start: "charged",
-    };
-    const created = Wire(WriteMetadata(own, { note: "x".repeat(887) }));
-    const charged = Wire(MergeOwn(created, { firstPayment: "tr_AAAAAAAAAA" }));
-    const canceled = Wire(
-      MergeOwn(charged, {
-        cancel: {
-          timing: "period_end",
-          key: "cancel-1",
-          endsAt: 4102444800000,
-        },
-      }),
-    );
+  it("pins laterWritesFit: the documented budget at its edge, 600 caller bytes and the widest keys, ends at 1024 bytes after a period-end cancellation", () => {
+    const { caller, canceled } = WidestSubscription();
     assert.deepEqual(
-      [Bytes(created), Bytes(charged), Bytes(canceled)],
-      [1024, 1055, 1128],
+      [Bytes(caller), OwnBytes(canceled), Bytes(canceled)],
+      [CALLER_BYTES, 398, 1023],
     );
   });
 });

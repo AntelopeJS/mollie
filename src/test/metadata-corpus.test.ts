@@ -42,8 +42,11 @@ import {
 import {
   CallerArb,
   ExpectedKeyHash,
+  ForeignCallerArb,
   InstantArb,
   KeyArb,
+  ObjectOf,
+  StringEntries,
   Wire,
 } from "./support/metadata-model";
 import { NewPayer, type Payer } from "./support/payers";
@@ -309,6 +312,34 @@ const keyedRoundTrip = fc.asyncProperty(
   },
 );
 
+const foreignInterfaceView = fc.asyncProperty(
+  ForeignCallerArb,
+  async (foreign) => {
+    keyedRuns += 1;
+    const id = `Foreign${keyedRuns}`;
+    const object = ObjectOf(foreign);
+    assert.ok(object, "another writer's metadata is a JSON object");
+    const caller = StringEntries(object);
+    const metadata = Object.keys(caller).length > 0 ? caller : null;
+    const fixture: Fixture = {
+      name: "foreign",
+      since: "HEAD",
+      until: null,
+      writer: "generated",
+      seed: {
+        customer: { id: `cst_${id}`, metadata: foreign },
+        payments: [{ id: `tr_${id}`, metadata: foreign }],
+      },
+      reads: {
+        customer: { metadata },
+        payment: { id: `tr_${id}`, reference: "", metadata },
+      },
+    };
+    SeedFixture(PrimaryAccount(), fixture);
+    assert.deepEqual(await ReadFixture(fixture), fixture.reads);
+  },
+);
+
 describe("[mollie] metadata written by earlier versions", function () {
   this.timeout(TEST_TIMEOUT);
 
@@ -368,6 +399,11 @@ describe("[mollie] metadata written by earlier versions", function () {
 
   it("holds keyedRoundTrip: a refund, capture and early end stored under any key replay and read back under it", async () => {
     const details = await fc.check(keyedRoundTrip, PARAMETERS);
+    assert.ok(!details.failed, fc.defaultReportMessage(details));
+  });
+
+  it("holds foreignInterfaceView: GetPayment and GetCustomer read another writer's metadata, with no `antelope` key, as its string entries", async () => {
+    const details = await fc.check(foreignInterfaceView, PARAMETERS);
     assert.ok(!details.failed, fc.defaultReportMessage(details));
   });
 

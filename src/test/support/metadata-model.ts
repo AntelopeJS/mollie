@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
-import { SUBSCRIPTION_INTERVALS } from "@antelopejs/interface-subscriptions";
+import {
+  CANCELLATION_TIMINGS,
+  SUBSCRIPTION_INTERVALS,
+} from "@antelopejs/interface-subscriptions";
 import fc from "fast-check";
 
 import type {
@@ -94,13 +97,22 @@ function parsedJson(text: string): JsonValue | undefined {
 }
 
 /**
+ * The JSON object `metadata` holds: itself when it is an object, the object
+ * its text holds when it is a string of JSON, otherwise nothing.
+ */
+export function ObjectOf(metadata: JsonValue): JsonObject | undefined {
+  const holder = IsTextValue(metadata) ? parsedJson(metadata) : metadata;
+  return IsObject(holder) ? holder : undefined;
+}
+
+/**
  * The module's own object in `metadata`, as the stored format places it: the
  * object under the own key of the metadata object, or of the JSON object a
  * metadata string holds.
  */
 export function OwnObjectOf(metadata: JsonValue): JsonObject | undefined {
-  const holder = IsTextValue(metadata) ? parsedJson(metadata) : metadata;
-  if (!IsObject(holder) || !Object.prototype.hasOwnProperty.call(holder, OWN))
+  const holder = ObjectOf(metadata);
+  if (!holder || !Object.prototype.hasOwnProperty.call(holder, OWN))
     return undefined;
   const own = holder[OWN];
   return IsObject(own) ? own : undefined;
@@ -118,6 +130,24 @@ export function StringEntries(object: JsonObject): Record<string, string> {
 /** The UTF-8 size of `value`'s JSON text, the measure of Mollie's limit. */
 export function Bytes(value: JsonValue): number {
   return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+/**
+ * What `docs/4.subscriptions.md` ("Metadata") leaves a subscription's own
+ * `metadata` of Mollie's 1 kB: "about 600 bytes", counted as the JSON text of
+ * the caller's metadata.
+ */
+export const CALLER_BYTES = 600;
+
+/**
+ * What the same section says the module's own record takes: "up to about 400
+ * bytes", counted as the JSON text of the record.
+ */
+export const OWN_BYTES = 400;
+
+/** The UTF-8 size of the module's own record in `metadata`. */
+export function OwnBytes(metadata: JsonValue): number {
+  return Bytes(OwnObjectOf(metadata) ?? null);
 }
 
 /** A record's own entries in key order, so two records compare whatever their prototype. */
@@ -194,6 +224,23 @@ export const CallerArb = fc.dictionary(TextArb, TextArb, {
   ...PLAIN,
   maxKeys: 6,
 });
+
+/**
+ * Caller metadata the way a caller might fill the budget: any entries, then a
+ * padding entry that takes a share of the room left, or all of it, which makes
+ * the caller's JSON exactly `CALLER_BYTES` long. A caller already past the
+ * budget stays past it.
+ */
+export const CallerWithinBudgetArb = fc
+  .tuple(
+    CallerArb,
+    fc.option(fc.integer({ min: 0, max: CALLER_BYTES }), { nil: undefined }),
+  )
+  .map(([base, share]) => {
+    const room = CALLER_BYTES - Bytes({ ...base, pad: "" });
+    if (room < 0) return base;
+    return { ...base, pad: "x".repeat(Math.min(share ?? room, room)) };
+  });
 
 /** An instant the module stores, as epoch milliseconds. */
 export const InstantArb = fc.integer({ min: 0, max: LAST_INSTANT });
@@ -301,6 +348,27 @@ export const ForeignObjectArb: fc.Arbitrary<JsonObject> = fc.dictionary(
   { ...PLAIN, minKeys: 1, maxKeys: 5 },
 );
 
+/**
+ * Metadata another writer left with no `antelope` key: a JSON object, one with
+ * a `metadata` object of its own, or either as the text of its JSON.
+ */
+const ForeignWithCallerArb: fc.Arbitrary<JsonObject> = fc
+  .tuple(
+    ForeignObjectArb,
+    fc.oneof(
+      CallerArb,
+      fc.dictionary(TextArb, ForeignValueArb, { ...PLAIN, maxKeys: 4 }),
+    ),
+  )
+  .map(([foreign, nested]) => ({ ...foreign, [CALLER]: nested }));
+
+export const ForeignCallerArb: fc.Arbitrary<JsonValue> = fc.oneof(
+  ForeignObjectArb,
+  ForeignWithCallerArb,
+  ForeignObjectArb.map((object) => JSON.stringify(object)),
+  ForeignWithCallerArb.map((object) => JSON.stringify(object)),
+);
+
 /** Metadata Mollie accepts that is not a JSON object: a string, a number or a list of strings. */
 export const NonObjectArb: fc.Arbitrary<JsonValue> = fc.oneof(
   KeyArb,
@@ -308,6 +376,15 @@ export const NonObjectArb: fc.Arbitrary<JsonValue> = fc.oneof(
   fc.double({ noNaN: true, noDefaultInfinity: true }).map(Wire),
   fc.array(TextArb, { minLength: 1, maxLength: 4 }),
 );
+
+/** A metadata string that is not the JSON text of an object: JSON of another type, or text that is not JSON. */
+export const NonObjectTextArb: fc.Arbitrary<string> = fc
+  .oneof(
+    NonObjectArb.map((value) => JSON.stringify(value)),
+    fc.array(TextArb, { maxLength: 3 }).map((items) => JSON.stringify(items)),
+    TextArb,
+  )
+  .filter((text) => ObjectOf(text) === undefined);
 
 /** An own record of the wrong shape: a value of another type, or an object with fields of other types. */
 const ForeignOwnArb = fc.oneof(
@@ -355,10 +432,43 @@ const MistypedOwnSubscriptionArb: fc.Arbitrary<JsonValue> = fc
     return stored;
   });
 
+const CancelFieldArb: fc.Arbitrary<[string, JsonValue]> = fc.oneof(
+  fc.tuple(
+    fc.constant("timing"),
+    fc
+      .oneof(
+        fc.string({ maxLength: 12 }),
+        fc.constantFrom("NOW", "Period_End", "period-end", "period_end ", ""),
+      )
+      .filter(
+        (text) => !CANCELLATION_TIMINGS.some((timing) => timing === text),
+      ),
+  ),
+  fc.tuple(fc.constant("key"), ForeignValueArb),
+  fc.tuple(fc.constant("endsAt"), ForeignValueArb),
+);
+
+/**
+ * A well-formed own subscription record whose cancellation mark has one field
+ * holding a value of another type, or a timing the interface does not know,
+ * the mark's other fields valid.
+ */
+const MistypedCancelArb: fc.Arbitrary<JsonValue> = fc
+  .tuple(OwnSubscriptionArb, cancelArb, CancelFieldArb)
+  .map(([own, cancel, [field, value]]) => {
+    const stored = Wire({ [OWN]: { ...own, cancel }, [CALLER]: {} });
+    const record = IsObject(stored) ? stored[OWN] : undefined;
+    const mark = IsObject(record) ? record.cancel : undefined;
+    if (IsObject(mark)) mark[field] = value;
+    return stored;
+  });
+
 /** Any metadata a resource can carry: arbitrary JSON, foreign records and the module's own. */
 export const AnyMetadataArb: fc.Arbitrary<JsonValue> = fc.oneof(
   fc.jsonValue({ maxDepth: 3 }).map(Wire),
   MistypedOwnSubscriptionArb,
+  { arbitrary: MistypedCancelArb, weight: 2 },
+  ForeignCallerArb,
   NonObjectArb,
   ForeignObjectArb,
   fc.record({ [OWN]: ForeignOwnArb, [CALLER]: ForeignValueArb }),

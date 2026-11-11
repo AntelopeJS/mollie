@@ -88,6 +88,8 @@ const config: VerifyConfig = {
         "src/test/metadata.properties.test.ts",
         "src/test/metadata-corpus.test.ts",
         "src/test/support/metadata-model.ts",
+        "src/test/support/metadata-budget.ts",
+        "src/test/support/metadata-types.ts",
         "src/test/support/metadata-corpus.ts",
         "src/test/fixtures/metadata-corpus-*.json",
       ],

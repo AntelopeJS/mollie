@@ -1,6 +1,6 @@
 ---
 name: formal-metadata-roundtrip
-description: Checks the Mollie metadata @antelopejs/mollie keeps, with fast-check properties and a golden corpus of every shape earlier versions wrote. It covers the caller's metadata and the module's own records reading back unchanged, merges keeping other writers' data, reads that never throw, Mollie's 1 kB limit, and backward compatibility since ef5dfaf. Use when a change touches mollie/metadata.ts, subscriptions/records.ts or shared/subscription-of-payment.ts, or changes what any writer stores in metadata.
+description: Checks the Mollie metadata @antelopejs/mollie keeps, with fast-check properties and a golden corpus of every shape earlier versions wrote. It covers the caller's metadata and the module's own records reading back unchanged, merges keeping other writers' data, reads that never throw, metadata another writer left, metadata stored as JSON text, the sizes the docs promise fit Mollie's 1 kB, and backward compatibility since ef5dfaf. Use when a change touches mollie/metadata.ts, subscriptions/records.ts or shared/subscription-of-payment.ts, or changes what any writer stores in metadata.
 ---
 
 # Check the metadata round trip
@@ -17,7 +17,7 @@ From the repository root, with `MOLLIE_API_KEY` unset, run:
 pnpm run build && pnpm exec ajs module test . -f dist/test/metadata.properties.test.js -f dist/test/metadata-corpus.test.js
 ```
 
-`antelopejs-verify formal <run>` runs the same command. It takes about 5 s. The test uses fast-check 4.3.0, pinned as a devDependency. Each property in `metadata.properties.test.ts` requests 300 runs, and `keyedRoundTrip` 100. The default seed is `20261111`. Set `FC_SEED` to the integer a failure prints to replay another run, with the generators and the fast-check version unchanged. A failure prints the shrink path and the shrunk counterexample.
+`antelopejs-verify formal <run>` runs the same command. It takes about 5 s. The test uses fast-check 4.3.0, pinned as a devDependency. Each property in `metadata.properties.test.ts` requests 300 runs, and `keyedRoundTrip` and `foreignInterfaceView` 100. The default seed is `20261111`. Set `FC_SEED` to the integer a failure prints to replay another run, with the generators and the fast-check version unchanged. A failure prints the counterexample.
 
 The corpus tests seed the stand-in's records directly, so they skip against Mollie's test mode. The properties run against either target.
 
@@ -25,7 +25,7 @@ Each check prints on its own line:
 
 - `holds <name>` is a property that passes. A numbered `holds` line is a break.
 - `finding <name>` is a recorded finding. It passes only while the property still fails, and fails with `<name> now holds: record it as holds` once a fix makes it hold.
-- `pins <name>` holds the exact wrong behaviour of a finding on a named input. A fix fails it, and the fix PR deletes it.
+- `pins <name>` holds the exact wrong behaviour of a finding on a named input, or the numbers of a bound's edge. A fix fails a finding's pin, and the fix PR deletes it.
 - `generates` fails when a generator change loses a class of inputs the properties need.
 
 ## The properties
@@ -38,28 +38,33 @@ The model is `src/test/support/metadata-model.ts`. The expected values are the g
 | `ownRoundTrip` | `ShownSubscription` TSDoc | An own subscription record reads back equal through `ReadOwnSubscription`. `ShownSubscription` returns it, except a refused one with no cancellation whose Mollie status is `canceled` or `completed`. A payment, a renewal and a first-period charge read back their reference, and a charge names its subscription through `SubscriptionOfPayment` without a request. | holds |
 | `mergeKeepsForeignKeys` | `ReadOwn` TSDoc, `docs/4.subscriptions.md` "keeps it as it is" | Merging into a JSON object keeps every key but `antelope` as it was, keeps every own field the change does not name, and sets the ones it names. | holds |
 | `mergeKeepsCallerView` | same | After a merge into metadata the module wrote, the caller reads the same metadata. | holds |
+| `foreignCallerView` | interface `metadata` "Round-tripped opaque key/value pairs"; `ReadCallerMetadata` reads what another writer left | Metadata with no `antelope` key (an object of any keys, one with a `metadata` object of its own, or the text of either) reads as its own string entries through `ReadCallerMetadata`, `ToPayment`, `ToRefund` and `ToSubscription`, and is not the module's. | holds |
 | `mergeKeepsForeignCallerView` | same | After a merge into another writer's JSON object, the caller still reads its string entries. | finding F2 |
 | `mergeKeepsForeignValue` | same; Mollie's `metadata` takes a string, a number, an object or a list of strings | A merge into metadata that is not a JSON object keeps that value. | finding F1 |
-| `readsNeverThrow` | `ReadOwn` TSDoc: "a field of another type is dropped" | For any JSON, including well-formed own records with one field of another type, every reader returns its documented types without throwing. Metadata with no own object reads as not the module's: no own subscription, an empty reference, no charged subscription. | holds |
+| `readsNeverThrow` | `ReadOwn` TSDoc: "a field of another type is dropped" | For any JSON, including well-formed own records with one field of another type and cancellation marks with a valid key and one field of another type or an unknown timing, every reader returns its documented types without throwing. `AssertOwnTypes` (`support/metadata-types.ts`) checks every field of the own subscription it returns, `cancel.timing` included. Metadata with no own object reads as not the module's: no own subscription, an empty reference, no charged subscription. | holds |
+| `textRoundTrip` | `parse` in `metadata.ts`, unchanged since `ef5dfaf`; no TSDoc or doc states it | Metadata Mollie holds as the JSON text of what the module wrote reads as the object it holds: the caller's metadata, an own subscription record, a payment's reference and a charge's subscription. | holds |
+| `textWithoutObject` | same | A metadata string that is not the JSON text of an object (JSON of another type, or text that is not JSON) reads as no caller metadata, no own subscription, an empty reference and no charged subscription. | holds |
 | `ownSubscriptionValues` | same, and the interval table of `docs/4.subscriptions.md` | An own subscription record the module accepts has values it could have written: an integer count from 1 to the interval's longest, and a cancellation end that is a non-negative integer. | finding F3 |
-| `laterWritesFit` | Mollie's 1 kB | Metadata Mollie accepted at creation still fits after the module records the first charge and a cancellation. | finding F4 |
+| `laterWritesFit` | `docs/4.subscriptions.md` "Metadata": about 1 kB per subscription, an own record of up to about 400 bytes, about 600 bytes for the caller's `metadata` | Caller metadata of at most 600 bytes (the JSON text, padded to exactly 600 half the time) next to an own record of at most 400 bytes stays within 1,024 bytes after the first charge or the refusal and then a cancellation now or at the period end. Nothing beyond the budget is generated. | holds |
+| `earlyEndsFit` | `docs/4.subscriptions.md` "Cancelling": "room for about twenty" early ends | Twenty early ends fit a customer with no other metadata. | holds |
 | `corpusReads` | the golden corpus | Every shape written since `ef5dfaf` reads through the interfaces as the version that wrote it read it. | holds |
-| `legacyEarlyEnd` | the golden corpus | The first release's early end ends its subscription early. | finding F5 |
+| `legacyEarlyEnd` | the golden corpus | The first release's early end ends its subscription early. | finding F4 |
 | `corpusCoversWriters` | the golden corpus | Every record today's writers write has the format of a fixture still written (`until: null`). | holds |
+| `foreignInterfaceView` | same as `foreignCallerView` | `GetPayment` and `GetCustomer` on the stand-in read another writer's metadata, with no `antelope` key, as its string entries (an object, one with a `metadata` object of its own, or the text of either). | holds |
 | `keyedRoundTrip` | `docs/2.payments.md` replays, `docs/4.subscriptions.md` early ends | A refund, a capture and an early end stored under any key replay under that key, and the early end's hash names the same request. | holds |
 
 ## The golden corpus
 
 `src/test/fixtures/metadata-corpus-payments.json` and `metadata-corpus-subscriptions.json` hold one fixture per stored shape. Each names `since`, the first commit that wrote it, `until`, the first commit that stopped (`null` while it is still written), and its `writer`. `seed` holds the records as Mollie would hold them, under fixed ids. `reads` holds what the version that wrote them read back. `ReadFixture` (`src/test/support/metadata-corpus.ts`) seeds the stand-in and reads through `GetPayment`, `GetRefund`, `GetCustomer` and `GetSubscription`. It also replays `RefundPayment` and `CapturePayment` under the stored key, or under an unknown key when none is stored, on a payment whose state refuses a new refund or capture. So only a replay resolves.
 
-The shapes come from `git log -p` of `src/mollie/metadata.ts`, `src/implementations/subscriptions/records.ts` and every `WriteMetadata` and `MergeOwn` caller, from `ef5dfaf` to `8799bff`.
+The shapes come from `git log -p` of `src/mollie/metadata.ts`, `src/implementations/subscriptions/records.ts` and every `WriteMetadata` and `MergeOwn` caller, from `ef5dfaf` to `c0f7ded`.
 
 - `ef5dfaf` wrote a payment `{reference}`, a first-period charge `{reference, subscription}`, a refund with `{}` or `{reason}`, a capture with no metadata, a customer `{}`, an early end as `{endedAt, endsAt, key}`, and a subscription `{reference, createKey, interval, intervalCount, start}` with `firstPayment`, `refused` and `cancel` merged in later.
 - `eedbca1`, 27 minutes later, added `key` to refunds and `{key}` to captures, and stored an early end as `[endedAt, keyHash]`, the first 8 hex digits of the key's SHA-256. It also kept a customer's foreign top-level keys visible.
 - `c8e56ae` shows a refused subscription the caller cancelled, so `refused` with `cancel` is a shape the interface reads.
-- `82a6eee`, `b1b17af`, `f5c6543`, `4266686`, `5d48627`, `2bf8046` and `8799bff` changed how records are read and when marks are written, not the stored shapes.
+- `82a6eee`, `b1b17af`, `f5c6543`, `4266686`, `5d48627`, `2bf8046`, `8799bff` and `c0f7ded` changed how records are read and when marks are written, not the stored shapes.
 
-A writer change that stores a new format fails `corpusCoversWriters` and names the step. Add a fixture for the new format with `since` set to that change, and set `until` on the fixture it replaces. Never edit the `metadata` of an existing fixture: it is what Mollie holds for some merchant. A change that alters a fixture's `reads` on purpose updates `docs/` in the same pull request and says so.
+A writer change that stores a new format fails `corpusCoversWriters` and names the step. Add a fixture for the new format with `since` set to that change and `until` on the one it replaces. Never edit the `metadata` of an existing fixture: it is what Mollie holds for some merchant. A change that alters a fixture's `reads` on purpose updates `docs/` and says so.
 
 ## Judge the result
 
@@ -73,20 +78,23 @@ A writer change that stores a new format fails `corpusCoversWriters` and names t
 This is randomized testing of real code, not an exhaustive proof. It does not cover:
 
 - What Mollie does with metadata beyond a JSON round trip. Whether it keeps key order, accepts NUL or lone surrogates, counts its 1 kB in bytes or characters, and refuses or truncates above it is not observed. The stand-in enforces no size. `laterWritesFit` counts UTF-8 bytes of the JSON text.
+- Subscription metadata past the documented budget. The module checks no size at creation, then adds `firstPayment` (31 bytes) and a cancellation mark (35 bytes plus the key for `now`, 65 plus the key at the period end). A subscription Mollie accepted at 1,024 bytes grows to 1,055 with the first charge and 1,128 with a cancellation at the period end, and the cancellation PATCH that `cancelAtPeriodEnd` sends before its DELETE may then fail. `docs/4.subscriptions.md` says Mollie does not document what it does beyond the budget, so this is a bound, not a finding, until Mollie's behaviour is observed.
+- The one byte past 1,024 at the budget's joint edge. 400 own bytes, 600 caller bytes and the 25 bytes of the two wrapper keys make 1,025. The widest keys make an own record of 398 bytes and 1,023 in all (`pins laterWritesFit`). The docs say "about", so the byte is not asserted.
 - Inputs the interfaces never pass: caller metadata values that are not strings, and own records the module never writes, such as `firstPayment` with `refused`. The generators produce such combinations anyway, as a superset.
 - Two writers merging into the same metadata at once. `formal-subscription-lifecycle` owns that race.
 - Period bounds. The corpus asserts status, end and the marks, not `currentPeriodStart` or `currentPeriodEnd`. `formal-amsterdam-calendar` owns those.
 - `CreateCheckoutSession`. `checkout.ts` writes the payment format through the same `WriteMetadata` call as `CreatePayment`, and `corpusCoversWriters` does not drive it.
-- The customer's early ends past Mollie's limit. One early end adds 43 bytes, each later one 44, so 22 fit a customer with no other metadata (1,011 bytes) and the 23rd makes 1,055. `docs/4.subscriptions.md` documents this, so it is a bound, not a finding.
+- The customer's early ends past Mollie's limit. One early end adds 43 bytes, each later one 44, so 22 fit a customer with no other metadata (1,011 bytes) and the 23rd makes 1,055. `docs/4.subscriptions.md` documents this, so it is a bound, not a finding. `earlyEndsFit` asserts the documented twenty.
+- Metadata the module writes as a string. It writes objects only. `textRoundTrip` and `textWithoutObject` cover JSON text another writer left.
 - Long references and keys. With an empty reference and empty keys, the largest own subscription record is 183 bytes, and the whole metadata with no caller entries 210. The 400 bytes `docs/4.subscriptions.md` gives the own record hold while the reference, the creation key and the cancellation key add up to at most 217 bytes.
 
 ## Coverage record
 
-Last code synchronization is `8799bff`.
+Last code synchronization is `c0f7ded`.
 
 | File | Covered functions and role |
 | --- | --- |
-| `src/mollie/metadata.ts` | `WriteMetadata`, `MergeOwn`, `ReadOwn`, `ReadCallerMetadata` and the private `parse` and `strings`. |
+| `src/mollie/metadata.ts` | `WriteMetadata`, `MergeOwn`, `ReadOwn`, `ReadCallerMetadata` and the private `parse` (its JSON-text reading included) and `strings`. |
 | `src/implementations/subscriptions/records.ts` | `ReadOwnSubscription`, `ShownSubscription`, `KeyHash`, the `OWN_SUBSCRIPTION` and `OWN_CUSTOMER` guards, and through the interface `endedEarly`, `toEarlyEnd`, `earlyEndOf` and `RecordEarlyEnd`. |
 | `src/implementations/shared/subscription-of-payment.ts` | `SubscriptionOfPayment` and its two guards. |
 | Writers, through `corpusCoversWriters` | `PaymentBody`, `CapturePayment` (`payments.ts`), `RefundPayment` (`refunds.ts`), `CreateCustomer` (`customers.ts`), `subscriptionBody`, `chargeFirstPeriod`, `updateOwn` (`creation.ts`), `cancelAtMollie` (`changes.ts`). These files are not in `covers`, so `formal` does not run this check for them, but `pnpm test` does. |
@@ -97,13 +105,16 @@ After covered code changes, compare its behaviour with the properties above and 
 Generator coverage at the default seed, over 300 samples each:
 
 - Caller metadata has `antelope` as a key 22 times, `metadata` 30, `antelopeSubscription` 26, `__proto__` 37, `ANTELOPE` 33, `" spaced key "` 38 and the empty key 62, and is empty 49 times.
-- Arbitrary metadata is the module's 122 times, holds a foreign value under `antelope` 29 times, is another object 49 times, a string 44 times (15 of them a JSON object), a number 19 times, a list 26 times, and `true`, `false` or `null` 11 times.
+- Arbitrary metadata is the module's 129 times, holds a foreign value under `antelope` 22 times, is another object 53 times, a string 56 times (24 of them a JSON object), a number 16 times, a list 18 times, and `true`, `false` or `null` 6 times.
+- It holds a cancellation mark 75 times: 11 with a valid key and an unknown timing, 6 with a key of another type, 23 with an end of another type.
+- Metadata another writer left has a `metadata` object of its own 149 times and is JSON text 138 times, and 71 nested objects hold a string entry. 209 non-object texts are JSON of another type.
+- The caller metadata of `laterWritesFit` is exactly 600 bytes 105 times and never more.
 - Own records are 43 payments, 45 charges, 49 captures, 44 refunds, 79 customers and 40 subscriptions.
 - Tampered subscription records have a count of 0 or less 151 times and a non-integer count 82 times.
 
 ## Findings
 
-Five findings stand. Counterexamples are at seed `20261111`. None is fixed here.
+Four findings stand. Counterexamples are at seed `20261111`. None is fixed here.
 
 ### F1: `mergeKeepsForeignValue`, an early end erases a customer's metadata that is not an object
 
@@ -139,17 +150,7 @@ intervalCount -1: ToSubscription did not return within 3000 ms
 
 `pins ownSubscriptionValues` holds the first two lines. The hang was shown with `ToSubscription` in a worker thread stopped after 3 s. No committed test runs it.
 
-### F4: `laterWritesFit`, a subscription Mollie accepted can outgrow its metadata
-
-The module checks no size at creation, then adds `firstPayment` (31 bytes) and a cancellation mark (35 bytes plus the key for `now`, 65 plus the key at the period end). A subscription created with metadata near Mollie's 1 kB can no longer take the cancellation PATCH, which `cancelAtMollie` sends before the DELETE. So `CancelSubscription` would fail if Mollie refuses the PATCH, and the cancel mark would be lost if Mollie truncates it. Neither is observed. `docs/4.subscriptions.md` leaves about 600 bytes for the caller's metadata but does not say what happens beyond.
-
-```text
-Counterexample: [{"reference":" ","createKey":"\u0000","interval":"day","intervalCount":1,"start":"anchor"},761,["tr_AAAAAAAAAA","\u0000\u0000\u0000\u0000\u0000\u0000\u0000",1000000000000]]
-bytes at creation 887, after firstPayment 918, after the cancel mark 1025
-pinned: bytes at creation 1024, after firstPayment 1055, after the cancel mark 1128
-```
-
-### F5: `legacyEarlyEnd`, the first release's early end no longer reads
+### F4: `legacyEarlyEnd`, the first release's early end no longer reads
 
 `ef5dfaf` stored an early end as `{endedAt, endsAt, key}`. `eedbca1` changed it to `[endedAt, keyHash]`, and `toEarlyEnd` reads only the list. A subscription ended early under `ef5dfaf` now reads as still running until its period end. The format lived 27 minutes on `main`, and no version reached npm.
 
@@ -160,25 +161,4 @@ reads:    {"status":"active","cancelAtPeriodEnd":true,"endedAt":null, ...}
 
 ## Mutation evidence
 
-Each scratch change below was applied to the current code, rebuilt, run with both test files, and reverted. `git diff --stat src/implementations src/mollie` was empty afterward. Every holding property fails under at least one change. The table leaves out the finding and pin tests a change also flips.
-
-| # | Scratch change | Failed checks, first counterexample |
-| --- | --- | --- |
-| M1 | `ReadCallerMetadata` reads `strings(parsed)` instead of the nested caller object | `callerRoundTrip` `[refund {key:" "}, {"":""}]`, `mergeKeepsCallerView`, `corpusReads`, `keyedRoundTrip` |
-| M2 | `WriteMetadata` also spreads the caller's keys at the top level | `callerRoundTrip` `[refund {key:"antelope"}, {metadata:"antelope", antelope:"antelope"}]`, `ownRoundTrip`, `mergeKeepsCallerView`, `corpusCoversWriters`, `keyedRoundTrip` |
-| M3 | `MergeOwn` replaces the own record with the changes | `mergeKeepsForeignKeys` `[{"":[], antelope:{"":[]}}, {firstPayment}]`, `corpusCoversWriters` |
-| M4 | `MergeOwn` keeps only `antelope` and `metadata` | `mergeKeepsForeignKeys` `[{"":[], antelope:false}, {firstPayment}]` |
-| M5 | `MergeOwn` empties the caller object | `mergeKeepsForeignKeys`, `mergeKeepsCallerView` `[refund {key:" "}, {"":""}, {refused}]`, `keyedRoundTrip` |
-| M6 | `parse` lets a `JSON.parse` error out | `readsNeverThrow` `["antelope", "pending"]` |
-| M7 | `OWN_SUBSCRIPTION.intervalCount` accepts any defined value | `readsNeverThrow` with `intervalCount: []` |
-| M8 | `ToPayment` reports `"unknown"` for a payment that is not the module's | `readsNeverThrow` `[{"":[]}, "pending"]` |
-| M9 | `ShownSubscription` shows a refused subscription Mollie ended | `ownRoundTrip` with `refused` and status `completed`, `corpusReads` |
-| M10 | `ShownSubscription` hides a refused subscription the caller cancelled | `ownRoundTrip` with `refused`, `cancel` and status `completed`, `corpusReads` |
-| M11 | an early end is read only from a three-item list | `corpusReads`, `keyedRoundTrip` `["\u0000", {}, 0]` |
-| M12 | `KEY_HASH_LENGTH` is 10 | `keyedRoundTrip` `["\u0000", {}, 0]` |
-| M13 | a refund replay trims the key it looks for | `keyedRoundTrip` `[" spaced key ", {}, 0]` |
-| M14 | a capture replay lowercases the key it looks for | `keyedRoundTrip` `["toString", {}, 0]` |
-| M15 | a first-period charge names its subscription only when Mollie spawned it | `ownRoundTrip`, `corpusReads` |
-| M16 | `PaymentBody`'s own record gains `version: 2` | `corpusCoversWriters` |
-
-M7 and M13 first survived. The generators then gained a well-formed own record with one mistyped field, and keys with edge spaces or another case, and `keyedRoundTrip` went from 40 to 100 runs. Both are now caught.
+`MUTATIONS.md` lists the scratch changes the check was run against and the checks that fail under each. Add a row there when a review finds a change the holding checks miss.
