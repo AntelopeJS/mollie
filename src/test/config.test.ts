@@ -9,6 +9,9 @@ const MALFORMED_SETTLE_TIMEOUTS: [string, unknown][] = [
   ["a negative number", -1],
   ["NaN", Number.NaN],
   ["Infinity", Number.POSITIVE_INFINITY],
+  ["a fraction of a millisecond", 1500.5],
+  ["more than a Node timer holds", 2_147_483_648],
+  ["more than a timeout signal takes", 5_000_000_000],
 ];
 
 describe("[mollie] configuration", () => {

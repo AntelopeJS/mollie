@@ -31,17 +31,19 @@ export interface SharedSettings {
 const accounts = new Map<string, Account>();
 const DEFAULT_ACCOUNT = "";
 const DEFAULT_SETTLE_TIMEOUT_MS = 10_000;
+const LONGEST_TIMER_MS = 2_147_483_647;
 
 /**
  * The configured settle budget. A configuration read from JSON can carry any
- * value there, and anything but a finite number of milliseconds, 0 or more,
- * refuses to start the module. `Number.isFinite` takes no string for a number.
+ * value there, and anything but a whole number of milliseconds from 0 to the
+ * longest delay a Node timer holds refuses to start the module.
+ * `Number.isInteger` takes no string for a number.
  */
 function settleTimeoutMs(value: number | undefined): number {
   if (value === undefined) return DEFAULT_SETTLE_TIMEOUT_MS;
-  if (!Number.isFinite(value) || value < 0) {
+  if (!Number.isInteger(value) || value < 0 || value > LONGEST_TIMER_MS) {
     throw new RangeError(
-      `settleTimeoutMs must be a finite number of milliseconds, 0 or more, not ${inspect(value)}`,
+      `settleTimeoutMs must be a whole number of milliseconds from 0 to ${LONGEST_TIMER_MS}, not ${inspect(value)}`,
     );
   }
   return value;

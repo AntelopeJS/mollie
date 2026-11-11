@@ -300,8 +300,8 @@ async function reread(
   { payment, capture }: Followed,
   timeoutMs: number,
 ): Promise<Followed | undefined> {
-  const signal = AbortSignal.timeout(Math.max(timeoutMs, 0));
   try {
+    const signal = AbortSignal.timeout(Math.max(timeoutMs, SETTLE_POLL_MS));
     const [current, captures] = await Promise.all([
       account.client.request(
         { method: "GET", path: `/payments/${payment.id}`, signal },
