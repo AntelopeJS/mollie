@@ -36,6 +36,10 @@ const config: VerifyConfig = {
       why: "the package name and release workflow claim @antelopejs/mollie on npm",
     },
   },
+  saas: {
+    env: ["MOLLIE_API_KEY"],
+    sandbox: "Mollie's test mode at api.mollie.com, under the merchant's test_ API key; the journeys refuse any other key",
+  },
   moduleConfig() {
     return { apiKey: PRIMARY_KEY };
   },

@@ -5,7 +5,7 @@ docs:
   - docs/5.testing.md
 journeys:
   - module-dev
-  - pay-through-stand-in
+  - pay-read-back
 ---
 
 # Smoke
@@ -15,7 +15,7 @@ The fixed journey every verdict runs: load the module as `local`, create one pay
 ## Sub-features
 
 - `module-dev` is the pack's journey: the project answers, the consumer loads both implemented interfaces, Ctrl+C exits 130.
-- `pay-through-stand-in`: one `CreatePayment` reaches the stand-in and the payment reads `succeeded` once Mollie settles it.
+- `pay-read-back`: one `CreatePayment` reaches Mollie and the payment reads `succeeded` once the payer pays it.
 
 ## How to get to it (user POV)
 
@@ -30,4 +30,4 @@ node_modules/.bin/antelopejs-verify journey <run> smoke
 ## Gotchas
 
 - The smoke feature covers no glob, so it never marks a file as mapped.
-- The Mollie side is the module's own stand-in (`src/test/stand-in`, built to `dist/test/stand-in`), so a feature proves agreement with its reading of Mollie's documentation, not with the live service; see [sandbox](sandbox.md).
+- With `MOLLIE_API_KEY` set to a test key these journeys run against Mollie's test mode, as [A live run](README.md#a-live-run) describes; without it every journey is NOT VERIFIED. `saas` caps the whole run, `module-dev` included.

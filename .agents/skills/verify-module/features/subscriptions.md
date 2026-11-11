@@ -50,7 +50,7 @@ An application module subscribes a customer's saved method to a plan with `Creat
 
 ## Sub-features
 
-- `subscribe-charged`: a subscription is one Mollie subscription with the first period charged at once as a recurring payment, and reads back active.
+- `subscribe-charged`: a subscription is one Mollie subscription, created with the account's webhook URL, with the first period charged at once as a recurring payment, and reads back active.
 - `subscribe-replay`: one idempotency key makes one subscription and one first charge; a new key a new subscription.
 - `subscribe-schedule`: a trial or anchor defers the first charge to the next Amsterdam day, a year is twelve months at Mollie, and a period Mollie cannot bill is refused before any request.
 - `subscribe-refused`: another customer's method and a malformed one are invalid requests and create nothing.
@@ -72,6 +72,7 @@ node_modules/.bin/antelopejs-verify journey <run> subscriptions
 
 ## Gotchas
 
-- The Mollie side is the module's own stand-in (`src/test/stand-in`, built to `dist/test/stand-in`), so a feature proves agreement with its reading of Mollie's documentation, not with the live service; see [sandbox](sandbox.md).
+- With `MOLLIE_API_KEY` set to a test key these journeys run against Mollie's test mode, as [A live run](README.md#a-live-run) describes; without it every journey is NOT VERIFIED.
+- `subscribe-declined` stays on the stand-in in a live run: Mollie's test mode answers the first period's off-session card charge `paid` in the creating call, so it is never declined afterwards.
 - Subscription events are raised to handlers registered in the module's own process, which a call through core cannot register, so the events are raised but no journey can observe them; their ids and triggers are judged from `docs/4.subscriptions.md` and the module's own tests.
 - Renewals are created by Mollie on its dates, with no test clock, so no journey reaches a renewal.

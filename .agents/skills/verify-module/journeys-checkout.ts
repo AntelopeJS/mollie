@@ -1,6 +1,6 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { RETURN_URL, answered, call, callsTo, fresh, paymentAtProvider, pick, same, settle, text, withSession } from "./session.ts";
+import { RETURN_URL, WEBHOOK_URL, answered, call, callsTo, fresh, paymentAtProvider, pick, same, settle, text, withSession } from "./session.ts";
 
 const hostedSession: Journey = {
   title: "a hosted checkout session is one Mollie payment with the success URL and the payer's language, and reads back as its payment settles",
@@ -22,9 +22,12 @@ const hostedSession: Journey = {
         same("French is preset in the region Mollie offers it in", pick(callsTo(session, "POST", "/v2/payments")[0]?.body, "locale"), "fr_FR"),
       ], { critical: true });
       const open = await call(session, "GetCheckoutSession open", "GetCheckoutSession", [id, null]);
-      settle(session, id, "paid");
+      await settle(session, id, "paid");
       const paid = await call(session, "GetCheckoutSession paid", "GetCheckoutSession", [id, null]);
-      context.expect(paid.folder, [same("the session follows its payment", [pick(open.value, "status"), pick(paid.value, "status")], ["requires_action", "succeeded"])]);
+      context.expect(paid.folder, [
+        same("the payment Mollie received carries the account's webhook URL", pick(callsTo(session, "POST", "/v2/payments")[0]?.body, "webhookUrl") ?? null, WEBHOOK_URL),
+        same("the session follows its payment", [pick(open.value, "status"), pick(paid.value, "status")], ["requires_action", "succeeded"]),
+      ]);
     });
   },
 };

@@ -31,6 +31,7 @@ docs:
 journeys:
   - webhook-reads-back
   - webhook-refused
+  - webhook-other-account
   - webhook-outage
 ---
 
@@ -41,7 +42,8 @@ An application route passes Mollie's classic deliveries to `VerifyWebhook` and a
 ## Sub-features
 
 - `webhook-reads-back`: a delivery that names a payment becomes the event of the status Mollie holds, whatever else the body claims; every delivery of one state has one event id; an expired payment is `payment.canceled`.
-- `webhook-refused`: a delivery that names no payment, an unknown payment, or another account's payment is refused as unverifiable.
+- `webhook-refused`: a delivery that names no payment, or a payment Mollie does not have, is refused as unverifiable.
+- `webhook-other-account`: a delivery of another account's payment is refused as unverifiable, and the account that owns it verifies it.
 - `webhook-outage`: while Mollie answers 503 a call fails with a `PaymentError` carrying Mollie's message and `VerifyWebhook` rejects with it, so Mollie delivers again; once Mollie is back the same calls succeed.
 
 ## How to get to it (user POV)
@@ -56,4 +58,8 @@ node_modules/.bin/antelopejs-verify journey <run> webhooks
 
 ## Gotchas
 
-- The Mollie side is the module's own stand-in (`src/test/stand-in`, built to `dist/test/stand-in`), so a feature proves agreement with its reading of Mollie's documentation, not with the live service; see [sandbox](sandbox.md).
+- With `MOLLIE_API_KEY` set to a test key these journeys run against Mollie's test mode, as [A live run](README.md#a-live-run) describes; without it every journey is NOT VERIFIED.
+- Mollie cannot reach a local app, so in a live run the session delivers `id=<payment>` to `VerifyWebhook` itself once the payment settles, for the account whose webhook URL the payment holds.
+- The payments `webhook-reads-back` fails and lets expire are created by card: Mollie keeps a payment created with no method `open` after a failed or expired attempt.
+- In a live run `webhook-outage` sets the recording proxy's outage: the proxy answers the module's requests with 503 while Mollie itself stays up.
+- `webhook-other-account` needs two Mollie accounts: live only when `MOLLIE_SECOND_API_KEY` names a second test account, on the stand-in otherwise.

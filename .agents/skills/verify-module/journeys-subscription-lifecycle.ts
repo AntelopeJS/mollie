@@ -1,6 +1,6 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { PRIMARY_KEY, isNumber, RETURN_URL, answered, call, fresh, pick, same, savedMethod, settle, subscription, text, thrown, withSession, wire } from "./session.ts";
+import { WEBHOOK_URL, isNumber, RETURN_URL, answered, call, fresh, pick, same, savedMethod, settle, subscription, text, thrown, withSession, wire } from "./session.ts";
 import { requestOf, subscriptionAtProvider } from "./journeys-subscriptions-shared.ts";
 
 const cancelNow: Journey = {
@@ -68,7 +68,7 @@ const changeMethod: Journey = {
         fresh("key"),
         null,
       ]);
-      settle(session, text(pick(second.value, "id")), "paid");
+      await settle(session, text(pick(second.value, "id")), "paid");
       const methods = await call(session, "ListPaymentMethods", "ListPaymentMethods", [saved.customer, null]);
       const other = text(pick(methods.value, 0, "id")) === saved.method ? text(pick(methods.value, 1, "id")) : text(pick(methods.value, 0, "id"));
       const created = await subscription(session, "CreateSubscription", "CreateSubscription", [requestOf(saved), fresh("sub"), null]);
@@ -99,12 +99,12 @@ const subscribeOwn: Journey = {
     await withSession(context, async (session) => {
       const saved = await savedMethod(session, "saved card");
       const mandate = saved.method.split(":")[1] ?? "";
-      const foreign = await wire(session.base, "POST", `/v2/customers/${saved.customer}/subscriptions`, PRIMARY_KEY, {
+      const foreign = await wire(session, "POST", `/v2/customers/${saved.customer}/subscriptions`, "primary", {
         amount: { currency: "EUR", value: "5.00" },
         interval: "1 month",
         description: "Made in the dashboard",
         mandateId: mandate,
-        webhookUrl: "https://merchant.invalid/mollie/webhook",
+        webhookUrl: WEBHOOK_URL,
       });
       const foreignId = `${saved.customer}:${text(pick(foreign.json, "id"))}`;
       const listed = await subscription(session, "ListSubscriptions", "ListSubscriptions", [saved.customer, null]);

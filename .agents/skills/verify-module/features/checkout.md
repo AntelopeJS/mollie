@@ -40,7 +40,7 @@ An application module sends the payer to a hosted payment page with `CreateCheck
 
 ## Sub-features
 
-- `hosted-session`: a session is one Mollie payment with the success URL and the payer's language, and follows its payment as it settles.
+- `hosted-session`: a session is one Mollie payment with the success URL, the payer's language and the account's webhook URL, and follows its payment as the payer pays it.
 - `session-locales`: a language Mollie does not offer is left to the browser; a regional one keeps its region only when Mollie lists it (`en-GB` stays `en_GB`), otherwise it gets the region Mollie offers (`pt-BR` becomes `pt_PT`).
 
 ## How to get to it (user POV)
@@ -55,4 +55,4 @@ node_modules/.bin/antelopejs-verify journey <run> checkout
 
 ## Gotchas
 
-- The Mollie side is the module's own stand-in (`src/test/stand-in`, built to `dist/test/stand-in`), so a feature proves agreement with its reading of Mollie's documentation, not with the live service; see [sandbox](sandbox.md).
+- With `MOLLIE_API_KEY` set to a test key these journeys run against Mollie's test mode, as [A live run](README.md#a-live-run) describes; without it every journey is NOT VERIFIED.

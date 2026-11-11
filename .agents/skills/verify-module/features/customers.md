@@ -32,6 +32,7 @@ docs:
 journeys:
   - customer-lifecycle
   - saved-method-charge
+  - saved-method-pending
 ---
 
 # Customers
@@ -40,8 +41,9 @@ An application module keeps customers and their saved methods, and charges a sav
 
 ## Sub-features
 
-- `customer-lifecycle`: a customer is created with its email, name and metadata, reads back, and is gone after deletion.
-- `saved-method-charge`: a payment with `savePaymentMethod` leaves a mandate the customer is charged on off-session; a method belongs to one customer; detaching revokes the mandate.
+- `customer-lifecycle`: a customer is created with its email, name and metadata, reads back, and is gone after deletion: `GetCustomer` is `CustomerNotFoundError` and Mollie no longer has it.
+- `saved-method-charge`: a payment with `savePaymentMethod` leaves a mandate Mollie holds valid; an off-session charge on it goes to Mollie as a recurring payment on that customer and mandate and reads `succeeded`; a method belongs to one customer; detaching revokes the mandate.
+- `saved-method-pending`: an off-session charge on a saved card is `pending`, not decided by the call, until Mollie settles it.
 
 ## How to get to it (user POV)
 
@@ -55,4 +57,6 @@ node_modules/.bin/antelopejs-verify journey <run> customers
 
 ## Gotchas
 
-- The Mollie side is the module's own stand-in (`src/test/stand-in`, built to `dist/test/stand-in`), so a feature proves agreement with its reading of Mollie's documentation, not with the live service; see [sandbox](sandbox.md).
+- With `MOLLIE_API_KEY` set to a test key these journeys run against Mollie's test mode, as [A live run](README.md#a-live-run) describes; without it every journey is NOT VERIFIED.
+- Mollie answers a deleted customer with 410 Gone, the stand-in with 404; `customer-lifecycle` accepts either from Mollie and expects `CustomerNotFoundError` from the module in both cases.
+- `saved-method-pending` stays on the stand-in in a live run: Mollie's test mode answers an off-session card charge `paid` in the creating call.

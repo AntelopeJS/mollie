@@ -1,10 +1,10 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { EUR, PRIMARY_KEY, RETURN_URL, WEBHOOK_URL, answered, call, callsTo, fresh, paymentAtProvider, pick, same, settle, text, thrown, tuple, withSession, wire } from "./session.ts";
+import { EUR, RETURN_URL, WEBHOOK_URL, answered, call, callsTo, fresh, paymentAtProvider, pick, same, settle, text, thrown, tuple, withSession, wire } from "./session.ts";
 
 const payRedirect: Journey = {
   title: "a payment with no method becomes one open Mollie payment with the amount as a decimal string, the reference and webhook, and reads back as requires_action with Mollie's checkout link",
-  entryPoint: "`CreatePayment` and `GetPayment` through core against the stand-in for Mollie",
+  entryPoint: "`CreatePayment` and `GetPayment` through core",
   async run(context) {
     await withSession(context, async (session) => {
       const reference = fresh("order");
@@ -37,7 +37,7 @@ const paySettles: Journey = {
     await withSession(context, async (session) => {
       const paid = await call(session, "CreatePayment to pay", "CreatePayment", [{ amount: EUR, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
       const paidId = text(pick(paid.value, "id"));
-      settle(session, paidId, "paid");
+      await settle(session, paidId, "paid");
       const read = await call(session, "GetPayment of the paid payment", "GetPayment", [paidId, null]);
       context.expect(read.folder, [
         answered(read),
@@ -50,15 +50,15 @@ const paySettles: Journey = {
         null,
       ]);
       const declinedId = text(pick(declined.value, "id"));
-      settle(session, declinedId, "failed");
+      await settle(session, declinedId, "failed");
       const failed = await call(session, "GetPayment of the declined payment", "GetPayment", [declinedId, null]);
       context.expect(failed.folder, [
         same("the payment is failed, not a thrown error", pick(failed.value, "status"), "failed"),
         same("the reason is renamed to the interface's and Mollie's own is kept", [pick(failed.value, "failure", "code"), pick(failed.value, "failure", "providerCode")], ["expired_card", "card_expired"]),
       ]);
-      const lapsed = await call(session, "CreatePayment to expire", "CreatePayment", [{ amount: EUR, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
+      const lapsed = await call(session, "CreatePayment by card to expire", "CreatePayment", [{ amount: EUR, reference: fresh("order"), paymentMethod: "creditcard", returnUrl: RETURN_URL }, fresh("key"), null]);
       const lapsedId = text(pick(lapsed.value, "id"));
-      settle(session, lapsedId, "expired");
+      await settle(session, lapsedId, "expired");
       const expired = await call(session, "GetPayment of the expired payment", "GetPayment", [lapsedId, null]);
       context.expect(expired.folder, [
         answered(expired),
@@ -70,7 +70,7 @@ const paySettles: Journey = {
 
 const payAmounts: Journey = {
   title: "amounts reach Mollie as strings with the currency's decimals: two for euros and forints, none for yen",
-  entryPoint: "`CreatePayment` with EUR, HUF and JPY amounts through core, read back at the stand-in",
+  entryPoint: "`CreatePayment` with EUR, HUF and JPY amounts through core, read back at Mollie",
   async run(context) {
     await withSession(context, async (session) => {
       const sent: [string, number][] = [["EUR", 1050], ["HUF", 1050], ["JPY", 1050]];
@@ -97,13 +97,15 @@ const payIdempotent: Journey = {
       const first = await call(session, "CreatePayment", "CreatePayment", [request, key, null]);
       const replay = await call(session, "CreatePayment replayed", "CreatePayment", [request, key, null]);
       const other = await call(session, "CreatePayment under another key", "CreatePayment", [request, fresh("key"), null]);
-      const listed = await wire(session.base, "GET", "/v2/payments", PRIMARY_KEY);
+      const listed = await wire(session, "GET", "/v2/payments?limit=250");
+      const held = pick(listed.json, "_embedded", "payments");
+      const ofRequest = Array.isArray(held) ? held.filter((payment) => pick(payment, "metadata", "antelope", "reference") === request.reference).length : -1;
       context.expect(other.folder, [
         answered(first),
         answered(replay),
         same("the replay returns the first payment", pick(replay.value, "id"), pick(first.value, "id")),
         same("another key is another payment", pick(other.value, "id") === pick(first.value, "id"), false),
-        same("Mollie holds two payments, not three", pick(listed.json, "count"), 2),
+        same("Mollie holds two payments with the request's reference, not three", ofRequest, 2),
       ]);
     });
   },
