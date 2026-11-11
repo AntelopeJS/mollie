@@ -160,8 +160,12 @@ export class MollieStandIn {
     path: RegExp;
     run: (account: Account) => void;
   }[] = [];
-  /** How long a capture stays `pending` before it succeeds; `undefined` holds every capture until `settleCaptures`. */
+  /** Requests answered late once each, matched by method and path, as a slow Mollie. */
+  readonly delays: { method: string; path: RegExp; ms: number }[] = [];
+  /** How long a capture stays `pending` before it settles; `undefined` holds every capture until `settleCaptures`. */
   captureDelayMs: number | undefined = CAPTURE_DELAY_MS;
+  /** How a capture settles: `failed` as Mollie rejects a capture of an expired authorization. */
+  captureOutcome: payments.CaptureOutcome = "succeeded";
   private receiver: WebhookReceiver | undefined;
   private server: Server | undefined;
   private baseUrl = "";
@@ -229,16 +233,27 @@ export class MollieStandIn {
   settleCaptures(apiKey: string): void {
     const account = this.account(apiKey);
     for (const capture of account.captures.values()) {
-      payments.SettleCapture(account, this.hooks, capture);
+      payments.SettleCapture(account, this.hooks, capture, this.captureOutcome);
     }
   }
 
   private schedule(account: Account, capture: MollieCapture): void {
     if (this.captureDelayMs === undefined) return;
+    const outcome = this.captureOutcome;
     setTimeout(
-      () => payments.SettleCapture(account, this.hooks, capture),
+      () => payments.SettleCapture(account, this.hooks, capture, outcome),
       this.captureDelayMs,
     ).unref();
+  }
+
+  private async lag(message: IncomingMessage, url: URL): Promise<void> {
+    const index = this.delays.findIndex(
+      (entry) =>
+        entry.method === message.method && entry.path.test(url.pathname),
+    );
+    if (index === -1) return;
+    const [{ ms }] = this.delays.splice(index, 1);
+    await new Promise((resolve) => setTimeout(resolve, ms).unref());
   }
 
   private notify(_account: Account, payment: MolliePayment): void {
@@ -265,6 +280,7 @@ export class MollieStandIn {
   ): Promise<void> {
     const url = new URL(message.url ?? "/", this.baseUrl);
     const raw = await text(message);
+    await this.lag(message, url);
     try {
       const result = url.pathname.startsWith("/v2/")
         ? this.api(message, url, raw)

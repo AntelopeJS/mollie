@@ -27,6 +27,7 @@ export interface Config extends AccountConfig {
    * account. Mollie accepts a capture as `pending` and applies it about a
    * second later; past this budget the payment is returned `pending`, with the
    * amount being captured. `0` returns as soon as Mollie accepts the capture.
+   * A finite number, 0 or more; any other value makes `construct` reject.
    * Default 10 seconds.
    */
   settleTimeoutMs?: number;

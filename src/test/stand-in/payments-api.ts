@@ -167,15 +167,18 @@ export function CreateCapture(request: Request): StandInResponse {
   return Ok(capture, 201);
 }
 
+export type CaptureOutcome = Exclude<MollieCapture["status"], "pending">;
+
 /** What Mollie does once it has processed a pending capture. */
 export function SettleCapture(
   account: Account,
   hooks: PaymentHooks,
   capture: MollieCapture,
+  outcome: CaptureOutcome,
 ): void {
   if (capture.status !== "pending") return;
   const payment = PaymentOf(account, capture.paymentId);
-  if (payment.status !== "authorized") {
+  if (payment.status !== "authorized" || outcome === "failed") {
     capture.status = "failed";
     return;
   }

@@ -24,13 +24,13 @@ No other module is needed. To use `@antelopejs/payment-subscriptions` for subscr
 
 ## Config
 
-| Field             | Required | Meaning                                                                                         |
-| ----------------- | -------- | ----------------------------------------------------------------------------------------------- |
-| `apiKey`          | Yes      | `test_…` or `live_…`                                                                            |
-| `webhookUrl`      | No       | Public route calling `VerifyWebhook`; without it no event is ever raised                        |
-| `accounts`        | No       | `{ name: { apiKey, webhookUrl } }`, chosen by the `provider` argument                           |
-| `apiUrl`          | No       | Defaults to `https://api.mollie.com`                                                            |
-| `settleTimeoutMs` | No       | How long `CapturePayment` waits for Mollie to apply a capture; default 10000, `0` does not wait |
+| Field             | Required | Meaning                                                                                                                                                     |
+| ----------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiKey`          | Yes      | `test_…` or `live_…`                                                                                                                                        |
+| `webhookUrl`      | No       | Public route calling `VerifyWebhook`; without it no event is ever raised                                                                                    |
+| `accounts`        | No       | `{ name: { apiKey, webhookUrl } }`, chosen by the `provider` argument                                                                                       |
+| `apiUrl`          | No       | Defaults to `https://api.mollie.com`                                                                                                                        |
+| `settleTimeoutMs` | No       | How long `CapturePayment` waits for Mollie to apply a capture; default 10000, `0` does not wait; a finite number, 0 or more, or the module refuses to start |
 
 ## The webhook route
 
@@ -45,7 +45,7 @@ Pass the raw body and the headers to `VerifyWebhook`. Mollie posts `id=tr_…`, 
 - **`authorizeOnly`** only for cards, Klarna, Billie, Riverty, Vipps, MobilePay, PayPal, Billink; anything else is refused before Mollie is called.
 - **No `refund.*` or `dispute.opened` events**: a Mollie delivery names a payment, never its refund or chargeback. Read refunds with `GetRefund`.
 - **Idempotency keys last one hour** at Mollie; `RefundPayment`, `CapturePayment` and `CreateSubscription` find their earlier result by key at any time.
-- **Captures settle after the call**: Mollie answers a capture `pending` and applies it about a second later. `CapturePayment` waits up to `settleTimeoutMs`, then returns `succeeded`, or `pending` with `amountCaptured` already set; `GetPayment` reads a payment with a capture in flight the same way. Mollie takes one capture per authorization, so a second capture under another key is `InvalidPaymentStateError` and never reaches Mollie.
+- **Captures settle after the call**: Mollie answers a capture `pending` and applies it about a second later. `CapturePayment` waits up to `settleTimeoutMs`, then returns `succeeded`, or `pending` with `amountCaptured` already set; `GetPayment` reads a payment with a capture in flight the same way. A read that fails after Mollie accepted the capture also returns `pending`; a capture Mollie fails rejects with `PaymentError` `capture_failed`. Mollie takes one capture per authorization, so a second capture under another key, or `CancelPayment`, while a capture is in flight or applied is `InvalidPaymentStateError` and never reaches Mollie.
 - **State errors come from the module reading the payment first.** A Mollie 422 is a `PaymentError`: it also means a suspended account. A capture Mollie refuses with 422 is read again, and a capture another caller made meanwhile turns it into `InvalidPaymentStateError`.
 - **Subscriptions**: the first period is charged by `CreateSubscription` and not retried if it fails; Mollie's schedule starts one period later and Mollie retries its own renewals five times, then cancels. Dates are Europe/Amsterdam days; trial ends and anchors round up to the next midnight. `period_end` cancels at Mollie at once and is reported as running until the period ends, with no event when it does. `now` after `period_end` records the early end in the customer's metadata, one call at a time within a process; two processes ending one customer's subscriptions early at once can lose one, which then reports its scheduled end. Subscriptions not created by this module are invisible to it.
 - **A failed `CreateSubscription` must be replayed with its key**: Mollie may already hold the subscription and will charge it. Replay once the call has failed, not while it runs: an overlapping replay can cancel the subscription the call returns if the first charge fails in between.

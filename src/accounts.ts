@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { PaymentError } from "@antelopejs/interface-payment";
 
 import { MollieClient } from "./mollie/client";
@@ -31,6 +32,21 @@ const accounts = new Map<string, Account>();
 const DEFAULT_ACCOUNT = "";
 const DEFAULT_SETTLE_TIMEOUT_MS = 10_000;
 
+/**
+ * The configured settle budget. A configuration read from JSON can carry any
+ * value there, and anything but a finite number of milliseconds, 0 or more,
+ * refuses to start the module. `Number.isFinite` takes no string for a number.
+ */
+function settleTimeoutMs(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_SETTLE_TIMEOUT_MS;
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(
+      `settleTimeoutMs must be a finite number of milliseconds, 0 or more, not ${inspect(value)}`,
+    );
+  }
+  return value;
+}
+
 export function RegisterAccount(
   name: string | undefined,
   config: AccountConfig,
@@ -38,7 +54,7 @@ export function RegisterAccount(
 ): void {
   accounts.set(name ?? DEFAULT_ACCOUNT, {
     client: new MollieClient({ apiKey: config.apiKey, apiUrl: shared.apiUrl }),
-    settleTimeoutMs: shared.settleTimeoutMs ?? DEFAULT_SETTLE_TIMEOUT_MS,
+    settleTimeoutMs: settleTimeoutMs(shared.settleTimeoutMs),
     ...DefinedFields({ webhookUrl: config.webhookUrl || undefined }),
   });
 }

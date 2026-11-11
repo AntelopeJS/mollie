@@ -7,6 +7,7 @@ import {
   type Amount,
   InvalidPaymentStateError,
   type Payment,
+  PaymentError,
   type PaymentRequest,
 } from "@antelopejs/interface-payment";
 
@@ -42,6 +43,7 @@ const MANUAL = "manual";
 const CAPTURE_PAGE = "?limit=250";
 const SETTLE_POLL_MS = 250;
 const UNPROCESSABLE = 422;
+const CAPTURE_FAILED = "capture_failed";
 
 function sequenceType(
   request: PaymentRequest,
@@ -147,8 +149,10 @@ export async function GetPayment(
   const account = GetAccount(provider);
   const payment = await ReadPayment(account, id);
   return Translating(id, PAYMENT_ENTITY, async () => {
-    const [capture] =
-      payment.status === "authorized" ? await readCaptures(account, id) : [];
+    const capture =
+      payment.status === "authorized"
+        ? liveCapture(await readCaptures(account, id))
+        : undefined;
     return MarkSubscriptionCharge(
       ToPayment(payment, capture),
       (await SubscriptionOfPayment(account, payment))?.id,
@@ -193,12 +197,25 @@ interface Hold {
   captures: MollieCapture[];
 }
 
-function readCaptures(account: Account, id: string): Promise<MollieCapture[]> {
+function readCaptures(
+  account: Account,
+  id: string,
+  signal?: AbortSignal,
+): Promise<MollieCapture[]> {
   return account.client.list(
     `/payments/${id}/captures${CAPTURE_PAGE}`,
     "captures",
     IsMollieCapture,
+    signal,
   );
+}
+
+/**
+ * The capture that holds the payment: Mollie takes one capture per
+ * authorization, and one that failed captured nothing.
+ */
+function liveCapture(captures: MollieCapture[]): MollieCapture | undefined {
+  return captures.find((capture) => capture.status !== "failed");
 }
 
 async function readHold(account: Account, id: string): Promise<Hold> {
@@ -211,8 +228,8 @@ async function readHold(account: Account, id: string): Promise<Hold> {
 
 /**
  * The capture made earlier under this key, or `undefined` when the payment can
- * take one. Mollie takes one capture per authorization, so any other capture,
- * whatever its status, refuses the call.
+ * take one. Mollie takes one capture per authorization, so any other capture
+ * that has not failed refuses the call.
  */
 function earlierCapture(
   { payment, captures }: Hold,
@@ -222,7 +239,7 @@ function earlierCapture(
     (capture) => ReadOwn(capture.metadata, OWN_CAPTURE)?.key === idempotencyKey,
   );
   if (own) return own;
-  const [other] = captures;
+  const other = liveCapture(captures);
   if (payment.status !== "authorized" || other) {
     refuse(payment, "captured", other);
   }
@@ -265,23 +282,70 @@ async function requestCapture(
   }
 }
 
+interface Followed {
+  payment: MolliePayment;
+  capture: MollieCapture;
+}
+
+function settling({ payment, capture }: Followed): boolean {
+  return payment.status === "authorized" && capture.status !== "failed";
+}
+
 /**
- * Mollie applies a capture to the payment after it answers. The payment is
- * read until it leaves `authorized` or the account's settle budget runs out;
- * in the second case it is returned `pending`, with the amount being captured.
+ * The payment and the capture read again, or `undefined` when the read fails
+ * or takes longer than `timeoutMs`.
+ */
+async function reread(
+  account: Account,
+  { payment, capture }: Followed,
+  timeoutMs: number,
+): Promise<Followed | undefined> {
+  const signal = AbortSignal.timeout(Math.max(timeoutMs, 0));
+  try {
+    const [current, captures] = await Promise.all([
+      account.client.request(
+        { method: "GET", path: `/payments/${payment.id}`, signal },
+        IsMolliePayment,
+      ),
+      readCaptures(account, payment.id, signal),
+    ]);
+    const latest = captures.find(({ id }) => id === capture.id) ?? capture;
+    return { payment: current, capture: latest };
+  } catch {
+    return undefined;
+  }
+}
+
+function captureFailed({ payment, capture }: Followed): PaymentError {
+  return new PaymentError(
+    `Mollie failed capture ${capture.id} of payment ${payment.id} (${payment.status} at Mollie)`,
+    CAPTURE_FAILED,
+  );
+}
+
+/**
+ * Mollie applies a capture to the payment after it answers. The payment and
+ * its capture are read until the payment leaves `authorized`, the capture
+ * fails, or the account's settle budget runs out. A read that fails, or that
+ * the budget cuts short, ends the wait as the budget does: the payment is
+ * returned `pending`, with the amount being captured. A failed capture
+ * rejects with a `PaymentError`.
  */
 async function followCapture(
   account: Account,
-  payment: MolliePayment,
-  capture: MollieCapture,
+  followed: Followed,
 ): Promise<Payment> {
   const deadline = Date.now() + account.settleTimeoutMs;
-  let current = payment;
-  while (current.status === "authorized" && Date.now() < deadline) {
-    await delay(SETTLE_POLL_MS);
-    current = await ReadPayment(account, payment.id);
+  const timeLeft = () => deadline - Date.now();
+  let current = followed;
+  while (settling(current) && timeLeft() > 0) {
+    await delay(Math.min(SETTLE_POLL_MS, timeLeft()));
+    const next = await reread(account, current, timeLeft());
+    if (!next) break;
+    current = next;
   }
-  return ToPayment(current, capture);
+  if (current.capture.status === "failed") throw captureFailed(current);
+  return ToPayment(current.payment, current.capture);
 }
 
 export async function CapturePayment(
@@ -295,10 +359,15 @@ export async function CapturePayment(
   return Translating(id, PAYMENT_ENTITY, async () => {
     const hold = await readHold(account, id);
     const earlier = earlierCapture(hold, idempotencyKey);
-    if (earlier) return followCapture(account, hold.payment, earlier);
+    if (earlier) {
+      return followCapture(account, {
+        payment: hold.payment,
+        capture: earlier,
+      });
+    }
     assertCapturableAmount(hold.payment, amount);
     const capture = await requestCapture(account, id, idempotencyKey, amount);
-    return followCapture(account, hold.payment, capture);
+    return followCapture(account, { payment: hold.payment, capture });
   });
 }
 
@@ -309,18 +378,32 @@ type Cancellation = (
 ) => Promise<void>;
 
 const CANCELLATIONS: Partial<Record<MolliePayment["status"], Cancellation>> = {
-  authorized: (account, payment, idempotencyKey) =>
-    account.client.execute({
-      method: "POST",
-      path: `/payments/${payment.id}/release-authorization`,
-      body: {},
-      idempotencyKey,
-    }),
+  authorized: releaseHold,
   canceled: async () => undefined,
   expired: async () => undefined,
   open: (account, payment) => cancelOpen(account, payment),
   pending: (account, payment) => cancelOpen(account, payment),
 };
+
+/**
+ * Mollie keeps a payment `authorized` until it applies the capture it has
+ * accepted, so the payment's captures are read first: one in flight refuses
+ * the release.
+ */
+async function releaseHold(
+  account: Account,
+  payment: MolliePayment,
+  idempotencyKey: string,
+): Promise<void> {
+  const capture = liveCapture(await readCaptures(account, payment.id));
+  if (capture) refuse(payment, "canceled", capture);
+  return account.client.execute({
+    method: "POST",
+    path: `/payments/${payment.id}/release-authorization`,
+    body: {},
+    idempotencyKey,
+  });
+}
 
 async function cancelOpen(
   account: Account,

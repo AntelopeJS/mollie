@@ -117,5 +117,7 @@ These exist only so the tests can make time pass or force an outcome. The module
 - `outage`: every API call answers the given status (503, or 422 for a suspended account).
 - `faults`: the next request matching a method and a path answers the given status, once per entry.
 - `captureDelayMs` and `settleCaptures`: how long a capture stays pending, or no timer at all, so a test settles captures when it chooses.
+- `captureOutcome`: how pending captures settle. `failed` fails them while the payment stays `authorized`, so the module's handling of a failed capture is exercised alone. Mollie lists `failed` among a capture's statuses (spec, `reference/get-capture`) and documents it for an expired authorization; nothing documents a failed capture of a payment that is still `authorized`.
+- `delays`: the next request matching a method and a path is answered that many milliseconds late, once per entry, standing for a slow Mollie.
 - `interceptions`: work run once just before the next request matching a method and a path, standing for another caller acting between the module's read and its request.
 - `declinesAtCreation`: a recurring payment on that mandate is `failed` in its creating response. Nothing documents that Mollie ever does this; it exists to exercise the module's handling of a `failed` status in a creating response, which the API's schema allows.
