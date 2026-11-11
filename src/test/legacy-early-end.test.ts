@@ -7,6 +7,7 @@ import {
 } from "@antelopejs/interface-subscriptions";
 
 import { ParseSubscriptionId } from "../mollie/ids";
+import type { JsonObject } from "../mollie/types";
 import { CurrentHarness } from "./support/harness";
 import {
   Key,
@@ -21,7 +22,18 @@ import "./support/relay";
 const PERIOD = { value: 1900, currency: "EUR" };
 const ENDED_AT = Date.UTC(2026, 4, 20, 8, 30);
 
-async function endedUnderFirstRelease(cancelKey: string) {
+type StoredEarlyEnd = (endsAt: number, key: string) => JsonObject;
+
+const FIRST_RELEASE: StoredEarlyEnd = (endsAt, key) => ({
+  endedAt: ENDED_AT,
+  endsAt,
+  key,
+});
+
+async function endedUnderFirstRelease(
+  cancelKey: string,
+  stored: StoredEarlyEnd = FIRST_RELEASE,
+) {
   const payer = await NewPayer();
   const created = await CreateSubscription(
     {
@@ -44,11 +56,7 @@ async function endedUnderFirstRelease(cancelKey: string) {
       metadata: {
         antelope: {
           endedEarly: {
-            [parsed.child]: {
-              endedAt: ENDED_AT,
-              endsAt: atPeriodEnd.currentPeriodEnd,
-              key: cancelKey,
-            },
+            [parsed.child]: stored(atPeriodEnd.currentPeriodEnd, cancelKey),
           },
         },
       },
@@ -83,4 +91,26 @@ describe("[mollie] an early end stored by the first release", function () {
       InvalidSubscriptionStateError,
     );
   });
+
+  const NOT_FIRST_RELEASE: [string, StoredEarlyEnd][] = [
+    [
+      "an endsAt that is not a number",
+      (_endsAt, key) => ({ endedAt: ENDED_AT, endsAt: "soon", key }),
+    ],
+    ["no endsAt", (_endsAt, key) => ({ endedAt: ENDED_AT, key })],
+    [
+      "a field the first release never wrote",
+      (endsAt, key) => ({ endedAt: ENDED_AT, endsAt, key, extra: 1 }),
+    ],
+  ];
+
+  for (const [name, stored] of NOT_FIRST_RELEASE) {
+    it(`does not read a stored value with ${name} as an early end`, async () => {
+      const read = await GetSubscription(
+        await endedUnderFirstRelease(Key(), stored),
+      );
+      assert.equal(read.status, "active");
+      assert.equal(read.cancelAtPeriodEnd, true);
+    });
+  }
 });
