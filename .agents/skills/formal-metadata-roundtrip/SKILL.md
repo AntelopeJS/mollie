@@ -90,7 +90,7 @@ This is randomized testing of real code, not an exhaustive proof. It does not co
 
 ## Coverage record
 
-Last code synchronization is `c0f7ded`.
+Last code synchronization is `a1a0f3e`, the F3 fix.
 
 | File | Covered functions and role |
 | --- | --- |
