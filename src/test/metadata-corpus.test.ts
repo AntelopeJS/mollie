@@ -7,11 +7,9 @@ import {
   RefundPayment,
 } from "@antelopejs/interface-payment";
 import {
-  CANCELLATION_TIMINGS,
   CancelSubscription,
   CreateSubscription,
   GetSubscription,
-  SubscriptionError,
   SubscriptionPaymentError,
   type SubscriptionRequest,
 } from "@antelopejs/interface-subscriptions";
@@ -410,10 +408,6 @@ describe("[mollie] metadata written by earlier versions", function () {
   });
 });
 
-const PINNED_CALLER_BYTES = 700;
-const METADATA_REFUSAL =
-  "The metadata storage is currently limited to 1024 bytes";
-
 describe("[mollie] metadata pins", function () {
   this.timeout(TEST_TIMEOUT);
 
@@ -422,42 +416,6 @@ describe("[mollie] metadata pins", function () {
     assert.deepEqual(
       [Bytes(caller), OwnBytes(canceled), Bytes(canceled)],
       [CALLER_BYTES, 398, 1023],
-    );
-  });
-
-  it("pins subscriptionWritesFit: a subscription created with 700 bytes of caller metadata cannot be cancelled now or at the period end, and Mollie keeps billing it", async function () {
-    RequireStandIn(this);
-    const payer = await NewPayer();
-    const metadata = {
-      pad: "x".repeat(PINNED_CALLER_BYTES - Bytes({ pad: "" })),
-    };
-    assert.equal(Bytes(metadata), PINNED_CALLER_BYTES);
-    const created = await CreateSubscription(
-      request(payer, { metadata }),
-      Key(),
-    );
-    assert.deepEqual(created.metadata, metadata);
-    const refusals: string[] = [];
-    for (const timing of CANCELLATION_TIMINGS) {
-      const error = await Rejected(
-        CancelSubscription(created.id, Key(), timing),
-        SubscriptionError,
-      );
-      refusals.push(`${timing}: ${error.message}`);
-    }
-    assert.deepEqual(refusals, [
-      `now: ${METADATA_REFUSAL}`,
-      `period_end: ${METADATA_REFUSAL}`,
-    ]);
-    const read = await GetSubscription(created.id);
-    const child = created.id.split(":")[1] ?? "";
-    assert.deepEqual(
-      [
-        read.status,
-        read.cancelAtPeriodEnd,
-        PrimaryAccount().subscriptions.get(child)?.status,
-      ],
-      ["active", false, "active"],
     );
   });
 });

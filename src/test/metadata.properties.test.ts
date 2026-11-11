@@ -360,17 +360,6 @@ function holds<Ts extends unknown[]>(
   });
 }
 
-function finding<Ts extends unknown[]>(
-  name: string,
-  claim: string,
-  property: fc.IRawProperty<Ts>,
-) {
-  it(`finding ${name}: ${claim}`, async () => {
-    const details = await fc.check(property, PARAMETERS);
-    assert.ok(details.failed, `${name} now holds: record it as holds`);
-  });
-}
-
 describe("[mollie] metadata round trip properties", function () {
   this.timeout(SUITE_TIMEOUT_MS);
 
@@ -449,7 +438,7 @@ describe("[mollie] metadata round trip properties", function () {
     "twenty early ends fit a customer's 1 kB",
     earlyEndsFit,
   );
-  finding(
+  holds(
     "subscriptionWritesFit",
     "for every caller metadata CreateSubscription accepts, the first charge or the refusal and then a cancellation now or at the period end, with a key of up to 64 bytes, stay within Mollie's 1 kB",
     subscriptionWritesFit,

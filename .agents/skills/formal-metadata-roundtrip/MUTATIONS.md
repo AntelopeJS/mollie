@@ -52,3 +52,17 @@ M23 and M24 each put back half of the code before the F3 fix. M24 also fails the
 M17 to M19 survived the first version: dropping the guard failed only a pin, a cancellation timing of any string passed `readsNeverThrow`, and no property asserted that a string is parsed. The generators then gained foreign metadata with a `metadata` object of its own and as JSON text, cancellation marks with a valid key and one bad field, and `textRoundTrip` and `textWithoutObject`, and `AssertOwnTypes` gained the cancellation mark. M20 shows that `laterWritesFit` and `earlyEndsFit` can fail at all. M7 and M13 first survived. The generators then gained a well-formed own record with one mistyped field, and keys with edge spaces or another case, and `keyedRoundTrip` went from 40 to 100 runs. Both are now caught. M21 to M31 were run against the fix of F1 and F2 in #62: each fails at least one check. M31 fails only on a string, as a wrapped number or list holds no string entry the caller would read.
 
 M17 to M19 survived the first version: dropping the guard failed only a pin, a cancellation timing of any string passed `readsNeverThrow`, and no property asserted that a string is parsed. The generators then gained foreign metadata with a `metadata` object of its own and as JSON text, cancellation marks with a valid key and one bad field, and `textRoundTrip` and `textWithoutObject`, and `AssertOwnTypes` gained the cancellation mark. M20 shows that `laterWritesFit` and `earlyEndsFit` can fail at all. M7 and M13 first survived. The generators then gained a well-formed own record with one mistyped field, and keys with edge spaces or another case, and `keyedRoundTrip` went from 40 to 100 runs. Both are now caught. M29 to M40 were run against the fix of F1 and F2 in #62: each fails at least one check. M31 fails only on a string, as a wrapped number or list holds no string entry the caller would read.
+
+M41 to M47 were run against the fix of F5, with `metadata.properties.test.js` and `subscription-metadata-room.test.js`:
+
+| # | Scratch change | Failed checks |
+| --- | --- | --- |
+| M41 | creation reserves 10 characters for a payment id instead of 32 | `subscriptionWritesFit`, the `period_end` case of `subscription-metadata-room.test.ts` |
+| M42 | creation reserves a 63-byte cancellation key instead of 64 | none: the 10 bytes the reserve keeps beyond what Mollie was seen to write absorb it (SKILL.md, Bounds) |
+| M43 | creation reserves an end of `0` instead of the last day of 9999 | `subscriptionWritesFit`, through the edge-padded callers |
+| M44 | `RoomAfterLaterWrites` never reports a negative room | `subscriptionWritesFit`, the three creation tests of `subscription-metadata-room.test.ts` |
+| M45 | creation reserves 200 characters for a payment id | `subscriptionWritesFit` (a 600-byte caller refused), both cancellation cases of `subscription-metadata-room.test.ts` (fewer than 600 bytes left) |
+| M46 | `CreateSubscription` skips the room check | the three creation tests of `subscription-metadata-room.test.ts`: no property calls `CreateSubscription` |
+| M47 | `cancelAtMollie` skips its room check | the test of `subscription-metadata-room.test.ts` for a subscription created past the room |
+
+M43 first survived, with caller sizes drawn only from 0 to 1,024 bytes: no run came within a few bytes of the edge. The generator then gained callers padded to 16 bytes either side of the edge where the widest write the model knows reaches 1,024 bytes, and the longest payment id and end as constants.

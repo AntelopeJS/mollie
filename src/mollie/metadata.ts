@@ -9,15 +9,22 @@ const FOREIGN_KEY = "foreign";
 const METADATA_BYTES = 1024;
 
 /**
- * Whether `metadata` is within Mollie's limit on one resource's metadata,
+ * The bytes `metadata` leaves of Mollie's limit on one resource's metadata,
  * "approximately 1kB" in Mollie's OpenAPI specification, counted as the UTF-8
- * bytes of its JSON text. Mollie answers 422 "The metadata storage is
- * currently limited to 1024 bytes" to a larger write.
+ * bytes of its JSON text; negative past the limit. Mollie answers 422 "The
+ * metadata storage is currently limited to 1024 bytes" to a larger write.
  */
+export function MetadataRoom(
+  metadata: ReturnType<typeof MergeOwn> | ReturnType<typeof WriteMetadata>,
+): number {
+  return METADATA_BYTES - Buffer.byteLength(JSON.stringify(metadata), "utf8");
+}
+
+/** Whether `metadata` is within Mollie's limit, as {@link MetadataRoom} counts it. */
 export function FitsMetadataLimit(
   metadata: ReturnType<typeof MergeOwn>,
 ): boolean {
-  return Buffer.byteLength(JSON.stringify(metadata), "utf8") <= METADATA_BYTES;
+  return MetadataRoom(metadata) >= 0;
 }
 
 export function IsJsonObject(

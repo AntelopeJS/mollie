@@ -134,18 +134,27 @@ function parseRequestBody(raw: string): payments.Request["body"] {
 }
 
 const METADATA_BYTES = 1024;
+const SUBSCRIPTION_PATH = /\/subscriptions(\/|$)/;
 
-function assertMetadataFits(body: payments.Request["body"]): void {
-  if (
+function assertMetadataFits(
+  body: payments.Request["body"],
+  pathname: string,
+): void {
+  const isOver =
     body.metadata !== undefined &&
-    Buffer.byteLength(JSON.stringify(body.metadata), "utf8") > METADATA_BYTES
-  ) {
+    Buffer.byteLength(JSON.stringify(body.metadata), "utf8") > METADATA_BYTES;
+  if (!isOver) return;
+  if (SUBSCRIPTION_PATH.test(pathname)) {
     throw new StandInError(
-      422,
-      "The metadata storage is currently limited to 1024 bytes",
-      "metadata",
+      500,
+      "The service is currently unavailable due to an upstream (503) or internal error (500).",
     );
   }
+  throw new StandInError(
+    422,
+    "The metadata storage is currently limited to 1024 bytes",
+    "metadata",
+  );
 }
 
 function send(response: ServerResponse, result: StandInResponse): void {
@@ -401,7 +410,7 @@ export class MollieStandIn {
       );
     const body = parseRequestBody(raw);
     const run = () => {
-      assertMetadataFits(body);
+      assertMetadataFits(body, url.pathname);
       return route.candidate.handle({
         account,
         hooks: this.hooks,

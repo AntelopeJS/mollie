@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 
 import fc from "fast-check";
 
+import {
+  type OwnSubscription,
+  RoomAfterLaterWrites,
+} from "../../implementations/subscriptions/records";
 import { MergeOwn, WriteMetadata } from "../../mollie/metadata";
 import type { JsonValue } from "../../mollie/types";
 import {
@@ -119,14 +123,60 @@ const CancelKeyArb = fc.oneof(
   fc.constant(WIDEST_CANCEL_KEY),
 );
 
-/** Caller metadata of any size up to what Mollie accepts with an own record beside it. */
-const CallerOfAnySizeArb = fc
-  .tuple(CallerArb, fc.integer({ min: 0, max: MOLLIE_METADATA_BYTES }))
-  .map(([base, pad]) => ({ ...base, pad: "x".repeat(pad) }));
+/** The longest payment id Mollie gave: 21 characters after the prefix, in test mode in November 2026. */
+const LONGEST_PAYMENT_ID = "tr_EMC26Pytk3buxxCzxWQZJ";
 
-/** Whether `CreateSubscription` sends the metadata to Mollie and Mollie stores it. */
-function isCreated(created: JsonValue): boolean {
-  return Bytes(created) <= MOLLIE_METADATA_BYTES;
+/** Mollie's payment ids: ten characters after the prefix, as the stand-in gives, or 21. */
+const PaymentIdArb = fc.oneof(
+  IdArb.payment,
+  IdArb.payment.map((id) => `${id}${id.slice(3)}W`),
+  fc.constant(LONGEST_PAYMENT_ID),
+);
+
+const EndArb = fc.oneof(InstantArb, fc.constant(LAST_INSTANT));
+
+/** How much caller metadata to pad: any size, or a few bytes either side of the widest write's edge. */
+const PadArb = fc.oneof(
+  fc.record({ pad: fc.integer({ min: 0, max: MOLLIE_METADATA_BYTES }) }),
+  fc.record({ edge: fc.integer({ min: -16, max: 16 }) }),
+);
+
+/** The widest write the module may make to `created`: the longest payment id, then a period-end cancellation under the widest key. */
+function widestWrite(created: JsonValue): JsonValue {
+  const charged = Wire(MergeOwn(created, { firstPayment: LONGEST_PAYMENT_ID }));
+  const cancel = {
+    timing: "period_end",
+    key: WIDEST_CANCEL_KEY,
+    endsAt: LAST_INSTANT,
+  };
+  return Wire(MergeOwn(charged, { cancel }));
+}
+
+function padded(
+  own: OwnSubscription,
+  base: Record<string, string>,
+  size: { pad: number } | { edge: number },
+) {
+  if ("pad" in size) return { ...base, pad: "x".repeat(size.pad) };
+  const empty = { ...base, pad: "" };
+  const edge =
+    MOLLIE_METADATA_BYTES - Bytes(widestWrite(Wire(WriteMetadata(own, empty))));
+  return { ...base, pad: "x".repeat(Math.max(0, edge + size.edge)) };
+}
+
+/**
+ * `docs/4.subscriptions.md` ("Metadata"): with a reference and an idempotency
+ * key of up to 64 bytes each, at least 600 bytes are left for the caller.
+ */
+function isWithinDocumentedRoom(
+  own: { reference: string; createKey: string },
+  caller: JsonValue,
+): boolean {
+  return (
+    Bytes(own.reference) - 2 <= CANCEL_KEY_BYTES &&
+    Bytes(own.createKey) - 2 <= CANCEL_KEY_BYTES &&
+    Bytes(caller) <= CALLER_BYTES
+  );
 }
 
 /**
@@ -134,16 +184,25 @@ function isCreated(created: JsonValue): boolean {
  * module's later writes to its metadata (the first charge or the refusal,
  * then the cancellation mark, now or at the period end, with a key of up to
  * `CANCEL_KEY_BYTES`) stay within Mollie's 1,024 bytes, whatever caller
- * metadata the creation accepted. An early end after `period_end` writes to
- * the customer, not the subscription.
+ * metadata the creation accepted. Creation accepts what the docs promise
+ * room for. An early end after `period_end` writes to the customer, not the
+ * subscription.
  */
 export const subscriptionWritesFit = fc.property(
   CreatedOwnArb,
-  CallerOfAnySizeArb,
-  fc.tuple(IdArb.payment, CancelKeyArb, InstantArb),
-  (own, caller, [payment, key, endsAt]) => {
+  fc.tuple(CallerArb, PadArb),
+  fc.tuple(PaymentIdArb, CancelKeyArb, EndArb),
+  (own, [base, size], [payment, key, endsAt]) => {
+    const caller = padded(own, base, size);
     const created = Wire(WriteMetadata(own, caller));
-    fc.pre(isCreated(created));
+    const isAccepted = RoomAfterLaterWrites(own, caller) >= 0;
+    if (isWithinDocumentedRoom(own, caller)) {
+      assert.ok(
+        isAccepted,
+        `refused ${Bytes(created)} bytes: ${JSON.stringify(own)}`,
+      );
+    }
+    fc.pre(isAccepted);
     const cancels = [
       { timing: "now", key },
       { timing: "period_end", key, endsAt },

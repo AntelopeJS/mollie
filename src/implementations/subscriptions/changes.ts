@@ -5,13 +5,14 @@ import {
   InvalidSubscriptionRequestError,
   InvalidSubscriptionStateError,
   type Subscription,
+  SubscriptionError,
 } from "@antelopejs/interface-subscriptions";
 
 import { ToSubscription } from "./mapping";
 import type { Account } from "../../accounts";
 import { ChargeableMandate } from "./creation";
 import { MollieApiError } from "../../mollie/errors";
-import { MergeOwn } from "../../mollie/metadata";
+import { MergeOwn, MetadataRoom } from "../../mollie/metadata";
 import { LifecycleEvent, Raise } from "./events";
 import { DefinedFields } from "../../mollie/fields";
 import type { MollieSubscription } from "../../mollie/types";
@@ -22,6 +23,7 @@ import {
   UnreadablePeriodError,
 } from "./errors";
 import {
+  CANCEL_KEY_BYTES,
   type CancelMark,
   CompleteRecord,
   LoadRecord,
@@ -114,6 +116,12 @@ async function replayOrRefuse(
   return current;
 }
 
+/**
+ * Records the cancellation on the subscription, then cancels it at Mollie.
+ * Rejects with a `SubscriptionError`, sending nothing, when the mark would
+ * take the subscription's metadata past Mollie's limit: a key longer than
+ * `CANCEL_KEY_BYTES`, or metadata written before creation kept room for it.
+ */
 async function cancelAtMollie(
   account: Account,
   record: SubscriptionRecord,
@@ -121,11 +129,14 @@ async function cancelAtMollie(
 ): Promise<Subscription> {
   const { mollie } = record;
   const path = SubscriptionPath(mollie.customerId, mollie.id);
-  await account.client.execute({
-    method: "PATCH",
-    path,
-    body: { metadata: MergeOwn(mollie.metadata, { cancel: mark }) },
-  });
+  const metadata = MergeOwn(mollie.metadata, { cancel: mark });
+  const room = MetadataRoom(metadata);
+  if (room < 0) {
+    throw new SubscriptionError(
+      `There is no room to record the cancellation of subscription ${record.id} in its metadata: Mollie keeps 1,024 bytes of metadata per subscription, and the cancellation would pass it by ${-room} bytes. Cancel again with an idempotency key of up to ${CANCEL_KEY_BYTES} bytes, or, for a subscription created before the module kept that room, shorten its metadata at Mollie or cancel it in Mollie's dashboard`,
+    );
+  }
+  await account.client.execute({ method: "PATCH", path, body: { metadata } });
   await account.client.execute({ method: "DELETE", path });
   return ToSubscription(await LoadRecord(account, record.id));
 }
