@@ -13,7 +13,13 @@ import { IsMollieId } from "../../mollie/ids";
 import { DefinedFields } from "../../mollie/fields";
 import { ToPayment, ToPaymentStatus } from "./mapping";
 import { type Account, GetAccount } from "../../accounts";
-import { type Entity, InTurnOrder, NotFound, Translating } from "./errors";
+import {
+  type Entity,
+  InTurnOrder,
+  NotFound,
+  Translating,
+  TranslatingNamed,
+} from "./errors";
 import { type OwnFields, ReadOwn, WriteMetadata } from "../../mollie/metadata";
 import { FromMollieAmount, ToMollieAmount } from "../../mollie/amounts";
 import { SubscriptionOfPayment } from "../shared/subscription-of-payment";
@@ -106,7 +112,14 @@ export async function CreatePayment(
   if (request.authorizeOnly) {
     await AssertCapturable(account, instrument, request.paymentMethod ?? "");
   }
-  return Translating(request.paymentMethod ?? "", PAYMENT_ENTITY, async () =>
+  const named =
+    instrument.kind === "mandate"
+      ? {
+          customer: instrument.customerId,
+          paymentMethod: request.paymentMethod,
+        }
+      : { customer: request.customer };
+  return TranslatingNamed(named, async () =>
     ToPayment(
       await account.client.request(
         {

@@ -58,5 +58,5 @@ node_modules/.bin/antelopejs-verify journey <run> customers
 ## Gotchas
 
 - With `MOLLIE_API_KEY` set to a test key these journeys run against Mollie's test mode, as [A live run](README.md#a-live-run) describes; without it every journey is NOT VERIFIED.
-- Mollie answers a deleted customer with 410 Gone, the stand-in with 404; `customer-lifecycle` accepts either from Mollie and expects `CustomerNotFoundError` from the module in both cases.
+- Mollie and the stand-in answer a deleted customer with 410 Gone; `customer-lifecycle` expects 410 from Mollie and `CustomerNotFoundError` from the module.
 - `saved-method-pending` stays on the stand-in in a live run: Mollie's test mode answers an off-session card charge `paid` in the creating call.

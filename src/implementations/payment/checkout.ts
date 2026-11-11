@@ -6,7 +6,7 @@ import {
   type PaymentLocale,
 } from "@antelopejs/interface-payment";
 
-import { Translating } from "./errors";
+import { TranslatingNamed } from "./errors";
 import { ReadPayment } from "./payments";
 import { GetAccount } from "../../accounts";
 import { DefinedFields, Lookup } from "../../mollie/fields";
@@ -126,7 +126,7 @@ export async function CreateCheckoutSession(
   }
   const account = GetAccount(provider);
   const body = sessionBody(request);
-  return Translating("", SESSION_ENTITY, async () =>
+  return TranslatingNamed({ customer: request.customer }, async () =>
     toSession(
       await account.client.request(
         {

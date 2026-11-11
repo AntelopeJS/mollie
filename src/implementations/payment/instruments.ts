@@ -5,7 +5,7 @@ import {
 } from "@antelopejs/interface-payment";
 
 import type { Account } from "../../accounts";
-import { NotFound, Translating } from "./errors";
+import { NotFound, TranslatingNamed } from "./errors";
 import { ParsePaymentMethodId } from "../../mollie/ids";
 
 const MOLLIE_METHODS = new Set([
@@ -147,7 +147,8 @@ async function mandateMethod(
   instrument: MandateInstrument,
   paymentMethod: string,
 ): Promise<string> {
-  const mandate = await Translating(paymentMethod, "payment method", () =>
+  const named = { customer: instrument.customerId, paymentMethod };
+  const mandate = await TranslatingNamed(named, () =>
     account.client.request(
       {
         method: "GET",

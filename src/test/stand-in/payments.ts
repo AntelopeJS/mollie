@@ -1,5 +1,5 @@
 import { DefinedFields, Lookup } from "../../mollie/fields";
-import { NotFound, Unprocessable } from "./responses";
+import { CustomerGone, NotFound, Unprocessable } from "./responses";
 import { IsJsonObject, IsJsonString } from "../../mollie/metadata";
 import { type Account, IsoIn, NewId, NowIso, Text, TextOf } from "./state";
 import type {
@@ -180,6 +180,10 @@ function isSequenceType(
 }
 
 function draftOf(account: Account, body: Body): Draft {
+  const customerId = TextOf(body.customerId);
+  if (customerId !== undefined && account.deletedCustomers.has(customerId)) {
+    throw CustomerGone("customerId");
+  }
   const sequenceType = body.sequenceType ?? "oneoff";
   if (!isSequenceType(sequenceType)) {
     throw Unprocessable("The sequence type is invalid", "sequenceType");

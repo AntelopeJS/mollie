@@ -7,6 +7,7 @@ export interface MollieErrorBody {
 
 const UNREACHABLE = 0;
 const NOT_FOUND = 404;
+const GONE = 410;
 
 export class MollieApiError extends Error {
   readonly status: number;
@@ -28,8 +29,14 @@ export class MollieApiError extends Error {
     });
   }
 
+  /** Mollie answers 404 for a record it never had and 410 for a deleted customer. */
   get isNotFound(): boolean {
-    return this.status === NOT_FOUND;
+    return this.status === NOT_FOUND || this.status === GONE;
+  }
+
+  /** Mollie blames the request's customer: 410 for a deleted one, or an error on the `customerId` field. */
+  get refersToCustomer(): boolean {
+    return this.status === GONE || this.field === "customerId";
   }
 
   get providerCode(): string {

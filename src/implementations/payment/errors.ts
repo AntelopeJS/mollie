@@ -50,6 +50,45 @@ export async function Translating<T>(
   }
 }
 
+/** What a request names that Mollie can fail to find; a creation names no payment. */
+export interface Named {
+  customer?: string;
+  paymentMethod?: string;
+}
+
+function TranslateNamedError(error: MollieApiError, named: Named): Error {
+  const { customer, paymentMethod } = named;
+  if (error.isNotFound) {
+    if (customer !== undefined && error.refersToCustomer) {
+      return NotFound(customer, "customer", error.providerCode);
+    }
+    if (paymentMethod) {
+      return NotFound(paymentMethod, "payment method", error.providerCode);
+    }
+    if (customer !== undefined) {
+      return NotFound(customer, "customer", error.providerCode);
+    }
+  }
+  return new PaymentError(error.message, error.providerCode);
+}
+
+/**
+ * Translates what Mollie refuses on a call that creates a record or reads a
+ * saved method. A not-found names the customer when Mollie blames it, else the
+ * saved method, else the customer, and is never a payment nobody named.
+ */
+export async function TranslatingNamed<T>(
+  named: Named,
+  call: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    if (!(error instanceof MollieApiError)) throw error;
+    throw TranslateNamedError(error, named);
+  }
+}
+
 /**
  * Awaits two reads that run together. When both fail, or the second fails
  * sooner, it rejects with the first read's error: the error the caller would
