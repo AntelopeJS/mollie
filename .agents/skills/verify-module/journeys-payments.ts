@@ -31,8 +31,8 @@ const payRedirect: Journey = {
 };
 
 const paySettles: Journey = {
-  title: "once the payer pays Mollie the payment reads succeeded with the amount captured, a card Mollie declines reads failed with the reason it gives, and a payment that expires reads canceled",
-  entryPoint: "`GetPayment` through core after Mollie settles the payment as paid, as failed for Mollie's insufficient-funds test amount, and as expired",
+  title: "once the payer pays Mollie the payment reads succeeded with the amount captured, a card Mollie declines reads failed with its reason renamed and Mollie's own kept, and a payment that expires reads canceled",
+  entryPoint: "`GetPayment` through core after Mollie settles the payment as paid, as failed for Mollie's expired-card test amount (1004.00), and as expired",
   async run(context) {
     await withSession(context, async (session) => {
       const paid = await call(session, "CreatePayment to pay", "CreatePayment", [{ amount: EUR, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
@@ -45,7 +45,7 @@ const paySettles: Journey = {
         same("it no longer has a checkout link", pick(read.value, "redirectUrl") ?? null, null),
       ]);
       const declined = await call(session, "CreatePayment to decline", "CreatePayment", [
-        { amount: { value: 100_700, currency: "EUR" }, reference: fresh("order"), paymentMethod: "creditcard", returnUrl: RETURN_URL },
+        { amount: { value: 100_400, currency: "EUR" }, reference: fresh("order"), paymentMethod: "creditcard", returnUrl: RETURN_URL },
         fresh("key"),
         null,
       ]);
@@ -54,7 +54,7 @@ const paySettles: Journey = {
       const failed = await call(session, "GetPayment of the declined payment", "GetPayment", [declinedId, null]);
       context.expect(failed.folder, [
         same("the payment is failed, not a thrown error", pick(failed.value, "status"), "failed"),
-        same("the reason is normalised and Mollie's own is kept", [pick(failed.value, "failure", "code"), pick(failed.value, "failure", "providerCode")], ["insufficient_funds", "insufficient_funds"]),
+        same("the reason is renamed to the interface's and Mollie's own is kept", [pick(failed.value, "failure", "code"), pick(failed.value, "failure", "providerCode")], ["expired_card", "card_expired"]),
       ]);
       const lapsed = await call(session, "CreatePayment to expire", "CreatePayment", [{ amount: EUR, reference: fresh("order"), returnUrl: RETURN_URL }, fresh("key"), null]);
       const lapsedId = text(pick(lapsed.value, "id"));

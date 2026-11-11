@@ -26,10 +26,12 @@ covers:
   - src/mollie/types.ts
 docs:
   - README.md
+  - skills/mollie/SKILL.md
   - docs/3.webhooks.md
 journeys:
   - webhook-reads-back
   - webhook-refused
+  - webhook-outage
 ---
 
 # Webhooks
@@ -40,6 +42,7 @@ An application route passes Mollie's classic deliveries to `VerifyWebhook` and a
 
 - `webhook-reads-back`: a delivery that names a payment becomes the event of the status Mollie holds, whatever else the body claims; every delivery of one state has one event id; an expired payment is `payment.canceled`.
 - `webhook-refused`: a delivery that names no payment, an unknown payment, or another account's payment is refused as unverifiable.
+- `webhook-outage`: while Mollie answers 503 a call fails with a `PaymentError` carrying Mollie's message and `VerifyWebhook` rejects with it, so Mollie delivers again; once Mollie is back the same calls succeed.
 
 ## How to get to it (user POV)
 
@@ -48,7 +51,7 @@ An application route passes Mollie's classic deliveries to `VerifyWebhook` and a
 ## Driving it with antelopejs-verify
 
 ```bash
-pnpm exec antelopejs-verify journey "$RUN" webhooks
+node_modules/.bin/antelopejs-verify journey <run> webhooks
 ```
 
 ## Gotchas

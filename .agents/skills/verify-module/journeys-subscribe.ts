@@ -1,7 +1,7 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
 import { isNumber, PRIMARY_KEY, answered, call, callsTo, fresh, settleDelivered, pick, same, savedMethod, subscription, text, thrown, withSession, wire, type Json } from "./session.ts";
-import { MONTHLY, requestOf, subscriptionAtProvider } from "./journeys-subscriptions-shared.ts";
+import { MONTHLY, amsterdamClock, monthAfter, requestOf, subscriptionAtProvider } from "./journeys-subscriptions-shared.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -12,8 +12,16 @@ const subscribeCharged: Journey = {
     await withSession(context, async (session) => {
       const saved = await savedMethod(session, "saved card");
       const key = fresh("sub");
+      const dayBefore = amsterdamClock(Date.now())?.[0];
       const created = await subscription(session, "CreateSubscription", "CreateSubscription", [requestOf(saved, { description: "Pro plan" }), key, null]);
+      const dayAfter = amsterdamClock(Date.now())?.[0];
       const id = text(pick(created.value, "id"));
+      const periodStart = amsterdamClock(pick(created.value, "currentPeriodStart"));
+      const periodEnd = amsterdamClock(pick(created.value, "currentPeriodEnd"));
+      context.expect(created.folder, [
+        same("the period it reports starts at midnight on today's Amsterdam date", [periodStart?.[1] ?? null, periodStart !== null && (periodStart[0] === dayBefore || periodStart[0] === dayAfter)], ["00:00:00", true]),
+        same("the period ends at midnight one month later", [periodEnd?.[1] ?? null, periodStart === null ? null : periodEnd?.[0]], ["00:00:00", periodStart === null ? null : monthAfter(periodStart[0])]),
+      ]);
       context.expect(created.folder, [
         answered(created),
         same("the subscription is active on the customer's saved method for 19.00 a month", [pick(created.value, "status"), pick(created.value, "customer"), pick(created.value, "paymentMethod"), pick(created.value, "amount"), pick(created.value, "interval"), pick(created.value, "intervalCount")], ["active", saved.customer, saved.method, MONTHLY, "month", 1]),
@@ -87,9 +95,16 @@ const subscribeSchedule: Journey = {
         same("the first period ends when the trial does", pick(trial.value, "currentPeriodEnd"), trialEndsAt ?? null),
         same("Mollie starts the schedule on that calendar day", pick(trialAtMollie, "startDate"), isNumber(trialEndsAt) ? new Date(trialEndsAt + 2 * 60 * 60 * 1000).toISOString().slice(0, 10) : null),
       ], { critical: true });
-      const anchored = await subscription(session, "CreateSubscription with an anchor", "CreateSubscription", [requestOf(saved, { billingAnchor: Date.now() + 2 * DAY_MS + 60 * 60 * 1000 }), fresh("sub"), null]);
+      const billingAnchor = Date.now() + 2 * DAY_MS + 60 * 60 * 1000;
+      const chargesBefore = callsTo(session, "POST", "/v2/payments").length;
+      const anchored = await subscription(session, "CreateSubscription with an anchor", "CreateSubscription", [requestOf(saved, { billingAnchor }), fresh("sub"), null]);
+      const anchoredAtMollie = await subscriptionAtProvider(session, text(pick(anchored.value, "id")));
+      const anchorEnd = pick(anchored.value, "currentPeriodEnd");
       context.expect(anchored.folder, [
         same("an anchored subscription is active and charged nothing yet", [pick(anchored.value, "status"), pick(anchored.value, "latestPayment") ?? null, pick(anchored.value, "trialEnd") ?? null], ["active", null, null]),
+        same("no payment request reached Mollie for it", callsTo(session, "POST", "/v2/payments").length, chargesBefore),
+        same("its first period ends at or after the anchor, less than a day later", isNumber(anchorEnd) && anchorEnd >= billingAnchor && anchorEnd - billingAnchor < DAY_MS, true),
+        same("Mollie starts the schedule on that Amsterdam day", pick(anchoredAtMollie, "startDate"), amsterdamClock(anchorEnd)?.[0] ?? null),
       ]);
       const yearly = await subscription(session, "CreateSubscription yearly", "CreateSubscription", [requestOf(saved, { interval: "year" }), fresh("sub"), null]);
       context.expect(yearly.folder, [
@@ -104,7 +119,7 @@ const subscribeSchedule: Journey = {
         refusals.push(pick(thrown(refused), 0) ?? null);
       }
       context.expect(yearly.folder, [
-        same("a period Mollie cannot bill is an InvalidSubscriptionRequestError, for years, weeks and months", refusals.slice(0, 3), ["InvalidSubscriptionRequestError", "InvalidSubscriptionRequestError", "InvalidSubscriptionRequestError"]),
+        same("a period Mollie cannot bill is an InvalidSubscriptionRequestError, for years, weeks, months and days", refusals, tooLong.map(() => "InvalidSubscriptionRequestError")),
         same("no subscription request reached Mollie for them", callsTo(session, "POST", "/v2/customers/" + saved.customer + "/subscriptions").length, before),
       ]);
     });

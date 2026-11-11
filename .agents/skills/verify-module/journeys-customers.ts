@@ -14,9 +14,12 @@ const customerLifecycle: Journey = {
         answered(created),
         same("the answer carries the email, name and metadata", [pick(created.value, "email"), pick(created.value, "name"), pick(created.value, "metadata")], ["ada@merchant.invalid", "Ada", { plan: "pro" }]),
         same("Mollie holds the customer with the same email and name", [held.status, pick(held.json, "email"), pick(held.json, "name")], [200, "ada@merchant.invalid", "Ada"]),
+        same("Mollie holds the caller's metadata", pick(held.json, "metadata", "metadata"), { plan: "pro" }),
       ]);
       const read = await call(session, "GetCustomer", "GetCustomer", [id, null]);
-      context.expect(read.folder, [same("reading it back gives the same customer", pick(read.value, "id"), id)]);
+      context.expect(read.folder, [
+        same("reading it back gives the same customer with its email, name and metadata", [pick(read.value, "id"), pick(read.value, "email"), pick(read.value, "name"), pick(read.value, "metadata")], [id, "ada@merchant.invalid", "Ada", { plan: "pro" }]),
+      ]);
       const deleted = await call(session, "DeleteCustomer", "DeleteCustomer", [id, fresh("key"), null]);
       const gone = await call(session, "GetCustomer after deletion", "GetCustomer", [id, null]);
       context.expect(gone.folder, [
@@ -70,7 +73,8 @@ const savedMethodCharge: Journey = {
       context.expect(after.folder, [
         answered(detached),
         same("no saved method is left", pick(after.value, "length") ?? (Array.isArray(after.value) ? after.value.length : -1), 0),
-        same("Mollie no longer lists the mandate as valid", pick((await wire(session.base, "GET", `/v2/customers/${saved.customer}/mandates/${mandate}`, PRIMARY_KEY)).json, "status") === "valid", false),
+        same("Mollie no longer holds the mandate as valid", pick((await wire(session.base, "GET", `/v2/customers/${saved.customer}/mandates/${mandate}`, PRIMARY_KEY)).json, "status") === "valid", false),
+        same("the module asked Mollie to revoke the mandate", callsTo(session, "DELETE", `/v2/customers/${saved.customer}/mandates/${mandate}`).length, 1),
       ]);
     });
   },

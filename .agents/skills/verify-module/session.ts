@@ -26,7 +26,7 @@ export const SECOND_ACCOUNT = "second";
 export const EUR = { value: 1050, currency: "EUR" } as const;
 
 /** The members of the module's own stand-in for Mollie (`src/test/stand-in`) that the skill drives, as the built suite exports it. */
-export type StandIn = Pick<MollieStandIn, "start" | "stop" | "receiveWebhooks" | "account" | "settle">;
+export type StandIn = Pick<MollieStandIn, "start" | "stop" | "receiveWebhooks" | "account" | "settle" | "outage">;
 
 function isStandIn(value: unknown): value is StandIn {
   return (

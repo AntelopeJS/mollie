@@ -1,6 +1,6 @@
 import type { Journey } from "@antelopejs/tooling-configs/verify";
 
-import { RETURN_URL, SECOND_ACCOUNT, SECOND_KEY, answered, call, fresh, settleDelivered, pick, same, settle, text, thrown, withSession } from "./session.ts";
+import { RETURN_URL, SECOND_ACCOUNT, SECOND_KEY, answered, call, callsTo, fresh, settleDelivered, pick, same, settle, text, thrown, withSession } from "./session.ts";
 
 function classic(body: string) {
   return { body: [...Buffer.from(body)], headers: { "content-type": "application/x-www-form-urlencoded" } };
@@ -67,7 +67,42 @@ const webhookRefused: Journey = {
   },
 };
 
+const webhookOutage: Journey = {
+  title: "while Mollie answers 503 a call fails with a PaymentError carrying Mollie's message and VerifyWebhook rejects with it, not as a forged delivery, so Mollie delivers again; once Mollie is back the same calls succeed",
+  entryPoint: "`CreatePayment` and `VerifyWebhook` through core while the stand-in for Mollie answers every request with 503",
+  async run(context) {
+    await withSession(context, async (session) => {
+      const request = { amount: { value: 2500, currency: "EUR" }, reference: fresh("order"), returnUrl: RETURN_URL };
+      const paid = await call(session, "CreatePayment to pay", "CreatePayment", [request, fresh("key"), null]);
+      const paidId = text(pick(paid.value, "id"));
+      const delivery = await settleDelivered(session, paidId, "paid");
+      const key = fresh("key");
+      session.standIn.outage = 503;
+      try {
+        const create = await call(session, "CreatePayment during the outage", "CreatePayment", [request, key, null]);
+        const verify = await call(session, "VerifyWebhook during the outage", "VerifyWebhook", [classic(`id=${paidId}`), null]);
+        context.expect(verify.folder, [
+          delivery,
+          same("a call is a PaymentError with Mollie's message", [pick(thrown(create), 0), text(pick(thrown(create), 1)).includes("temporarily unavailable")], ["PaymentError", true]),
+          same("the delivery is rejected as a PaymentError with Mollie's message, which Mollie answers by delivering again, not as a WebhookVerificationError", [pick(thrown(verify), 0), text(pick(thrown(verify), 1)).includes("temporarily unavailable")], ["PaymentError", true]),
+        ]);
+      } finally {
+        session.standIn.outage = undefined;
+      }
+      const created = await call(session, "CreatePayment after the outage", "CreatePayment", [request, key, null]);
+      const verified = await call(session, "VerifyWebhook after the outage", "VerifyWebhook", [classic(`id=${paidId}`), null]);
+      context.expect(verified.folder, [
+        answered(created),
+        answered(verified),
+        same("the same delivery is verified once Mollie is back", [pick(verified.value, "type"), pick(verified.value, "id")], ["payment.succeeded", `${paidId}:paid`]),
+        same("the call that failed created exactly one payment once it was retried under its key", callsTo(session, "POST", "/v2/payments").filter((entry) => entry.idempotencyKey === key).length, 1),
+      ]);
+    });
+  },
+};
+
 export const webhookJourneys = {
   "webhook-reads-back": webhookReadsBack,
   "webhook-refused": webhookRefused,
+  "webhook-outage": webhookOutage,
 };

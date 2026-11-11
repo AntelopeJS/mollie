@@ -27,6 +27,7 @@ covers:
   - src/mollie/types.ts
 docs:
   - README.md
+  - skills/mollie/SKILL.md
   - docs/2.payments.md
 journeys:
   - hold-capture
@@ -40,9 +41,9 @@ An application module holds funds with `authorizeOnly`, then captures in part wi
 
 ## Sub-features
 
-- `hold-capture`: an authorize-only charge is `pending` until Mollie authorizes it, then captures in part and records the capture at Mollie; a replayed key returns the capture, another key is a state error.
+- `hold-capture`: an authorize-only charge on a saved card is `pending` until Mollie authorizes it, a hosted one reads `requires_action` while it waits on the payer, and the card one captures in part and records the capture at Mollie; a replayed key returns the capture, another key is a state error.
 - `hold-release`: cancelling an authorization releases it, cancelling an open payment cancels it, cancelling again returns it, and a settled payment cannot be cancelled.
-- `hold-refused`: an authorize-only payment on a method Mollie would capture at once is refused before any request.
+- `hold-refused`: an authorize-only payment on a method Mollie would capture at once is refused before any payment request; on a saved SEPA mandate it is refused after the module reads the mandate from Mollie to learn its method.
 
 ## How to get to it (user POV)
 
@@ -51,7 +52,7 @@ An application module holds funds with `authorizeOnly`, then captures in part wi
 ## Driving it with antelopejs-verify
 
 ```bash
-pnpm exec antelopejs-verify journey "$RUN" holds
+node_modules/.bin/antelopejs-verify journey <run> holds
 ```
 
 ## Gotchas

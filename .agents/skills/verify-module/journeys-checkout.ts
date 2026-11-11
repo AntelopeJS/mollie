@@ -30,8 +30,8 @@ const hostedSession: Journey = {
 };
 
 const sessionLocales: Journey = {
-  title: "a language Mollie does not offer is left to the payer's browser, and a regional one keeps its region",
-  entryPoint: "`CreateCheckoutSession` with `ja`, `auto` and `en-GB` through core",
+  title: "a language Mollie does not offer is left to the payer's browser, and a regional one keeps its region only when Mollie lists it (en-GB), otherwise it gets the region Mollie offers (pt-BR is pt_PT)",
+  entryPoint: "`CreateCheckoutSession` with `ja`, `auto`, `en-GB` and `pt-BR` through core",
   async run(context) {
     await withSession(context, async (session) => {
       const locales: [string, string | null][] = [["ja", null], ["auto", null], ["en-GB", "en_GB"], ["pt-BR", "pt_PT"]];

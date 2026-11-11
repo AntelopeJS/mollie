@@ -3,7 +3,7 @@ import type { Journey } from "@antelopejs/tooling-configs/verify";
 import { RETURN_URL, answered, call, callsTo, fresh, paymentAtProvider, pick, same, savedMethod, settle, text, thrown, withSession, wire, PRIMARY_KEY } from "./session.ts";
 
 const holdCapture: Journey = {
-  title: "an authorize-only payment is pending until Mollie authorizes it, then captures in part and records the capture at Mollie",
+  title: "an authorize-only payment on a saved card is pending until Mollie authorizes it, a hosted one waits on the payer as requires_action, and the card one captures in part and records the capture at Mollie",
   entryPoint: "`CreatePayment` with `authorizeOnly`, `GetPayment` and `CapturePayment` through core",
   async run(context) {
     await withSession(context, async (session) => {
@@ -19,6 +19,15 @@ const holdCapture: Journey = {
         same("the hold is pending when created", pick(created.value, "status"), "pending"),
         same("Mollie holds it for manual capture", pick(await paymentAtProvider(session, id), "captureMode"), "manual"),
       ], { critical: true });
+      const hosted = await call(session, "CreatePayment authorize only, hosted", "CreatePayment", [
+        { amount: { value: 2500, currency: "EUR" }, reference: fresh("hold"), authorizeOnly: true, returnUrl: RETURN_URL },
+        fresh("key"),
+        null,
+      ]);
+      context.expect(hosted.folder, [
+        answered(hosted),
+        same("a hosted hold waits on the payer, held for manual capture at Mollie", [pick(hosted.value, "status"), pick(await paymentAtProvider(session, text(pick(hosted.value, "id"))), "captureMode")], ["requires_action", "manual"]),
+      ]);
       settle(session, id, "authorized");
       const authorized = await call(session, "GetPayment authorized", "GetPayment", [id, null]);
       context.expect(authorized.folder, [same("once Mollie authorizes it nothing is captured yet", [pick(authorized.value, "status"), pick(authorized.value, "amountCaptured", "value")], ["authorized", 0])]);
@@ -43,7 +52,7 @@ const holdCapture: Journey = {
 };
 
 const holdRelease: Journey = {
-  title: "cancelling an authorized payment releases it, cancelling an open one cancels it, and a cancelled payment cancels again as a replay",
+  title: "cancelling an authorized payment releases it, cancelling an open one cancels it, and cancelling a cancelled payment returns it again, whatever the idempotency key",
   entryPoint: "`CancelPayment` through core on an authorized payment, an open one and a captured one",
   async run(context) {
     await withSession(context, async (session) => {
@@ -79,8 +88,8 @@ const holdRelease: Journey = {
 };
 
 const holdRefused: Journey = {
-  title: "an authorize-only payment on a method Mollie would capture at once is refused before anything reaches Mollie",
-  entryPoint: "`CreatePayment` with `authorizeOnly` and the iDEAL method through core",
+  title: "an authorize-only payment on a method Mollie would capture at once is refused before any payment request reaches Mollie, and on a saved SEPA mandate only after reading the mandate's method",
+  entryPoint: "`CreatePayment` with `authorizeOnly` on the iDEAL method and on a saved SEPA mandate, through core",
   async run(context) {
     await withSession(context, async (session) => {
       const refused = await call(session, "CreatePayment authorize only on iDEAL", "CreatePayment", [
@@ -91,7 +100,22 @@ const holdRefused: Journey = {
       const held = await wire(session.base, "GET", "/v2/payments", PRIMARY_KEY);
       context.expect(refused.folder, [
         same("the request is a PaymentError", pick(thrown(refused), 0), "PaymentError"),
-        same("Mollie holds no payment", pick(held.json, "count"), 0),
+        same("no payment request reached Mollie and Mollie holds no payment", [callsTo(session, "POST", "/v2/payments").length, pick(held.json, "count")], [0, 0]),
+      ]);
+      const customer = await call(session, "CreateCustomer for a SEPA mandate", "CreateCustomer", [{ email: `${fresh("sepa")}@merchant.invalid`, name: "SEPA Payer" }, fresh("key"), null]);
+      const customerId = text(pick(customer.value, "id"));
+      const mandate = await wire(session.base, "POST", `/v2/customers/${customerId}/mandates`, PRIMARY_KEY, { method: "directdebit", consumerName: "SEPA Payer", consumerAccount: "NL55INGB0000000000" });
+      const mandateId = text(pick(mandate.json, "id"));
+      const onMandate = await call(session, "CreatePayment authorize only on a SEPA mandate", "CreatePayment", [
+        { amount: { value: 2500, currency: "EUR" }, reference: fresh("hold"), paymentMethod: `${customerId}:${mandateId}`, offSession: true, authorizeOnly: true },
+        fresh("key"),
+        null,
+      ]);
+      context.expect(onMandate.folder, [
+        answered(customer),
+        same("the stand-in saved the SEPA mandate", mandate.status, 201),
+        same("authorize-only on a SEPA mandate is a PaymentError naming the mandate's method", [pick(thrown(onMandate), 0), text(pick(thrown(onMandate), 1)).startsWith("Mollie cannot hold a directdebit payment")], ["PaymentError", true]),
+        same("the module read the mandate from Mollie and sent no payment request", [callsTo(session, "GET", `/v2/customers/${customerId}/mandates/${mandateId}`).length, callsTo(session, "POST", "/v2/payments").length], [1, 0]),
       ]);
     });
   },
