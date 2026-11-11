@@ -33,6 +33,9 @@ async function loadStandIn(repo: string): Promise<StandIn> {
   return instance;
 }
 
+const MANDATE_TIMEOUT_MS = 5000;
+const MANDATE_POLL_MS = 5;
+
 class StandInTarget implements MollieTarget {
   readonly kind = "stand-in";
   readonly apiUrl: string;
@@ -62,12 +65,18 @@ class StandInTarget implements MollieTarget {
     return send(new URL(path, this.apiUrl).href, method, ACCOUNTS[account].key, body);
   }
 
-  settle(id: string, status: PaymentStatus, account: Account): Promise<string | null> {
+  /** Settles the payment, then waits for the mandate a paid first payment leaves to turn valid, as the live target does. */
+  async settle(id: string, status: PaymentStatus, account: Account): Promise<string | null> {
     const { key } = ACCOUNTS[account];
-    const payment = this.standIn.account(key).payments.get(id);
+    const state = this.standIn.account(key);
+    const payment = state.payments.get(id);
     if (payment === undefined) throw new Error(`the stand-in holds no payment ${id}`);
     this.standIn.settle(key, payment, status);
-    return Promise.resolve(payment.webhookUrl ?? null);
+    const deadline = Date.now() + MANDATE_TIMEOUT_MS;
+    while (state.mandates.get(payment.mandateId ?? "")?.status === "pending" && Date.now() < deadline) {
+      await new Promise<void>((resolve) => setTimeout(resolve, MANDATE_POLL_MS));
+    }
+    return payment.webhookUrl ?? null;
   }
 
   receiveWebhooks(receiver: WebhookReceiver | undefined): void {
