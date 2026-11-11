@@ -31,7 +31,7 @@ vars == <<subs, charges, keys, pc, answer, target, snap, seen, pay>>
 
 Ids == 0..Cardinality(Calls)
 Steps == {"idle", "postSub", "get", "earlier", "postCharge",
-          "patchFirst", "patchRefused", "cancel", "done"}
+          "patchFirst", "patchRefused", "recheck", "cancel", "done"}
 Answers == {"none", "ok", "refused", "error"}
 Statuses == {"active", "canceled"}
 Sub == [status : Statuses, refused : BOOLEAN, first : BOOLEAN]
@@ -77,18 +77,19 @@ Go(c, step) == /\ pc' = [pc EXCEPT ![c] = step]
 Answer(c, a) == /\ pc' = [pc EXCEPT ![c] = "done"]
                 /\ answer' = [answer EXCEPT ![c] = a]
 
-(* The first charge decides the path: refuse a failed one, record another. *)
-Hold(c, j, status) ==
+(* The call holds the first charge j: a failed one goes to failedStep,     *)
+(* another to recording it as the first period.                           *)
+Hold(c, j, status, failedStep) ==
   /\ pay' = [pay EXCEPT ![c] = [id |-> j, status |-> status]]
-  /\ Go(c, IF status = "failed" THEN "patchRefused" ELSE "patchFirst")  \* creation.ts:313
+  /\ Go(c, IF status = "failed" THEN failedStep ELSE "patchFirst")
 
 (* existingFor lists the customer's subscriptions, newest first, and takes *)
 (* the first whose metadata carries the key. ValidateSubscriptionRequest   *)
 (* and the mandate read before it change nothing, so a failure there is a  *)
-(* call that never started (creation.ts:343-354).                          *)
+(* call that never started (creation.ts:377-388).                          *)
 List(c) ==
   /\ pc[c] = "idle"
-  /\ IF subs = <<>>                                  \* creation.ts:125-138, 168-169
+  /\ IF subs = <<>>                                  \* creation.ts:125-138, 181-182
      THEN /\ Go(c, "postSub")
           /\ UNCHANGED target
      ELSE /\ Go(c, "get")
@@ -105,7 +106,7 @@ PostSub(c) ==
       id == IF ~fresh THEN keys.sub.resp ELSE IF taken THEN 0 ELSE Len(subs) + 1
   IN
   /\ pc[c] = "postSub"
-  /\ subs' = IF fresh /\ ~taken                      \* creation.ts:171-179
+  /\ subs' = IF fresh /\ ~taken                      \* creation.ts:183-192
              THEN Append(subs, [status |-> "active", refused |-> FALSE, first |-> FALSE])
              ELSE subs
   /\ keys' = IF fresh
@@ -126,21 +127,23 @@ Get(c) ==
   /\ pc[c] = "get"
   /\ snap' = [snap EXCEPT ![c] = [refused |-> s.refused, first |-> s.first]]
   /\ seen' = [seen EXCEPT ![c] = s.status]
-  /\ IF s.refused THEN Go(c, "cancel")                \* creation.ts:307-310
-     ELSE IF s.first THEN Answer(c, "ok")            \* creation.ts:311, 317
+  /\ IF s.refused THEN Go(c, "cancel")                \* creation.ts:342-345
+     ELSE IF s.first THEN Answer(c, "ok")            \* creation.ts:346, 357
      ELSE Go(c, "earlier")
   /\ UNCHANGED <<subs, charges, keys, target, pay>>
 
 (* earlierCharge reads the customer's recent payments, newest first, and   *)
-(* takes the first whose metadata names this subscription.                *)
+(* takes the first whose metadata names this subscription. It reads the  *)
+(* charge as it is now, not as Mollie answered its creation, so a failed  *)
+(* one goes to Recheck.                                                    *)
 Earlier(c) ==
   LET mine == {j \in 1..Len(charges) : charges[j].sub = target[c]}
   IN
   /\ pc[c] = "earlier"
-  /\ IF mine = {}                                    \* creation.ts:219-235, 243-244
+  /\ IF mine = {}                                    \* creation.ts:232-248, 347
      THEN /\ Go(c, "postCharge")
           /\ UNCHANGED pay
-     ELSE Hold(c, Max(mine), charges[Max(mine)].status)
+     ELSE Hold(c, Max(mine), charges[Max(mine)].status, "recheck")  \* creation.ts:348-352
   /\ UNCHANGED <<subs, charges, keys, target, snap, seen>>
 
 (* POST /payments with the key plus ":first-period". A remembered key      *)
@@ -156,7 +159,7 @@ PostCharge(c) ==
   /\ IF ~fresh /\ keys.charge.for /= target[c]
      THEN /\ Answer(c, "error")
           /\ UNCHANGED <<charges, keys, pay>>
-     ELSE \E status \in outcomes :                   \* creation.ts:245-264
+     ELSE \E status \in outcomes :                   \* creation.ts:250-275
           /\ charges' = IF fresh
                         THEN Append(charges, [sub |-> target[c], status |-> status, created |-> status])
                         ELSE charges
@@ -167,7 +170,7 @@ PostCharge(c) ==
                IF lost
                THEN /\ Answer(c, "error")
                     /\ UNCHANGED pay
-               ELSE Hold(c, j, status)
+               ELSE Hold(c, j, status, "patchRefused")  \* creation.ts:351-353
   /\ UNCHANGED <<subs, target, snap, seen>>
 
 (* updateOwn PATCHes the whole metadata: the copy the call's GET read,     *)
@@ -177,7 +180,7 @@ PatchFirst(c) ==
   LET i == target[c]
   IN
   /\ pc[c] = "patchFirst"
-  /\ IF subs[i].status = "canceled"                  \* creation.ts:182-195, 314
+  /\ IF subs[i].status = "canceled"                  \* creation.ts:195-208, 354
      THEN /\ Answer(c, "error")
           /\ UNCHANGED subs
      ELSE /\ subs' = [subs EXCEPT ![i] = [@ EXCEPT !.refused = snap[c].refused, !.first = TRUE]]
@@ -185,12 +188,13 @@ PatchFirst(c) ==
   /\ UNCHANGED <<charges, keys, target, snap, seen, pay>>
 
 (* refuse PATCHes the copy the call's GET read, plus refused, then cancels *)
-(* the subscription as that PATCH answered it.                             *)
+(* the subscription as that PATCH answered it. Only a call holding        *)
+(* Mollie's answer to creating the charge gets here.                       *)
 PatchRefused(c) ==
   LET i == target[c]
   IN
   /\ pc[c] = "patchRefused"
-  /\ IF subs[i].status = "canceled"                  \* creation.ts:279-287
+  /\ IF subs[i].status = "canceled"                  \* creation.ts:295-303
      THEN /\ Answer(c, "error")
           /\ UNCHANGED <<subs, seen>>
      ELSE /\ subs' = [subs EXCEPT ![i] = [@ EXCEPT !.refused = TRUE, !.first = snap[c].first]]
@@ -202,6 +206,19 @@ PatchRefused(c) ==
                     /\ seen' = [seen EXCEPT ![c] = subs[i].status]
   /\ UNCHANGED <<charges, keys, target, snap, pay>>
 
+(* settleFailedEarlierCharge: the charge may have failed after another    *)
+(* call recorded it and returned the subscription, so the call GETs the   *)
+(* subscription again, returns it if a call recorded the charge, and      *)
+(* otherwise cancels it without writing its metadata.                     *)
+Recheck(c) ==
+  LET s == subs[target[c]]
+  IN
+  /\ pc[c] = "recheck"
+  /\ seen' = [seen EXCEPT ![c] = s.status]
+  /\ IF s.first THEN Answer(c, "ok")                 \* creation.ts:321-329
+     ELSE Go(c, "cancel")                            \* creation.ts:330-331
+  /\ UNCHANGED <<subs, charges, keys, target, snap, pay>>
+
 (* cancelRefused skips a subscription it last read as ended, else DELETEs *)
 (* it; Mollie refuses to cancel a canceled one. Then the call rejects with *)
 (* SubscriptionPaymentError.                                               *)
@@ -209,7 +226,7 @@ Cancel(c) ==
   LET i == target[c]
   IN
   /\ pc[c] = "cancel"
-  /\ IF seen[c] = "canceled"                         \* creation.ts:268-277
+  /\ IF seen[c] = "canceled"                         \* creation.ts:279-288
      THEN /\ Answer(c, "refused")
           /\ UNCHANGED subs
      ELSE IF subs[i].status = "canceled"
@@ -249,8 +266,8 @@ Settled ==
 Next ==
   \/ \E c \in Calls :
        \/ List(c) \/ PostSub(c) \/ Get(c) \/ Earlier(c)
-       \/ PostCharge(c) \/ PatchFirst(c) \/ PatchRefused(c) \/ Cancel(c)
-       \/ Fail(c)
+       \/ PostCharge(c) \/ PatchFirst(c) \/ PatchRefused(c) \/ Recheck(c)
+       \/ Cancel(c) \/ Fail(c)
   \/ \E k \in {"sub", "charge"} : Expire(k)
   \/ \E j \in 1..Cardinality(Calls) : LateFailure(j)
   \/ Settled

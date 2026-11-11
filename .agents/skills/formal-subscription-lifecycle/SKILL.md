@@ -5,7 +5,7 @@ description: TLA+ models of @antelopejs/mollie's CreateSubscription and CancelSu
 
 # Formal check: subscription lifecycle
 
-`CreateSubscription` reads the mandate, then lists the customer's subscriptions for one carrying the idempotency key, POSTs the subscription with the key, reads it back, looks for an earlier first charge, POSTs the first charge under `<key>:first-period`, then PATCHes `firstPayment`, or PATCHes `refused` and DELETEs the subscription when Mollie declines the charge. `CancelSubscription` marks and DELETEs a subscription, or, for `now` after `period_end`, records the early end in the customer's metadata, one call at a time per customer within a process. A request can fail before Mollie applies it, or after with the answer lost, the process can stop between any two requests, a caller can replay a key at any later time or while the first call still runs, and Mollie forgets a key after an hour.
+`CreateSubscription` reads the mandate, then lists the customer's subscriptions for one carrying the idempotency key, POSTs the subscription with the key, reads it back, looks for an earlier first charge, POSTs the first charge under `<key>:first-period`, then PATCHes `firstPayment`, or PATCHes `refused` and DELETEs the subscription when Mollie declines the charge. A call that finds the first charge already failed reads the subscription again, returns it if `firstPayment` is recorded, and otherwise DELETEs it without writing its metadata. `CancelSubscription` marks and DELETEs a subscription, or, for `now` after `period_end`, records the early end in the customer's metadata. A request can fail before Mollie applies it, or after with the answer lost, the process can stop between any two requests, a caller can replay a key at any later time or while the first call still runs, and Mollie forgets a key after an hour.
 
 The models treat each Mollie request as one step, and TLC checks every order of those steps across concurrent calls within the bounds below.
 
@@ -26,8 +26,8 @@ Java 11 or later comes from `$JAVA`, else `java` on PATH, else the `eclipse-temu
 
 | Configuration | Creation calls | Subscriptions cancelled | States (creation, cancellation) | Wall time |
 | --- | --- | --- | --- | --- |
-| CI (`<spec>.ci.cfg`) | 2 | 2 | 2,944, 3,021 | about 5 s |
-| Full (`<spec>.cfg`) | 3 | 3 | 142,913, 165,731 | about 9 s |
+| CI (`<spec>.ci.cfg`) | 2 | 2 | 2,944, 3,057 | about 5 s |
+| Full (`<spec>.cfg`) | 3 | 3 | 142,913, 172,039 | about 9 s |
 
 The times are uncached runs in Docker Java 21 on 32 cores; most of each is container and JVM start-up.
 
@@ -49,17 +49,17 @@ Run `--full` when a change touches a file in the coverage record below, or this 
 | `AtMostOneFirstChargePerKey` | At most one first-period charge exists for the key. | The customer pays the first period twice. | holds |
 | `NoHiddenActiveSubscription` | With no call running, every subscription Mollie would bill is one the module lists, reads and can cancel. | Mollie bills a subscription the app cannot see or cancel. | holds, F1 fixed |
 | `RefusedIsNotBilling` | A call that rejected with `SubscriptionPaymentError` left its subscription canceled at Mollie. | The caller is told the payment was refused while Mollie keeps billing. | holds |
-| `CreatedIsListed` | A call that resolved with a subscription left one the module lists. | The app grants a subscription the module then hides and Mollie cancels. | finding F2 |
+| `CreatedIsListed` | A call that resolved with a subscription left one the module lists. | The app grants a subscription the module then hides and Mollie cancels. | holds; F2 fixed in #54 |
 | `EarlyEndNotLost` | A `now` cancellation that returned after recording an early end left that early end on the customer. | A subscription the caller ended now reads as active until its period ends. | holds; F3 fixed in #52 |
 
-`TypeOK` holds in both specs. `check.mjs` records each finding's counterexample length for each configuration; both configurations give F2 13 states. F2 took 12 states before F1's fix, when the `refused` mark alone hid a subscription; since the fix, the subscription is hidden only once call 2's DELETE lands.
+`TypeOK` holds in both specs, and no rule breaks at either bound, so `check.mjs` records no finding. F2 took 13 states before its fix, and 12 before F1's, when the `refused` mark alone hid a subscription.
 
 ## Findings on main
 
 Each finding was replayed at `6747973` against the stand-in through the public interface, in a scratch mocha test that wraps `globalThis.fetch` to hold, release or drop chosen Mollie requests of the module. The PR that fixes each finding brings its test.
 
 - **F1, a billing subscription the module hides (`NoHiddenActiveSubscription`), fixed in #53.** At `6747973`, one call finds no subscription with the key, creates one, reads it uncharged, finds no first charge and charges the first period, and Mollie declines the charge in its creating response. `refuse` PATCHes the `refused` mark (creation.ts:284); Mollie applies it, but the answer is lost, so the call rejects with `SubscriptionError` and never sends the DELETE. The subscription is active at Mollie and carries `refused`, so `ListSubscriptions` skips it and `GetSubscription` and `CancelSubscription` answer `SubscriptionNotFoundError` (changes.ts:65-66, records.ts:272); Mollie charges it on its next payment date. A DELETE that fails before Mollie applies it leaves the same state in 8 states. A replay of the key cancels it (#43, which `RefusedIsNotBilling` covers); without a replay nothing does. In the replay test, a declining mandate and a fetch wrapper that throws after the `refused` PATCH reached the stand-in made `CreateSubscription` reject, the stand-in held the subscription `active`, and `ListSubscriptions` answered `[]`. The fix hides a refused subscription only once Mollie has ended it, unless a caller cancelled it (`ShownSubscription`, records.ts:142-151), so a refusal that stops before its DELETE leaves a `past_due` subscription that the module lists, reads and cancels, and a replay still cancels it and hides it. `src/test/subscription-failures.test.ts` replays the lost answer and the failed DELETE.
-- **F2, a created subscription a concurrent replay refuses (`CreatedIsListed`).** Call 1 creates the subscription and charges the first period, and the charge is `open`. Call 2, a replay of the key sent while call 1 runs, finds the subscription and reads it without `firstPayment`. Call 1 records `firstPayment` and returns the subscription. Mollie then fails the charge. Call 2's `earlierCharge` finds it failed, and `refuse` PATCHes call 2's stale copy of the metadata plus `refused` (creation.ts:182-195, 284), which drops `firstPayment`, marks the subscription refused and cancels it, and call 2 rejects with `SubscriptionPaymentError`. The caller holds a subscription that `GetSubscription` no longer finds, where docs/4.subscriptions.md promises a later failure makes it `past_due`. In the replay test, a declining mandate failed the charge after it was created `open`, the wrapper held call 1's `firstPayment` PATCH and call 2's payments read; call 1 resolved, call 2 rejected with `SubscriptionPaymentError`, and `ListSubscriptions` answered `[]` instead of call 1's subscription.
+- **F2, a created subscription a concurrent replay refuses (`CreatedIsListed`), fixed in #54.** Before #54, call 1 creates the subscription and charges the first period, and the charge is `open`. Call 2, a replay of the key sent while call 1 runs, reads the subscription without `firstPayment`. Call 1 records `firstPayment` and returns the subscription. Mollie then fails the charge. Call 2's `earlierCharge` finds it failed, and `refuse` PATCHes call 2's stale copy of the metadata plus `refused`, which drops `firstPayment`, and cancels the subscription: `ListSubscriptions` answered `[]` instead of call 1's subscription, where docs/4.subscriptions.md promises a later failure makes it `past_due`. Only the call holding Mollie's answer to creating the charge can tell a decline from a later failure, and a PATCH replaces the whole metadata, so re-reading before the `refused` PATCH still drops a `firstPayment` recorded between the two (14 states). The fix leaves the `refused` mark to that call: a call that finds the charge already failed reads the subscription again and returns it if `firstPayment` is recorded, else cancels it without writing its metadata (`settleFailedEarlierCharge`, creation.ts:315-332). `src/test/subscription-failures.test.ts` replays the race. What remains: if call 1 records `firstPayment` between call 2's second read and its DELETE, call 2 cancels the subscription call 1 returned, which stays listed, `canceled`. A scratch rule, `ok` implies `active`, breaks in 13 states on that order, and in 13 at `1511a3a` on F2's.
 - **F3, a lost early end (`EarlyEndNotLost`), fixed in #52.** A and B are two subscriptions of one customer, each cancelled `period_end`. `now` on A reads A ending at period end and reads the customer's early ends, none. `now` on B does the same. A's call PATCHes the customer's metadata with the early ends it read plus A's (records.ts:234-243) and returns A canceled. B's call PATCHes the early ends it read plus B's, which erases A's. A reads back `active` with `cancelAtPeriodEnd: true` until its period ends, after its cancellation returned it canceled and raised `subscription.canceled`. Mollie bills neither. In the replay test, the wrapper held both customer PATCHes until both calls had read, released A's, and released B's after A's call returned `canceled`; `GetSubscription(A)` then answered `status: "active"`. `src/test/early-end-races.test.ts` replays it through the public interface. The fix keeps the early ends on the customer, since Mollie has nowhere else to keep them: it refuses any change to a canceled subscription (doc `reference/update-subscription`), an anchor or trial subscription may have no payment to carry them, and a customer update has no conditional form (doc `reference/update-customer`). So `RecordEarlyEnd` reads and writes one customer's early ends one call at a time within a process (records.ts:246-290), and `ReadCustomer` waits while another call writes. Writing, then reading the early end back and writing again when it is missing, was checked in a scratch copy of the model first and still breaks the rule in 14 states: A finds its early end and returns, then B's write from its earlier read erases it.
 
 ## Read every result with /statechart
@@ -87,15 +87,16 @@ Assert only what a user observes: what the interface returns and what the stand-
 
 | Model action | Code |
 | --- | --- |
-| `List` | `CreateSubscription` validates and reads the mandate (creation.ts:338-354, `ChargeableMandate` 90-123), then `createAtMollie` calls `existingFor` (125-138, 164-169) |
-| `PostSub` | `createAtMollie` POSTs `subscriptionBody` under the key (140-180); the client sends `Idempotency-Key` on POST only (client.ts:21, 137-140) |
-| `Get` | `create` reads the subscription back (320-336); `settleFirstPeriod` branches on `refused` and `firstPayment` (299-311); `ReadOwnSubscription` (records.ts:117-135) |
-| `Earlier` | `chargeFirstPeriod` calls `earlierCharge` (219-235, 243-244) |
-| `PostCharge` | `chargeFirstPeriod` POSTs under `<key>:first-period` (245-264) |
-| `PatchFirst` | `updateOwn` with `firstPayment` (182-195, 314), `MergeOwn` (metadata.ts:99-106), `CompleteRecord` (records.ts:294-310) |
-| `PatchRefused` | `refuse` PATCHes `refused` (279-287) |
-| `Cancel` | `cancelRefused` (267-277), from `refuse` (285) and from a replay (307-310) |
-| `lost` in a write | Mollie applied it and the call still rejects: a lost answer, or a `subscription.created` or `subscription.canceled` handler that throws after the last write (creation.ts:359, changes.ts:147-149, events.ts:37-41) |
+| `List` | `CreateSubscription` validates and reads the mandate (creation.ts:372-388, `ChargeableMandate` 90-123), then `createAtMollie` calls `existingFor` (125-138, 177-182) |
+| `PostSub` | `createAtMollie` POSTs `subscriptionBody` under the key (140-162, 183-192); the client sends `Idempotency-Key` on POST only (client.ts:21, 137-140) |
+| `Get` | `create` reads the subscription back (360-370, `readSubscription` 164-175); `settleFirstPeriod` branches on `refused` and `firstPayment` (334-346); `ReadOwnSubscription` (records.ts:117-135) |
+| `Earlier` | `settleFirstPeriod` calls `earlierCharge` (232-248, 347-352) |
+| `PostCharge` | `chargeFirstPeriod` POSTs under `<key>:first-period` (250-276) |
+| `PatchFirst` | `updateOwn` with `firstPayment` (195-208, 354), `MergeOwn` (metadata.ts:99-106), `CompleteRecord` (records.ts:294-310) |
+| `PatchRefused` | `refuse` PATCHes `refused` (290-303, from 353) |
+| `Recheck` | `settleFailedEarlierCharge` reads the subscription again (315-332, from 348-350) |
+| `Cancel` | `cancelRefused` (278-288), from `refuse` (301), a replay (342-345) and `settleFailedEarlierCharge` (330) |
+| `lost` in a write | Mollie applied it and the call still rejects: a lost answer, or a `subscription.created` or `subscription.canceled` handler that throws after the last write (creation.ts:393, changes.ts:147-149, events.ts:37-41) |
 | `Fail` | a request that throws before Mollie applied it (client.ts:62-88, 109-120), a read that fails, or a stopped process |
 | `Expire`, `LateFailure` | Mollie forgets a key after an hour (`src/test/stand-in/SOURCES.md`, Idempotency); Mollie settles the first charge after the call returned |
 | `Listed` | `ShownSubscription` (records.ts:142-151), from `ListSubscriptions` (changes.ts:56-75) and `LoadRecord` (records.ts:313-327), which `GetSubscription` and `CancelSubscription` call |
@@ -104,7 +105,7 @@ Assert only what a user observes: what the interface returns and what the stand-
 | `ReadCustomer`, `PatchCustomer` | `endEarly` (changes.ts:114-124), `RecordEarlyEnd` with `oneAtATime` (records.ts:246-290) |
 | no action | `UpdateSubscriptionPaymentMethod` (changes.ts:186-209), the webhook path (`DispatchChargeEvents`, events.ts:75-98, `SubscriptionOfPayment`) |
 
-The specs and the source lines above describe the code with F3's fix (#52) and F1's fix (#53) on AntelopeJS/mollie `main`.
+The specs and the source lines above describe the code with F3's fix (#52), F1's fix (#53) and F2's fix (#54) on AntelopeJS/mollie `main`.
 
 ## Bounds and what is left out
 
@@ -122,10 +123,11 @@ The models leave out:
 
 ## Confirm the check can fail
 
-Each scratch change below was made in `src/`, mirrored in a scratch copy of the model, run with `check.mjs` in both configurations and with `subscriptions.test.js` and `subscription-failures.test.js` against the stand-in, then removed. The table holds the runs after F1's fix. Both configurations gave the same lines unless a cell names each.
+Each scratch change below was made in `src/`, mirrored in a scratch copy of the model, run with `check.mjs` in both configurations and with `subscriptions.test.js` and `subscription-failures.test.js` against the stand-in, then removed. The table holds the runs after F1's fix, before F2's, except the first row, run after F2's. Both configurations gave the same lines unless a cell names each.
 
 | Scratch change in the code, and the model edit | `check.mjs`, CI and full | Stand-in suite |
 | --- | --- | --- |
+| Refuse a failed charge `earlierCharge` found as before F2's fix (creation.ts:348-350): `Earlier` goes to `PatchRefused` | `BROKEN CreatedIsListed: Initial -> List -> PostSub -> Get -> Earlier -> PostCharge -> List -> Get -> PatchFirst -> LateFailure -> Earlier -> PatchRefused -> Cancel` | 1 failing |
 | Drop the `existingFor` lookup (creation.ts:168-169): `List` always goes to `PostSub` | `BROKEN AtMostOneSubscriptionPerKey: Initial -> List -> PostSub -> Get -> Earlier -> PostCharge -> PatchRefused -> Cancel -> List -> Expire -> PostSub`, `CHANGED CreatedIsListed: 14 states` | 2 failing |
 | Drop the `earlierCharge` lookup (creation.ts:243-244): `Earlier` always goes to `PostCharge` | `BROKEN AtMostOneFirstChargePerKey: Initial -> List -> PostSub -> Get -> Earlier -> PostCharge -> List -> Get -> Earlier -> Expire -> PostCharge`, `CHANGED CreatedIsListed: 14 states` | 1 failing |
 | Drop the first charge's idempotency key (creation.ts:261): `PostCharge` never finds a remembered key | `BROKEN AtMostOneFirstChargePerKey: Initial -> List -> PostSub -> Get -> Earlier -> List -> Get -> Earlier -> PostCharge -> PostCharge` | 22 passing |

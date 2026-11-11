@@ -98,7 +98,7 @@ Subscriptions are Mollie's own. Mollie holds the schedule and creates every rene
 - **Cancelling at period end stops Mollie at once.** The module reports the subscription as running until the end of the period it paid for. Mollie raises nothing when that period ends, so neither does this module.
 - **Events.** The call that causes `subscription.created` or `subscription.canceled` raises it. A handler that throws makes that call reject, and replaying the call's idempotency key raises the event again. The payment webhook raises `subscription.payment_succeeded` and `subscription.payment_failed`.
 - **Only this module's subscriptions.** The module does not list, read, change or raise events for subscriptions made in the dashboard or by other code on the account, and it does not mark their charges.
-- **Replay a failed creation with its idempotency key.** The subscription may already exist at Mollie, and Mollie will charge it from the next period.
+- **Replay a failed creation with its idempotency key.** The subscription may already exist at Mollie, and Mollie will charge it from the next period. Replay once the call has failed, not while it runs: a replay that overlaps it can cancel the subscription it returns if the first charge fails in between.
 
 ## Prefer the generic fallback?
 

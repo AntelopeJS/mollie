@@ -46,7 +46,7 @@ Pass the raw body and the headers to `VerifyWebhook`. Mollie posts `id=tr_…`, 
 - **Idempotency keys last one hour** at Mollie; `RefundPayment`, `CapturePayment` and `CreateSubscription` find their earlier result by key at any time.
 - **State errors come from the module reading the payment first.** A Mollie 422 is a `PaymentError`: it also means a suspended account.
 - **Subscriptions**: the first period is charged by `CreateSubscription` and not retried if it fails; Mollie's schedule starts one period later and Mollie retries its own renewals five times, then cancels. Dates are Europe/Amsterdam days; trial ends and anchors round up to the next midnight. `period_end` cancels at Mollie at once and is reported as running until the period ends, with no event when it does. `now` after `period_end` records the early end in the customer's metadata, one call at a time within a process; two processes ending one customer's subscriptions early at once can lose one, which then reports its scheduled end. Subscriptions not created by this module are invisible to it.
-- **A failed `CreateSubscription` must be replayed with its key**: Mollie may already hold the subscription and will charge it.
+- **A failed `CreateSubscription` must be replayed with its key**: Mollie may already hold the subscription and will charge it. Replay once the call has failed, not while it runs: an overlapping replay can cancel the subscription the call returns if the first charge fails in between.
 
 ## Not in this module
 

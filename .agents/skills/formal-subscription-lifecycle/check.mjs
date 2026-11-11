@@ -17,9 +17,7 @@ import { checkSpec, EXIT } from "@antelopejs/tooling-configs/formal";
 const dir = path.dirname(fileURLToPath(import.meta.url));
 
 /** Rules main breaks in the creation spec, with the states in TLC's shortest counterexample. */
-const CREATION_FINDINGS = {
-  CreatedIsListed: 13,
-};
+const CREATION_FINDINGS = {};
 
 /** Rules main breaks in the cancellation spec. */
 const CANCELLATION_FINDINGS = {};
