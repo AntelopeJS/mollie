@@ -34,6 +34,11 @@ export class MollieApiError extends Error {
     return this.status === NOT_FOUND || this.status === GONE;
   }
 
+  /** Mollie blames the request's customer: 410 for a deleted one, or an error on the `customerId` field. */
+  get refersToCustomer(): boolean {
+    return this.status === GONE || this.field === "customerId";
+  }
+
   get providerCode(): string {
     return this.field ? `${this.status}:${this.field}` : String(this.status);
   }

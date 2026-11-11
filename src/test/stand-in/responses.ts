@@ -45,8 +45,8 @@ export function NotFound(resource: string, id: string): StandInError {
   return new StandInError(404, `No ${resource} exists with token ${id}.`);
 }
 
-export function CustomerGone(): StandInError {
-  return new StandInError(410, "The customer is no longer available");
+export function CustomerGone(field?: string): StandInError {
+  return new StandInError(410, "The customer is no longer available", field);
 }
 
 export function Unprocessable(detail: string, field?: string): StandInError {
