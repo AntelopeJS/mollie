@@ -115,7 +115,7 @@ export function NewAccount(): Account {
     declinesAtCreation: new Set(),
     requests: [],
     captures: new Map(),
-    mandateLagMs: new Map([["creditcard", CARD_MANDATE_LAG_MS]]),
+    mandateLagMs: new Map(),
   };
 }
 

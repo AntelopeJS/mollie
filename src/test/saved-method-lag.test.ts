@@ -11,7 +11,7 @@ import {
   MANDATE_POLL_MS,
   MANDATE_WAIT_MS,
 } from "../implementations/payment/saved-method";
-import { IsoIn } from "./stand-in/state";
+import { CARD_MANDATE_LAG_MS, IsoIn } from "./stand-in/state";
 import {
   Eventually,
   FORM,
@@ -24,6 +24,7 @@ import {
   TEST_TIMEOUT,
   WebhookBody,
 } from "./support/helpers";
+import { PaymentPath } from "./support/holds";
 
 const AMOUNT = { value: 1900, currency: "EUR" };
 const STUCK_MS = 10 * MANDATE_WAIT_MS;
@@ -32,13 +33,19 @@ const SLOW_READ_MS = 8_000;
 const CLOCK_SKEW_MS = 60_000;
 const OVERRUN_MS = 750;
 const MANDATE_READ = /^\/v2\/customers\/[^/]+\/mandates\/[^/]+$/;
-const PAID_AT_RESOLUTION_MS = 1500;
+const LEFT_MS = 1_000;
 const QUICK_MS = MANDATE_WAIT_MS / 10;
-const SHORT_LAG_MS = 1_500;
+const SHORT_LAG_MS = 600;
 const FEW_CALLERS = 5;
 
+/**
+ * A paid payment that saves a method. With `budgetLeftMs`, the module's first
+ * read of the payment, by its webhook or a test, finds it paid, to the
+ * millisecond, that long before the mandate budget runs out.
+ */
 async function paidSavingPayment(
   paymentMethod: string,
+  budgetLeftMs?: number,
 ): Promise<{ customer: string; payment: string }> {
   const customer = await CreateCustomer({ name: "Lagging mandate" }, Key());
   const created = await CreatePayment(
@@ -52,6 +59,19 @@ async function paidSavingPayment(
     },
     Key(),
   );
+  if (budgetLeftMs !== undefined) {
+    StandIn().interceptions.push({
+      method: "GET",
+      path: PaymentPath(created.id),
+      run: (account) => {
+        const stored = account.payments.get(created.id);
+        assert.ok(stored);
+        stored.paidAt = new Date(
+          Date.now() - MANDATE_WAIT_MS + budgetLeftMs,
+        ).toISOString();
+      },
+    });
+  }
   await Eventually(
     () => PrimaryAccount().payments.get(created.id)?.status === "paid",
     `${created.id} to be paid`,
@@ -89,33 +109,39 @@ describe("[mollie] a saved card, as soon as its payment reads succeeded", functi
   });
 
   it("is listed, though Mollie turns the mandate valid after it marks the payment paid", async () => {
-    const { customer, payment } = await paidSavingPayment("creditcard");
-    assert.equal((await GetPayment(payment)).status, "succeeded");
-    const saved = await ListPaymentMethods(customer);
-    assert.deepEqual(
-      saved.map((method) => method.type),
-      ["card"],
-    );
+    await withMandateLag("creditcard", CARD_MANDATE_LAG_MS, async () => {
+      const { customer, payment } = await paidSavingPayment("creditcard");
+      assert.equal((await GetPayment(payment)).status, "succeeded");
+      const saved = await ListPaymentMethods(customer);
+      assert.deepEqual(
+        saved.map((method) => method.type),
+        ["card"],
+      );
+    });
   });
 
   it("is listed when the payment became known through its webhook", async () => {
-    const { customer, payment } = await paidSavingPayment("creditcard");
-    const event = await VerifyWebhook({
-      body: WebhookBody(payment),
-      headers: FORM,
+    await withMandateLag("creditcard", CARD_MANDATE_LAG_MS, async () => {
+      const { customer, payment } = await paidSavingPayment("creditcard");
+      const event = await VerifyWebhook({
+        body: WebhookBody(payment),
+        headers: FORM,
+      });
+      assert.equal(event?.type, "payment.succeeded");
+      assert.equal((await ListPaymentMethods(customer)).length, 1);
     });
-    assert.equal(event?.type, "payment.succeeded");
-    assert.equal((await ListPaymentMethods(customer)).length, 1);
   });
 
-  it("holds the payment back once, for the budget, when the mandate stays pending", async () => {
+  it("holds the payment back once, for what is left of the budget since paidAt, when the mandate stays pending", async () => {
     await withMandateLag("creditcard", STUCK_MS, async () => {
-      const { customer, payment } = await paidSavingPayment("creditcard");
+      const { customer, payment } = await paidSavingPayment(
+        "creditcard",
+        LEFT_MS,
+      );
       const [first, firstMs] = await timed(GetPayment(payment));
       assert.equal(first.status, "succeeded");
       assert.ok(
-        firstMs >= MANDATE_WAIT_MS - PAID_AT_RESOLUTION_MS &&
-          firstMs <= MANDATE_WAIT_MS + PAID_AT_RESOLUTION_MS,
+        firstMs >= LEFT_MS - MANDATE_POLL_MS && firstMs <= LEFT_MS + OVERRUN_MS,
         `the first read took ${firstMs} ms`,
       );
       const [second, secondMs] = await timed(GetPayment(payment));
@@ -149,7 +175,7 @@ describe("[mollie] the wait for a saved card's mandate", function () {
 
   it("sends a bounded number of mandate reads however many callers wait on one payment", async () => {
     await withMandateLag("creditcard", STUCK_MS, async () => {
-      const { payment } = await paidSavingPayment("creditcard");
+      const { payment } = await paidSavingPayment("creditcard", LEFT_MS);
       const account = PrimaryAccount();
       const reads = () =>
         account.requests.filter(
@@ -163,7 +189,7 @@ describe("[mollie] the wait for a saved card's mandate", function () {
       assert.ok(answers.every((answer) => answer.status === "succeeded"));
       const sent = reads() - before;
       assert.ok(
-        sent <= MANDATE_WAIT_MS / MANDATE_POLL_MS + 1,
+        sent <= LEFT_MS / MANDATE_POLL_MS + 1,
         `${CALLERS} callers sent ${sent} mandate reads`,
       );
     });
@@ -171,16 +197,13 @@ describe("[mollie] the wait for a saved card's mandate", function () {
 
   it("never holds a call past the budget when a mandate read is slow", async () => {
     await withMandateLag("creditcard", STUCK_MS, async () => {
-      const { payment } = await paidSavingPayment("creditcard");
+      const { payment } = await paidSavingPayment("creditcard", LEFT_MS);
       const slow = { method: "GET", path: MANDATE_READ, ms: SLOW_READ_MS };
       StandIn().latencies.push(slow);
       try {
         const [read, readMs] = await timed(GetPayment(payment));
         assert.equal(read.status, "succeeded");
-        assert.ok(
-          readMs <= MANDATE_WAIT_MS + OVERRUN_MS,
-          `the read took ${readMs} ms`,
-        );
+        assert.ok(readMs <= LEFT_MS + OVERRUN_MS, `the read took ${readMs} ms`);
       } finally {
         StandIn().latencies.splice(StandIn().latencies.indexOf(slow), 1);
       }
