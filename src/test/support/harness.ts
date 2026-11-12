@@ -37,7 +37,7 @@ export interface ModuleConfig {
 }
 
 const STAND_IN_PAYER_INTERVAL_MS = 50;
-const STAND_IN_SETTLE_TIMEOUT_MS = 500;
+const STAND_IN_SETTLE_TIMEOUT_MS = 1_000;
 const LIVE_PAYER_INTERVAL_MS = 1_000;
 const SETTLE_TIMEOUT_MS = 60_000;
 const SETTLE_POLL_MS = 100;
