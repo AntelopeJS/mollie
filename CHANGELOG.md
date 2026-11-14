@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.1.1
+
+[compare changes](https://github.com/AntelopeJS/mollie/compare/v0.1.0...v0.1.1)
+
+### 🔥 Performance
+
+- **test:** Stop every saved card waiting out the stand-in's mandate lag ([#68](https://github.com/AntelopeJS/mollie/pull/68))
+
+### 🩹 Fixes
+
+- **payment:** Remember a mandate wait that ended on a read cut at the deadline ([#71](https://github.com/AntelopeJS/mollie/pull/71))
+
+### 📖 Documentation
+
+- **readme:** Adopt the AntelopeJS framework README style ([#67](https://github.com/AntelopeJS/mollie/pull/67))
+- **readme:** Link the Docs badge to the payment interface docs ([#69](https://github.com/AntelopeJS/mollie/pull/69))
+
+### 📦 Build
+
+- **deps:** Cap @antelopejs ranges below the next minor ([#72](https://github.com/AntelopeJS/mollie/pull/72))
+
+### 🤖 CI
+
+- Run CI on Windows beside Linux ([#70](https://github.com/AntelopeJS/mollie/pull/70))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.1.0
 
 

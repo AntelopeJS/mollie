@@ -1,6 +1,6 @@
 {
   "name": "@antelopejs/mollie",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Mollie payment module that implements the payment and subscriptions interfaces of antelopejs",
   "keywords": [
     "antelopejs",
