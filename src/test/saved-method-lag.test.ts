@@ -37,6 +37,25 @@ const LEFT_MS = 1_000;
 const QUICK_MS = MANDATE_WAIT_MS / 10;
 const SHORT_LAG_MS = 600;
 const FEW_CALLERS = 5;
+const FAILED_READS = Math.ceil(LEFT_MS / MANDATE_POLL_MS) + 2;
+
+/**
+ * Moves `paidAt` on the module's next read of `payment` so that it finds the
+ * mandate budget, to the millisecond, `budgetLeftMs` short of running out.
+ */
+function budgetLeftOnNextRead(payment: string, budgetLeftMs: number): void {
+  StandIn().interceptions.push({
+    method: "GET",
+    path: PaymentPath(payment),
+    run: (account) => {
+      const stored = account.payments.get(payment);
+      assert.ok(stored);
+      stored.paidAt = new Date(
+        Date.now() - MANDATE_WAIT_MS + budgetLeftMs,
+      ).toISOString();
+    },
+  });
+}
 
 /**
  * A paid payment that saves a method. With `budgetLeftMs`, the module's first
@@ -60,17 +79,7 @@ async function paidSavingPayment(
     Key(),
   );
   if (budgetLeftMs !== undefined) {
-    StandIn().interceptions.push({
-      method: "GET",
-      path: PaymentPath(created.id),
-      run: (account) => {
-        const stored = account.payments.get(created.id);
-        assert.ok(stored);
-        stored.paidAt = new Date(
-          Date.now() - MANDATE_WAIT_MS + budgetLeftMs,
-        ).toISOString();
-      },
-    });
+    budgetLeftOnNextRead(created.id, budgetLeftMs);
   }
   await Eventually(
     () => PrimaryAccount().payments.get(created.id)?.status === "paid",
@@ -98,6 +107,36 @@ async function withMandateLag<T>(
   } finally {
     if (before === undefined) lags.delete(method);
     else lags.set(method, before);
+  }
+}
+
+/** Runs `work` while every mandate read is answered after {@link SLOW_READ_MS}. */
+async function withSlowMandateReads<T>(work: () => Promise<T>): Promise<T> {
+  const slow = { method: "GET", path: MANDATE_READ, ms: SLOW_READ_MS };
+  StandIn().latencies.push(slow);
+  try {
+    return await work();
+  } finally {
+    StandIn().latencies.splice(StandIn().latencies.indexOf(slow), 1);
+  }
+}
+
+/** Runs `work` while the next {@link FAILED_READS} mandate reads fail with a 503. */
+async function withFailingMandateReads<T>(work: () => Promise<T>): Promise<T> {
+  const { faults } = StandIn();
+  const failing = Array.from({ length: FAILED_READS }, () => ({
+    method: "GET",
+    path: MANDATE_READ,
+    status: 503,
+  }));
+  faults.push(...failing);
+  try {
+    return await work();
+  } finally {
+    for (const fault of failing) {
+      const left = faults.indexOf(fault);
+      if (left !== -1) faults.splice(left, 1);
+    }
   }
 }
 
@@ -198,15 +237,44 @@ describe("[mollie] the wait for a saved card's mandate", function () {
   it("never holds a call past the budget when a mandate read is slow", async () => {
     await withMandateLag("creditcard", STUCK_MS, async () => {
       const { payment } = await paidSavingPayment("creditcard", LEFT_MS);
-      const slow = { method: "GET", path: MANDATE_READ, ms: SLOW_READ_MS };
-      StandIn().latencies.push(slow);
-      try {
-        const [read, readMs] = await timed(GetPayment(payment));
-        assert.equal(read.status, "succeeded");
-        assert.ok(readMs <= LEFT_MS + OVERRUN_MS, `the read took ${readMs} ms`);
-      } finally {
-        StandIn().latencies.splice(StandIn().latencies.indexOf(slow), 1);
-      }
+      const [read, readMs] = await withSlowMandateReads(() =>
+        timed(GetPayment(payment)),
+      );
+      assert.equal(read.status, "succeeded");
+      assert.ok(readMs <= LEFT_MS + OVERRUN_MS, `the read took ${readMs} ms`);
+    });
+  });
+
+  it("does not wait again for a payment whose wait ended on a read cut off at the deadline", async () => {
+    await withMandateLag("creditcard", STUCK_MS, async () => {
+      const { payment } = await paidSavingPayment("creditcard", LEFT_MS);
+      await withSlowMandateReads(async () => {
+        const [first, firstMs] = await timed(GetPayment(payment));
+        assert.equal(first.status, "succeeded");
+        assert.ok(
+          firstMs >= LEFT_MS - MANDATE_POLL_MS,
+          `the first read took ${firstMs} ms`,
+        );
+        budgetLeftOnNextRead(payment, LEFT_MS);
+        const [second, secondMs] = await timed(GetPayment(payment));
+        assert.equal(second.status, "succeeded");
+        assert.ok(secondMs < QUICK_MS, `the next read took ${secondMs} ms`);
+      });
+    });
+  });
+
+  it("waits again for a payment whose wait ended on a failed mandate read", async () => {
+    await withMandateLag("creditcard", STUCK_MS, async () => {
+      const { payment } = await paidSavingPayment("creditcard", LEFT_MS);
+      const first = await withFailingMandateReads(() => GetPayment(payment));
+      assert.equal(first.status, "succeeded");
+      budgetLeftOnNextRead(payment, LEFT_MS);
+      const [second, secondMs] = await timed(GetPayment(payment));
+      assert.equal(second.status, "succeeded");
+      assert.ok(
+        secondMs >= LEFT_MS - MANDATE_POLL_MS,
+        `the next read took ${secondMs} ms`,
+      );
     });
   });
 

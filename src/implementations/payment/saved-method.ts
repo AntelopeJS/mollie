@@ -31,45 +31,52 @@ function savedCardOf(payment: MolliePayment): SavedCard | undefined {
     : undefined;
 }
 
-async function isPending(
+/**
+ * What one mandate read found: the mandate still `pending`, `settled` either
+ * way, the read `failed`, or the read `cut` off at the deadline.
+ */
+type MandateRead = "pending" | "settled" | "failed" | "cut";
+
+async function readMandate(
   account: Account,
   card: SavedCard,
   timeoutMs: number,
-): Promise<boolean | undefined> {
+): Promise<MandateRead> {
+  const deadline = AbortSignal.timeout(Math.max(1, timeoutMs));
   try {
     const mandate = await account.client.request(
       {
         method: "GET",
         path: `/customers/${card.customerId}/mandates/${card.mandateId}`,
-        signal: AbortSignal.timeout(Math.max(1, timeoutMs)),
+        signal: deadline,
       },
       IsMollieMandate,
     );
-    return mandate.status === "pending";
+    return mandate.status === "pending" ? "pending" : "settled";
   } catch {
-    return undefined;
+    return deadline.aborted ? "cut" : "failed";
   }
 }
 
 /**
  * Whether the wait reached an answer: the mandate settled, or the budget ran
- * out after a read that succeeded. A failed read is tried again at the next
- * poll, because every caller sharing this wait would otherwise stop with it.
+ * out after a read that succeeded or was cut off at the deadline. A failed read
+ * is tried again at the next poll, because every caller sharing this wait would
+ * otherwise stop with it.
  */
 async function pollUntilListable(
   account: Account,
   card: SavedCard,
   deadline: number,
 ): Promise<boolean> {
-  let lastReadFailed = false;
+  let last: MandateRead = "pending";
   for (let left = deadline - Date.now(); left > 0;) {
-    const pending = await isPending(account, card, left);
-    if (pending === false) return true;
-    lastReadFailed = pending === undefined;
+    last = await readMandate(account, card, left);
+    if (last === "settled") return true;
     await delay(Math.min(MANDATE_POLL_MS, Math.max(0, deadline - Date.now())));
     left = deadline - Date.now();
   }
-  return !lastReadFailed;
+  return last !== "failed";
 }
 
 interface WaitLedger {
@@ -106,8 +113,10 @@ function remember(finished: Set<string>, paymentId: string): void {
  * cut short ends the wait. A payment whose wait reached an answer, the mandate
  * settled or the budget spent, is not waited for again, even when its `paidAt`
  * is ahead of the host clock; the module remembers the last
- * {@link REMEMBERED_PAYMENTS} such payments. A wait that ended on a failed read
- * is not remembered, so the next read of the payment tries again. Only cards
+ * {@link REMEMBERED_PAYMENTS} such payments. A last read cut off at the
+ * deadline spends the budget like one that succeeded. A wait that ended on a
+ * read that failed before the deadline is not remembered, so the next read of
+ * the payment tries again. Only cards
  * wait: a bank mandate can stay pending for days, and an unreadable mandate
  * does not hold the payment back.
  */
