@@ -55,8 +55,6 @@ const config: VerifyConfig = {
         "pnpm run build >/dev/null && pnpm exec ajs module test . -f dist/test/calendar.properties.test.js",
       ],
       violation: /^\s*(?:\d+\) (?:holds|finding)|[✔✓] finding) (\w+)/gm,
-      passing: /^\s*[✔✓] holds (\w+)/gm,
-      behaviour: { kind: "emit" },
     },
     {
       name: "formal-subscription-lifecycle",
@@ -71,10 +69,7 @@ const config: VerifyConfig = {
       ],
       files: [".agents/skills/formal-subscription-lifecycle/**"],
       command: ["node", ".agents/skills/formal-subscription-lifecycle/check.mjs", "--full"],
-      baseCommand: ["node", ".agents/skills/formal-subscription-lifecycle/check.mjs"],
       violation: /^(?:finding|BROKEN|CHANGED|HOLDS) +(\w+)(?:: (?<states>\d+) states)?/gm,
-      passing: /(?<=^holds +(?:\w+, )*)(\w+)(?=,| \()/gm,
-      behaviour: { kind: "emit" },
     },
     {
       name: "formal-metadata-roundtrip",
@@ -99,8 +94,6 @@ const config: VerifyConfig = {
         "pnpm run build >/dev/null && pnpm exec ajs module test . -f dist/test/metadata.properties.test.js -f dist/test/metadata-corpus.test.js",
       ],
       violation: /^\s*(?:\d+\) (?:holds|finding)|[✔✓] finding) (\w+)/gm,
-      passing: /^\s*[✔✓] holds (\w+)/gm,
-      behaviour: { kind: "emit" },
     },
   ],
   moduleConfig() {
