@@ -120,21 +120,20 @@ describe("[mollie] authorize and capture, settled the way Mollie settles", funct
 
   it("offers only manual-capture methods on a hosted page that only authorizes", async function () {
     RequireStandIn(this);
+    const reference = Reference();
     const session = await CreateCheckoutSession(
       {
         amount: EUR(2500),
-        reference: Reference(),
+        reference,
         successUrl: ReturnUrl(),
         cancelUrl: ReturnUrl(),
         authorizeOnly: true,
       },
       Key(),
     );
-    const sent = PrimaryAccount()
-      .requests.filter((request) => request.path === "/v2/payments")
-      .at(-1);
-    assert.equal(sent?.body.captureMode, "manual");
-    assert.deepEqual(sent?.body.method, [
+    const sent = SentPaymentRequest(reference);
+    assert.equal(sent.body.captureMode, "manual");
+    assert.deepEqual(sent.body.method, [
       "creditcard",
       "klarna",
       "billie",
@@ -165,6 +164,18 @@ describe("[mollie] authorize and capture, settled the way Mollie settles", funct
   });
 });
 
+/** The one payment-creation request the primary account received for `reference`, whatever other tests send meanwhile. */
+function SentPaymentRequest(reference: string) {
+  const sent = PrimaryAccount().requests.filter(
+    (request) =>
+      request.method === "POST" &&
+      request.path === "/v2/payments" &&
+      request.body.description === reference,
+  );
+  assert.equal(sent.length, 1, "the session's own payment request");
+  return sent[0];
+}
+
 describe("[mollie] the hosted page language", function () {
   this.timeout(TEST_TIMEOUT);
 
@@ -180,14 +191,7 @@ describe("[mollie] the hosted page language", function () {
       },
       Key(),
     );
-    const sent = PrimaryAccount().requests.filter(
-      (request) =>
-        request.method === "POST" &&
-        request.path === "/v2/payments" &&
-        request.body.description === reference,
-    );
-    assert.equal(sent.length, 1, "the session's own payment request");
-    return sent[0]?.body.locale;
+    return SentPaymentRequest(reference).body.locale;
   }
 
   it("presets the language a payer asked for, in the region Mollie offers it in", async function () {
