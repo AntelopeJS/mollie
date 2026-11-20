@@ -169,19 +169,25 @@ describe("[mollie] the hosted page language", function () {
   this.timeout(TEST_TIMEOUT);
 
   async function sentLocale(locale: PaymentLocale) {
+    const reference = Reference();
     await CreateCheckoutSession(
       {
         amount: EUR(2500),
-        reference: Reference(),
+        reference,
         successUrl: ReturnUrl(),
         cancelUrl: ReturnUrl(),
         locale,
       },
       Key(),
     );
-    return PrimaryAccount()
-      .requests.filter((request) => request.path === "/v2/payments")
-      .at(-1)?.body?.locale;
+    const sent = PrimaryAccount().requests.filter(
+      (request) =>
+        request.method === "POST" &&
+        request.path === "/v2/payments" &&
+        request.body.description === reference,
+    );
+    assert.equal(sent.length, 1, "the session's own payment request");
+    return sent[0]?.body.locale;
   }
 
   it("presets the language a payer asked for, in the region Mollie offers it in", async function () {
