@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.1.2
+
+[compare changes](https://github.com/AntelopeJS/mollie/compare/v0.1.1...v0.1.2)
+
+### 🩹 Fixes
+
+- **test:** Read the hosted page language from the session's own payment request ([#77](https://github.com/AntelopeJS/mollie/pull/77))
+
+### 📦 Build
+
+- Move to @antelopejs/tooling-configs 0.8 and the three-tier CI ([#74](https://github.com/AntelopeJS/mollie/pull/74))
+- **ci:** Move to the trunk CI with the merge queue ([#76](https://github.com/AntelopeJS/mollie/pull/76))
+
+### ✅ Tests
+
+- Find the manual-capture session's own payment request by reference ([#78](https://github.com/AntelopeJS/mollie/pull/78))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.1.1
 
 [compare changes](https://github.com/AntelopeJS/mollie/compare/v0.1.0...v0.1.1)
