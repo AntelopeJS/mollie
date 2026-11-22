@@ -34,6 +34,5 @@ jobs:
       dependency-ranges: ${{ inputs.dependency-ranges }}
       install-core: true
     secrets:
-      RELEASE_GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
       RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
