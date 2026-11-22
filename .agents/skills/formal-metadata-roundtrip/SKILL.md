@@ -17,7 +17,7 @@ From the repository root, with `MOLLIE_API_KEY` unset, run:
 pnpm run build && pnpm exec ajs module test . -f dist/test/metadata.properties.test.js -f dist/test/metadata-corpus.test.js
 ```
 
-`antelopejs-verify formal <run>` runs the same command. It takes about 5 s. The test uses fast-check 4.3.0, pinned as a devDependency. Each property in `metadata.properties.test.ts` requests 300 runs, and `keyedRoundTrip` and `foreignInterfaceView` 100. The default seed is `20261111`. Set `FC_SEED` to the integer a failure prints to replay another run, with the generators and the fast-check version unchanged. A failure prints the counterexample.
+`pnpm test` runs it with the other suites. It takes about 5 s. The test uses fast-check 4.3.0, pinned as a devDependency. Each property in `metadata.properties.test.ts` requests 300 runs, and `keyedRoundTrip` and `foreignInterfaceView` 100. The default seed is `20261111`. Set `FC_SEED` to the integer a failure prints to replay another run, with the generators and the fast-check version unchanged. A failure prints the counterexample.
 
 The corpus tests seed the stand-in's records directly, so they skip against Mollie's test mode. The properties run against either target.
 
@@ -74,7 +74,7 @@ A writer change that stores a new format fails `corpusCoversWriters` and names t
 
 1. Read the shrunk counterexample. Most are `[metadata, ...]` or `[own record, caller metadata, ...]`. A corpus failure prints the fixture's name, its `since` and what it read.
 2. Replay it through the named public function, or through the interface on the stand-in, before you judge. A failure in `metadata-model.ts` or `metadata-corpus.ts` is an oracle error until that replay shows the module wrong.
-3. A failing property is a product finding. Report the counterexample before you propose a fix, exclude inputs, skip the property or loosen the model. Do not fix covered code in the pull request that adds or changes this check: `antelopejs-verify formal` fails a new check that lands with a covered-code change.
+3. A failing property is a product finding. Report the counterexample before you propose a fix, exclude inputs, skip the property or loosen the model. Do not fix covered code in the pull request that adds or changes this check: a check that lands with a covered-code change cannot show which of the two broke it.
 4. Fix a finding in its own pull request. Rename its `finding` to `holds`, delete its `pins` test, and move it to `FIXED.md`. `formal` then reports it fixed against the base. A finding recorded as a fixture (`legacyEarlyEnd`) leaves the fixtures' `finding` field and the `finding` test of `metadata-corpus.test.ts` when it is fixed: add them back with the next such finding.
 
 ## Bounds and exclusions
