@@ -44,7 +44,7 @@ The generators weight the inputs the module is most likely to get wrong. Instant
 1. Read the shrunk counterexample. A date is `{year, month, day}`, an instant is epoch milliseconds, a period is `{interval, count}`, and the numbers after a period are the period index and the position inside it (0 is the first millisecond, 1 the last).
 2. Replay it through the public functions named in the property before you judge. A failure in `calendar-model.ts` is an oracle error until that replay shows the module wrong.
 3. A property that fails is a product finding. Report the counterexample before you propose a fix, exclude inputs, skip the property or loosen the oracle. Do not fix `calendar.ts` or `mapping.ts` in the pull request that adds or changes this check: a check that lands with a covered-code change cannot show which of the two broke it.
-4. Fix the finding in its own pull request, which runs `formal` on the base and reports the rule fixed. Until then the check fails: nothing records a finding that stands.
+4. Fix the finding in its own pull request, where `pnpm test` runs the property against the base and passes. Until then the check fails: nothing records a finding that stands.
 
 ## Bounds and exclusions
 
