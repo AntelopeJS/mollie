@@ -39,7 +39,7 @@ The lines that name a broken rule match `^(?:finding|BROKEN|CHANGED|HOLDS) +(\w+
 
 ## When to run it
 
-Run `--full` when a change touches a file in the coverage record below, or this folder. `node_modules/.bin/antelopejs-verify formal <run>` runs it for such a diff and judges it by `verify-module` verdict rule 5: a changed rule fails the verdict, and the recorded findings fail it only when the diff changes what the covered code does.
+Run `--full` when a change touches a file in the coverage record below, or this folder. A changed rule is a failure. A recorded finding is a failure only when the diff changes what the covered code does.
 
 ## The rules
 
