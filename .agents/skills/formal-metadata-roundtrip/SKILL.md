@@ -75,7 +75,7 @@ A writer change that stores a new format fails `corpusCoversWriters` and names t
 1. Read the shrunk counterexample. Most are `[metadata, ...]` or `[own record, caller metadata, ...]`. A corpus failure prints the fixture's name, its `since` and what it read.
 2. Replay it through the named public function, or through the interface on the stand-in, before you judge. A failure in `metadata-model.ts` or `metadata-corpus.ts` is an oracle error until that replay shows the module wrong.
 3. A failing property is a product finding. Report the counterexample before you propose a fix, exclude inputs, skip the property or loosen the model. Do not fix covered code in the pull request that adds or changes this check: a check that lands with a covered-code change cannot show which of the two broke it.
-4. Fix a finding in its own pull request. Rename its `finding` to `holds`, delete its `pins` test, and move it to `FIXED.md`. `formal` then reports it fixed against the base. A finding recorded as a fixture (`legacyEarlyEnd`) leaves the fixtures' `finding` field and the `finding` test of `metadata-corpus.test.ts` when it is fixed: add them back with the next such finding.
+4. Fix a finding in its own pull request. Rename its `finding` to `holds`, delete its `pins` test, and move it to `FIXED.md`. `pnpm test` then passes it against the base. A finding recorded as a fixture (`legacyEarlyEnd`) leaves the fixtures' `finding` field and the `finding` test of `metadata-corpus.test.ts` when it is fixed: add them back with the next such finding.
 
 ## Bounds and exclusions
 
@@ -102,7 +102,7 @@ Last code synchronization is the F5 fix, on top of #62.
 | `src/mollie/metadata.ts` | `WriteMetadata`, `MergeOwn`, `ReadOwn`, `ReadCallerMetadata` and `FitsMetadataLimit` and the private `parse` (its JSON-text reading included), `strings`, `keptText`, `ownOf`, `isForeign` and `ownBefore`. |
 | `src/implementations/subscriptions/records.ts` | `ReadOwnSubscription`, `ShownSubscription`, `KeyHash`, the `OWN_SUBSCRIPTION` and `OWN_CUSTOMER` guards, and through the interface `endedEarly`, `toEarlyEnd` (both stored shapes), `earlyEndOf` and `RecordEarlyEnd`, size refusal included. |
 | `src/implementations/shared/subscription-of-payment.ts` | `SubscriptionOfPayment` and its two guards. |
-| Writers, through `corpusCoversWriters` | `PaymentBody`, `CapturePayment` (`payments.ts`), `RefundPayment` (`refunds.ts`), `CreateCustomer` (`customers.ts`), `subscriptionBody`, `chargeFirstPeriod`, `updateOwn` (`creation.ts`), `cancelAtMollie` (`changes.ts`). These files are not in `covers`, so `formal` does not run this check for them, but `pnpm test` does. |
+| Writers, through `corpusCoversWriters` | `PaymentBody`, `CapturePayment` (`payments.ts`), `RefundPayment` (`refunds.ts`), `CreateCustomer` (`customers.ts`), `subscriptionBody`, `chargeFirstPeriod`, `updateOwn` (`creation.ts`), `cancelAtMollie` (`changes.ts`). `pnpm test` runs this check for them. |
 | Readers, through the interface | `ToPayment`, `ToRefund` (`payment/mapping.ts`), `ToSubscription` (`subscriptions/mapping.ts`), refund and capture replays. |
 
 After covered code changes, compare its behaviour with the properties above and rerun the check. Move the synchronization commit forward only after confirming that the test still describes the new code.
