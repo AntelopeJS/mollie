@@ -451,13 +451,15 @@ describe("[mollie] payment requests the module refuses itself", function () {
       CurrentHarness().chargeable,
     ) ?? { parent: "", child: "" };
     const account = PrimaryAccount();
+    const chargeable = account.mandates.get(child);
+    assert.ok(chargeable);
     const presentOnly = {
-      ...account.mandates.get(child)!,
+      ...chargeable,
       id: "mdt_presentonly0",
       scopes: ["customer-present"],
     };
     const revoked = {
-      ...account.mandates.get(child)!,
+      ...chargeable,
       id: "mdt_revokedmndt0",
       status: "invalid" as const,
     };

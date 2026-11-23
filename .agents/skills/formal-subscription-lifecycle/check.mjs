@@ -1,15 +1,4 @@
 #!/usr/bin/env node
-/**
- * Model-checks subscription creation and cancellation with TLC through the
- * shared runner of @antelopejs/tooling-configs: SubscriptionCreation.tla,
- * then SubscriptionCancellation.tla.
- *
- * With no argument it runs the CI configuration of each spec
- * (`<spec>.ci.cfg`); with `--full` it runs the full one (`<spec>.cfg`). Exits
- * 0 when both match the record in SKILL.md, 1 when a rule changed, and 2 when
- * TLC could not run. The runner exits on the first spec that changed, so a
- * change in the creation spec skips the cancellation one.
- */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkSpec, EXIT } from "@antelopejs/tooling-configs/formal";
