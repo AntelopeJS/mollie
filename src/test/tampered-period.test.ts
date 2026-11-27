@@ -1,3 +1,4 @@
+import { IsInterfaceError } from "../implementations/shared/interface-error";
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
 import { VerifyWebhook } from "@antelopejs/interface-payment";
@@ -322,8 +323,9 @@ describe("[mollie] a subscription whose stored period and Mollie's interval are 
         () => Within(2 * HOUR_MS, () => CreateSubscription(request, key)),
       ]) {
         const error = await Rejected(call(), SubscriptionError);
-        assert.ok(!(error instanceof SubscriptionNotFoundError), error.message);
-        assert.ok(error.message.includes(broken.id), error.message);
+        const { message } = error;
+        assert.ok(!IsInterfaceError(error, SubscriptionNotFoundError), message);
+        assert.ok(message.includes(broken.id), message);
       }
       assert.equal(heldByMollie(broken.id).status, "active");
       assert.equal(heldFor(payer), held);

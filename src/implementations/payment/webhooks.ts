@@ -1,3 +1,4 @@
+import { IsInterfaceError } from "../shared/interface-error";
 import {
   type PaymentEvent,
   type PaymentEventType,
@@ -62,7 +63,7 @@ async function confirmedPayment(
   try {
     return await ReadPayment(account, id);
   } catch (error) {
-    if (error instanceof PaymentNotFoundError) {
+    if (IsInterfaceError(error, PaymentNotFoundError)) {
       throw new WebhookVerificationError(
         `Mollie has no payment ${id} on this account`,
         error.providerCode,

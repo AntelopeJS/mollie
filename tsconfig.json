@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "esnext",
     "module": "commonjs",
-    "lib": ["ES2020", "DOM"],
+    "lib": ["ES2022", "DOM"],
     "allowJs": true,
     "outDir": "dist",
     "rootDir": "src",

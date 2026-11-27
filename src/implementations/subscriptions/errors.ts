@@ -1,3 +1,4 @@
+import { IsInterfaceError } from "../shared/interface-error";
 import { PaymentError } from "@antelopejs/interface-payment";
 import {
   SubscriptionError,
@@ -43,7 +44,7 @@ export function SubscriptionAccount(provider?: string): Account {
   try {
     return GetAccount(provider);
   } catch (error) {
-    if (!(error instanceof PaymentError)) throw error;
+    if (!IsInterfaceError(error, PaymentError)) throw error;
     throw new SubscriptionError(error.message);
   }
 }

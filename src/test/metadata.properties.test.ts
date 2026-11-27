@@ -1,3 +1,4 @@
+import { IsInterfaceError } from "../implementations/shared/interface-error";
 import assert from "node:assert/strict";
 
 import {
@@ -181,7 +182,7 @@ const mergeKeepsForeignKeys = fc.property(
     const wanted = changes;
     assert.ok(IsObject(before) && IsObject(merged) && IsObject(wanted));
     const ownBefore = IsObject(before[OWN]) ? before[OWN] : {};
-    const isForeign = !(OWN in before) && IsObject(before[CALLER]);
+    const isForeign = !Object.hasOwn(before, OWN) && IsObject(before[CALLER]);
     const marks: Record<string, JsonValue> = isForeign ? { foreign: true } : {};
     const ownAfter = merged[OWN];
     assert.ok(IsObject(ownAfter), "the merged own record is an object");
@@ -277,7 +278,7 @@ function readOwnOrError(
   try {
     return ReadOwnSubscription(mollie);
   } catch (error) {
-    assert.ok(error instanceof SubscriptionError, String(error));
+    assert.ok(IsInterfaceError(error, SubscriptionError), String(error));
     return error;
   }
 }
@@ -287,7 +288,7 @@ const ownSubscriptionValues = fc.property(
   MollieIntervalArb,
   (metadata: JsonValue, interval: string) => {
     const read = readOwnOrError({ ...SubscriptionWith(metadata), interval });
-    if (read instanceof SubscriptionError) {
+    if (IsInterfaceError(read, SubscriptionError)) {
       assert.ok(
         !StoresWritablePeriod(metadata) &&
           !IsDocumentedMollieInterval(interval),

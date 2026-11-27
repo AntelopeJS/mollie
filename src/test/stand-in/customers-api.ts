@@ -81,7 +81,7 @@ export function GetCustomer(request: Request): StandInResponse {
 export function UpdateCustomer(request: Request): StandInResponse {
   const customer = CustomerOf(request.account, request.params[0]);
   for (const field of ["name", "email", "metadata"] as const) {
-    if (field in request.body) {
+    if (Object.hasOwn(request.body, field)) {
       Object.assign(customer, { [field]: request.body[field] });
     }
   }

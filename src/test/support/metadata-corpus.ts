@@ -1,3 +1,4 @@
+import { IsInterfaceError } from "../../implementations/shared/interface-error";
 import {
   CapturePayment,
   GetCustomer,
@@ -290,7 +291,7 @@ async function replayed(
   try {
     return (await replay(key)) ? key : `${key} replayed another record`;
   } catch (error) {
-    if (error instanceof InvalidPaymentStateError) return null;
+    if (IsInterfaceError(error, InvalidPaymentStateError)) return null;
     throw error;
   }
 }
@@ -313,7 +314,7 @@ async function readSubscription(
       metadata: read.metadata ?? null,
     };
   } catch (error) {
-    if (error instanceof SubscriptionNotFoundError) return null;
+    if (IsInterfaceError(error, SubscriptionNotFoundError)) return null;
     throw error;
   }
 }

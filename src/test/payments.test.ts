@@ -1,3 +1,4 @@
+import { IsInterfaceError } from "../implementations/shared/interface-error";
 import { IsMollieMandate } from "../mollie/resources";
 import assert from "node:assert/strict";
 import {
@@ -109,7 +110,8 @@ describe("[mollie] authorize and capture, settled the way Mollie settles", funct
     await assert.rejects(
       () => offSession(`${parent}:${mandate.id}`, { authorizeOnly: true }),
       (error) =>
-        error instanceof PaymentError && /directdebit/.test(error.message),
+        IsInterfaceError(error, PaymentError) &&
+        /directdebit/.test(error.message),
     );
     assert.equal(
       PrimaryAccount().payments.size,
@@ -159,7 +161,8 @@ describe("[mollie] authorize and capture, settled the way Mollie settles", funct
           },
           Key(),
         ),
-      (error) => error instanceof PaymentError && /ideal/.test(error.message),
+      (error) =>
+        IsInterfaceError(error, PaymentError) && /ideal/.test(error.message),
     );
   });
 });
@@ -303,7 +306,7 @@ describe("[mollie] payments edge cases", function () {
         PaymentError,
       );
       assert.ok(
-        !(error instanceof InvalidPaymentStateError),
+        !IsInterfaceError(error, InvalidPaymentStateError),
         `must not be ${InvalidPaymentStateError.name}`,
       );
     } finally {
@@ -441,7 +444,8 @@ describe("[mollie] payment requests the module refuses itself", function () {
           },
           key,
         ),
-      (error) => error instanceof PaymentError && error.providerCode === "400",
+      (error) =>
+        IsInterfaceError(error, PaymentError) && error.providerCode === "400",
     );
   });
 

@@ -378,7 +378,9 @@ export function Transition(
   payment: MolliePayment,
   status: MolliePaymentStatus,
 ): void {
-  const apply = TRANSITIONS[status];
+  const apply = Object.hasOwn(TRANSITIONS, status)
+    ? TRANSITIONS[status]
+    : undefined;
   if (payment.status !== "open" || !apply) {
     throw Unprocessable(
       `The payment cannot go from ${payment.status} to ${status}`,

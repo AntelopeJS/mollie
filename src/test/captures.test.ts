@@ -1,3 +1,4 @@
+import { IsInterfaceError } from "../implementations/shared/interface-error";
 import assert from "node:assert/strict";
 import {
   CapturePayment,
@@ -114,7 +115,7 @@ describe("[mollie] a capture Mollie applies after it answers", function () {
     });
     const error = await Rejected(CapturePayment(id, Key(), TEN), PaymentError);
     assert.ok(
-      !(error instanceof InvalidPaymentStateError),
+      !IsInterfaceError(error, InvalidPaymentStateError),
       `must not be ${InvalidPaymentStateError.name}`,
     );
   });

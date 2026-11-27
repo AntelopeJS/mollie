@@ -1,10 +1,4 @@
 /**
- * Reader's view of SubscriptionCancellation.tla for /statechart: one region
- * per subscription at Mollie, one for the customer's early ends, and one per
- * CancelSubscription call. A call's key is its tuple, printed as JSON.
- */
-
-/**
  * @typedef {{ timing: string; key: Record<string, string> }} Mark
  * @typedef {{
  *   status: Record<string, string>;
