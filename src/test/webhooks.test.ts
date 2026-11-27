@@ -1,3 +1,4 @@
+import { IsInterfaceError } from "../implementations/shared/interface-error";
 import assert from "node:assert/strict";
 import {
   CreatePayment,
@@ -168,7 +169,7 @@ describe("[mollie] classic webhooks", function () {
     try {
       const error = await Rejected(deliver(id), PaymentError);
       assert.ok(
-        !(error instanceof WebhookVerificationError),
+        !IsInterfaceError(error, WebhookVerificationError),
         "an outage must not answer 403",
       );
     } finally {

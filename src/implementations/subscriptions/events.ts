@@ -1,3 +1,4 @@
+import { IsInterfaceError } from "../shared/interface-error";
 import {
   type Subscription,
   type SubscriptionEvent,
@@ -66,7 +67,7 @@ async function currentState(
     );
   } catch (error) {
     const isUnreadable =
-      error instanceof SubscriptionNotFoundError ||
+      IsInterfaceError(error, SubscriptionNotFoundError) ||
       error instanceof UnreadablePeriodError;
     if (isUnreadable) return undefined;
     throw error;

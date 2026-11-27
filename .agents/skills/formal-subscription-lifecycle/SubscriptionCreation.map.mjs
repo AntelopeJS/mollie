@@ -1,9 +1,4 @@
 /**
- * Reader's view of SubscriptionCreation.tla for /statechart: one region for
- * what Mollie holds and one per CreateSubscription call under the key.
- */
-
-/**
  * @typedef {{ status: string; refused: boolean; first: boolean }} Sub
  * @typedef {{ sub: number; status: string; created: string }} Charge
  * @typedef {{

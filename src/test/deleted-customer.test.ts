@@ -1,3 +1,4 @@
+import { IsInterfaceError } from "../implementations/shared/interface-error";
 import assert from "node:assert/strict";
 import {
   CreateCheckoutSession,
@@ -154,20 +155,20 @@ describe("[mollie] a refusal of a call that names no payment", () => {
       translated(404, named, "customerId"),
     ]) {
       const error = await refusal;
-      assert.ok(error instanceof CustomerNotFoundError);
+      assert.ok(IsInterfaceError(error, CustomerNotFoundError));
       assert.equal(error.message, "No such customer: cst_named");
     }
   });
 
   it("blames the saved method for a not-found that does not name the customer", async () => {
     const error = await translated(404, named, "mandateId");
-    assert.ok(error instanceof CustomerNotFoundError);
+    assert.ok(IsInterfaceError(error, CustomerNotFoundError));
     assert.equal(error.message, "No such payment method: cst_named:mdt_named");
   });
 
   it("blames the customer for a bare not-found when no saved method is named", async () => {
     const error = await translated(404, { customer: "cst_named" });
-    assert.ok(error instanceof CustomerNotFoundError);
+    assert.ok(IsInterfaceError(error, CustomerNotFoundError));
     assert.equal(error.message, "No such customer: cst_named");
   });
 
@@ -177,9 +178,9 @@ describe("[mollie] a refusal of a call that names no payment", () => {
       translated(422, named, "mandateId"),
     ]) {
       const error = await refusal;
-      assert.ok(error instanceof PaymentError);
-      assert.ok(!(error instanceof PaymentNotFoundError));
-      assert.ok(!(error instanceof CustomerNotFoundError));
+      assert.ok(IsInterfaceError(error, PaymentError));
+      assert.ok(!IsInterfaceError(error, PaymentNotFoundError));
+      assert.ok(!IsInterfaceError(error, CustomerNotFoundError));
     }
   });
 });

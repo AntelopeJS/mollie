@@ -274,6 +274,9 @@ export const DateArb = InstantArb.map((instant): CalendarDate =>
 );
 
 function countArb(interval: SubscriptionInterval): fc.Arbitrary<number> {
+  if (!Object.hasOwn(LONGEST, interval)) {
+    throw new Error(`No longest count for interval ${interval}`);
+  }
   const longest = LONGEST[interval];
   return fc.oneof(
     fc.integer({ min: 1, max: longest }),
